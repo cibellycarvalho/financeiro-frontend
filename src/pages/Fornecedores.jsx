@@ -11,6 +11,7 @@ export default function Fornecedores() {
   const [fornecedorSel, setFornecedorSel] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ data_pedido:'', valor_total:'', prazo_combinado:'', descricao_produtos:'' })
+  const [erro, setErro] = useState(null)
 
   useEffect(() => {
     api.get('/api/fornecedores').then(r => setFornecedores(r.data))
@@ -25,21 +26,31 @@ export default function Fornecedores() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos`, { ...form, valor_total: parseFloat(form.valor_total) })
-    setShowForm(false)
-    setForm({ data_pedido:'', valor_total:'', prazo_combinado:'', descricao_produtos:'' })
-    selecionarFornecedor(fornecedorSel)
+    setErro(null)
+    try {
+      await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos`, { ...form, valor_total: parseFloat(form.valor_total) })
+      setShowForm(false)
+      setForm({ data_pedido:'', valor_total:'', prazo_combinado:'', descricao_produtos:'' })
+      selecionarFornecedor(fornecedorSel)
+    } catch (err) {
+      setErro(err.response?.data?.error || 'Erro ao salvar pedido.')
+    }
   }
 
   async function marcarPago(pedidoId) {
-    const hoje = new Date().toISOString().split('T')[0]
-    const pedido = pedidos.find(p => p.id === pedidoId)
-    await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}`, {
-      status: 'pago',
-      valor_pago: pedido.valor_total,
-      data_pagamento: hoje
-    })
-    selecionarFornecedor(fornecedorSel)
+    setErro(null)
+    try {
+      const hoje = new Date().toISOString().split('T')[0]
+      const pedido = pedidos.find(p => p.id === pedidoId)
+      await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}`, {
+        status: 'pago',
+        valor_pago: pedido.valor_total,
+        data_pagamento: hoje
+      })
+      selecionarFornecedor(fornecedorSel)
+    } catch {
+      setErro('Erro ao marcar pedido como pago.')
+    }
   }
 
   return (
@@ -62,6 +73,7 @@ export default function Fornecedores() {
 
       {fornecedorSel && (
         <>
+          {erro && <p style={{ color:'#c00', marginBottom:12 }}>{erro}</p>}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
             <h2>Pedidos — {fornecedorSel.nome}</h2>
             {finRole === 'fin_admin' && (
