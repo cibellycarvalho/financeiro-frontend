@@ -15,7 +15,8 @@ function ProtectedRoute({ children }) {
 }
 
 function AdminRoute({ children }) {
-  const { finRole } = useAuth()
+  const { finRole, loading } = useAuth()
+  if (loading) return <div>Carregando...</div>
   if (finRole !== 'fin_admin') return <div style={{padding:32}}>Acesso restrito a administradores.</div>
   return children
 }

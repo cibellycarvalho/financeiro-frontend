@@ -25,10 +25,10 @@ export function AuthProvider({ children }) {
     supabase.auth.getSession().then(({ data }) => {
       loadUser(data.session).finally(() => setLoading(false))
     })
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      loadUser(session)
+    const listener = supabase.auth.onAuthStateChange((_event, session) => {
+      loadUser(session).finally(() => setLoading(false))
     })
-    return () => listener.subscription.unsubscribe()
+    return () => listener?.unsubscribe()
   }, [])
 
   return (
