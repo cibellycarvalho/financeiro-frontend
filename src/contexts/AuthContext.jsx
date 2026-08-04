@@ -8,6 +8,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [finRole, setFinRole] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [needsPasswordReset, setNeedsPasswordReset] = useState(false)
 
   async function loadUser(session) {
     if (!session) { setUser(null); setFinRole(null); return }
@@ -25,14 +26,20 @@ export function AuthProvider({ children }) {
     supabase.auth.getSession().then(({ data }) => {
       loadUser(data.session).finally(() => setLoading(false))
     })
-    const listener = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setNeedsPasswordReset(true)
+        setLoading(false)
+        return
+      }
+      setNeedsPasswordReset(false)
       loadUser(session).finally(() => setLoading(false))
     })
-    return () => listener?.unsubscribe()
+    return () => subscription?.unsubscribe()
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, finRole, loading }}>
+    <AuthContext.Provider value={{ user, finRole, loading, needsPasswordReset }}>
       {children}
     </AuthContext.Provider>
   )

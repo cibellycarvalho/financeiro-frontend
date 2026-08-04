@@ -6,10 +6,12 @@ import ContasPagar from './pages/ContasPagar'
 import RepasesML from './pages/RepasesML'
 import Fornecedores from './pages/Fornecedores'
 import Admin from './pages/Admin'
+import ResetPassword from './pages/ResetPassword'
 
 function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading, needsPasswordReset } = useAuth()
   if (loading) return <div>Carregando...</div>
+  if (needsPasswordReset) return <Navigate to="/reset-password" replace />
   if (!user) return <Navigate to="/login" replace />
   return children
 }
@@ -32,6 +34,7 @@ export default function App() {
           <Route path="/repasses" element={<ProtectedRoute><RepasesML /></ProtectedRoute>} />
           <Route path="/fornecedores" element={<ProtectedRoute><Fornecedores /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute><AdminRoute><Admin /></AdminRoute></ProtectedRoute>} />
+          <Route path="/reset-password" element={<ResetPassword />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
