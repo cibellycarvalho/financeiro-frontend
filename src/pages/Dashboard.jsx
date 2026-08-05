@@ -24,10 +24,10 @@ export default function Dashboard() {
       <h1 style={{ marginBottom:24 }}>Visão da Semana</h1>
 
       <div style={{ display:'flex', gap:16, flexWrap:'wrap', marginBottom:32 }}>
-        <CardResumo titulo="A pagar esta semana" valor={totais.a_pagar_semana} cor="#ef4444" />
-        <CardResumo titulo="Saldo disponível para compras" valor={totais.saldo_disponivel} cor="#22c55e" />
-        <CardResumo titulo="Repasse ML (mês)" valor={totais.repasses_bruto_mes} />
-        <CardResumo titulo="Fornecedores em aberto" valor={totais.fornecedores_aberto} cor="#f59e0b" />
+        <CardResumo titulo="A pagar esta semana" valor={Number(totais.a_pagar_semana)} cor="#ef4444" />
+        <CardResumo titulo="Saldo disponível para compras" valor={Number(totais.saldo_disponivel)} cor="#22c55e" />
+        <CardResumo titulo="Repasse ML (mês)" valor={Number(totais.repasses_bruto_mes)} />
+        <CardResumo titulo="Fornecedores em aberto" valor={Number(totais.fornecedores_aberto)} cor="#f59e0b" />
       </div>
 
       {alertas.repasse_divergencia && (
