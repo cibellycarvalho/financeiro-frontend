@@ -9,19 +9,36 @@ export default function RepasesML() {
   const [repasses, setRepasses] = useState([])
   const [saldo, setSaldo] = useState(null)
   const [mes, setMes] = useState(new Date().toISOString().slice(0,7))
+  const [contaFiltro, setContaFiltro] = useState('YUSO')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ tipo:'repasse', valor:'', data_referencia:'', conta_ml:'YUSO', descricao:'' })
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [syncMsg, setSyncMsg] = useState(null)
 
   async function carregar() {
     const [r, s] = await Promise.all([
-      api.get(`/api/repasses?mes=${mes}`),
+      api.get(`/api/repasses?mes=${mes}&conta_ml=${contaFiltro}`),
       api.get(`/api/repasses/saldo?mes=${mes}`)
     ])
     setRepasses(r.data)
     setSaldo(s.data)
   }
 
-  useEffect(() => { carregar() }, [mes])
+  useEffect(() => { carregar() }, [mes, contaFiltro])
+
+  async function sincronizarMP() {
+    setSyncLoading(true)
+    setSyncMsg(null)
+    try {
+      const r = await api.post(`/api/repasses/sync-mp?mes=${mes}&conta_ml=${contaFiltro}`)
+      setSyncMsg({ tipo: 'ok', texto: `${r.data.sincronizados} pagamentos sincronizados (${r.data.registros} registros).` })
+      await carregar()
+    } catch (err) {
+      setSyncMsg({ tipo: 'erro', texto: err.response?.data?.error || 'Erro ao sincronizar.' })
+    } finally {
+      setSyncLoading(false)
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -36,15 +53,35 @@ export default function RepasesML() {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24 }}>
         <h1>Repasses ML</h1>
         {finRole === 'fin_admin' && (
-          <button onClick={() => setShowForm(!showForm)}
-            style={{ padding:'8px 20px', background:'#1a1a1a', color:'white', border:'none', borderRadius:8, cursor:'pointer' }}>
-            + Lançar repasse
-          </button>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={sincronizarMP} disabled={syncLoading}
+              style={{ padding:'8px 20px', background:'#2563eb', color:'white', border:'none', borderRadius:8, cursor:'pointer', opacity: syncLoading ? 0.6 : 1 }}>
+              {syncLoading ? 'Sincronizando...' : '↻ Sincronizar MP'}
+            </button>
+            <button onClick={() => setShowForm(!showForm)}
+              style={{ padding:'8px 20px', background:'#1a1a1a', color:'white', border:'none', borderRadius:8, cursor:'pointer' }}>
+              + Lançar repasse
+            </button>
+          </div>
         )}
       </div>
 
-      <div style={{ marginBottom:20 }}>
+      {syncMsg && (
+        <div style={{ marginBottom:16, padding:'10px 16px', borderRadius:8,
+          background: syncMsg.tipo === 'ok' ? '#22c55e22' : '#ef444422',
+          color: syncMsg.tipo === 'ok' ? '#15803d' : '#b91c1c', fontSize:14 }}>
+          {syncMsg.texto}
+        </div>
+      )}
+
+      <div style={{ display:'flex', gap:16, marginBottom:20, alignItems:'center' }}>
         <label>Mês: <input type="month" value={mes} onChange={e => setMes(e.target.value)} style={{padding:6, marginLeft:8}} /></label>
+        <label>Conta ML:
+          <select value={contaFiltro} onChange={e => setContaFiltro(e.target.value)} style={{padding:6, marginLeft:8}}>
+            <option value="YUSO">YUSO</option>
+            <option value="M12">M12</option>
+          </select>
+        </label>
       </div>
 
       {saldo && (
