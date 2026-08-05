@@ -126,7 +126,7 @@ export default function RepasesML() {
         <tbody>
           {repasses.map(r => (
             <tr key={r.id} style={{ borderTop:'1px solid #eee' }}>
-              <td style={{ padding:'10px 16px' }}>{new Date(String(r.data_referencia).slice(0,10) + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+              <td style={{ padding:'10px 16px' }}>{r.data_referencia ? new Date(r.data_referencia).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : '—'}</td>
               <td style={{ padding:'10px 16px' }}>
                 <span style={{ padding:'2px 10px', borderRadius:99, fontSize:12, fontWeight:600,
                   background: r.tipo === 'repasse' ? '#22c55e22' : '#ef444422',

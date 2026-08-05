@@ -207,10 +207,10 @@ export default function Fornecedores() {
             <tbody>
               {pedidos.map(p => (
                 <tr key={p.id} style={{ borderTop: '1px solid #eee' }}>
-                  <td style={{ padding: '10px 16px' }}>{new Date(p.data_pedido + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                  <td style={{ padding: '10px 16px' }}>{p.data_pedido ? new Date(p.data_pedido).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : '—'}</td>
                   <td style={{ padding: '10px 16px', color: '#666', maxWidth: 200 }}>{p.descricao_produtos || '—'}</td>
                   <td style={{ padding: '10px 16px', fontWeight: 600 }}>{Number(p.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                  <td style={{ padding: '10px 16px' }}>{p.prazo_combinado ? new Date(p.prazo_combinado + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+                  <td style={{ padding: '10px 16px' }}>{p.prazo_combinado ? new Date(p.prazo_combinado).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : '—'}</td>
                   <td style={{ padding: '10px 16px' }}>
                     <span style={{
                       padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600,
