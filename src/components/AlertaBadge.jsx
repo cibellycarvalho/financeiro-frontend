@@ -1,5 +1,5 @@
 export default function AlertaBadge({ texto, tipo = 'warning' }) {
-  const cores = { warning: '#f59e0b', error: '#ef4444', ok: '#22c55e' }
+  const cores = { warning: '#f59e0b', error: '#ef4444', ok: '#22c55e', info: '#7c3aed' }
   return (
     <span style={{
       background: cores[tipo] + '22',
