@@ -14,7 +14,7 @@ export default function Dashboard() {
       .catch(() => setErro('Erro ao carregar dados.'))
   }, [])
 
-  if (erro) return <Layout><p style={{color:'#c00'}}>{erro}</p></Layout>
+  if (erro) return <Layout><p style={{color:'var(--color-danger)'}}>{erro}</p></Layout>
   if (!data) return <Layout><p>Carregando...</p></Layout>
 
   const { totais, contas_semana, alertas, fornecedores_aberto } = data
@@ -24,10 +24,10 @@ export default function Dashboard() {
       <h1 style={{ marginBottom:24 }}>Visão da Semana</h1>
 
       <div style={{ display:'flex', gap:16, flexWrap:'wrap', marginBottom:32 }}>
-        <CardResumo titulo="A pagar esta semana" valor={Number(totais.a_pagar_semana)} cor="#ef4444" />
-        <CardResumo titulo="Saldo disponível para compras" valor={Number(totais.saldo_disponivel)} cor="#22c55e" />
+        <CardResumo titulo="A pagar esta semana" valor={Number(totais.a_pagar_semana)} cor="var(--color-danger)" />
+        <CardResumo titulo="Saldo disponível para compras" valor={Number(totais.saldo_disponivel)} cor="var(--color-success)" />
         <CardResumo titulo="Repasse ML (mês)" valor={Number(totais.repasses_bruto_mes)} />
-        <CardResumo titulo="Fornecedores em aberto" valor={Number(totais.fornecedores_aberto)} cor="#f59e0b" />
+        <CardResumo titulo="Fornecedores em aberto" valor={Number(totais.fornecedores_aberto)} cor="var(--color-warning)" />
       </div>
 
       {alertas.repasse_divergencia && (
@@ -38,11 +38,11 @@ export default function Dashboard() {
 
       <h2 style={{ marginBottom:12 }}>Contas vencendo em 7 dias</h2>
       {contas_semana.length === 0
-        ? <p style={{ color:'#666' }}>Nenhuma conta vencendo nos próximos 7 dias 🎉</p>
+        ? <p style={{ color:'var(--color-text-muted)' }}>Nenhuma conta vencendo nos próximos 7 dias 🎉</p>
         : (
-          <table style={{ width:'100%', borderCollapse:'collapse', background:'white', borderRadius:12, overflow:'hidden' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:'var(--radius-md)', overflow:'hidden' }}>
             <thead>
-              <tr style={{ background:'#f0f0f0', textAlign:'left' }}>
+              <tr style={{ background:'var(--color-bg)', textAlign:'left' }}>
                 {['Descrição','Categoria','Vencimento','Valor','Status'].map(h => (
                   <th key={h} style={{ padding:'10px 16px', fontSize:13 }}>{h}</th>
                 ))}
@@ -50,9 +50,9 @@ export default function Dashboard() {
             </thead>
             <tbody>
               {contas_semana.map(c => (
-                <tr key={c.id} style={{ borderTop:'1px solid #eee' }}>
+                <tr key={c.id} style={{ borderTop:'1px solid var(--color-border)' }}>
                   <td style={{ padding:'10px 16px' }}>{c.descricao}</td>
-                  <td style={{ padding:'10px 16px', fontSize:12, color:'#666' }}>{c.categoria}</td>
+                  <td style={{ padding:'10px 16px', fontSize:12, color:'var(--color-text-muted)' }}>{c.categoria}</td>
                   <td style={{ padding:'10px 16px' }}>{new Date(c.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
                   <td style={{ padding:'10px 16px', fontWeight:600 }}>
                     {Number(c.valor).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
@@ -75,7 +75,7 @@ export default function Dashboard() {
           <h2 style={{ marginTop:32, marginBottom:12 }}>Fornecedores com saldo em aberto</h2>
           <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
             {fornecedores_aberto.map(f => (
-              <CardResumo key={f.nome} titulo={f.nome} valor={Number(f.saldo_aberto)} cor="#f59e0b" />
+              <CardResumo key={f.nome} titulo={f.nome} valor={Number(f.saldo_aberto)} cor="var(--color-warning)" />
             ))}
           </div>
         </>
