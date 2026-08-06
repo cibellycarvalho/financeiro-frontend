@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { signIn, supabase } from '../services/auth'
 import { useNavigate } from 'react-router-dom'
+import ThemeToggle from '../components/ThemeToggle'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -31,32 +32,34 @@ export default function Login() {
       redirectTo: `${window.location.origin}/reset-password`
     })
     if (err) {
-      setResetMsg('Erro ao enviar email. Tente novamente.')
+      setResetMsg(`Erro: ${err.message || err.status || 'desconhecido'}`)
     } else {
       setResetMsg('Email enviado! Verifique sua caixa de entrada.')
     }
     setResetLoading(false)
   }
 
-  const containerStyle = { display:'flex', justifyContent:'center', alignItems:'center', minHeight:'100vh', background:'#f5f5f5' }
-  const cardStyle = { background:'white', padding:40, borderRadius:12, width:360, boxShadow:'0 2px 16px rgba(0,0,0,0.08)' }
+  const inputStyle = { width:'100%', padding:8, marginTop:4, boxSizing:'border-box', background:'var(--color-bg)', color:'var(--color-text)', border:'1px solid var(--color-border)', borderRadius:'var(--radius-sm)' }
+  const containerStyle = { display:'flex', justifyContent:'center', alignItems:'center', minHeight:'100vh', background:'var(--color-bg)' }
+  const cardStyle = { background:'var(--color-surface)', border:'1px solid var(--color-border)', padding:40, borderRadius:'var(--radius-md)', width:360 }
 
   if (resetMode) return (
     <div style={containerStyle}>
+      <div style={{ position:'fixed', top:16, right:16 }}><ThemeToggle /></div>
       <form onSubmit={handleReset} style={cardStyle}>
         <h2 style={{ marginBottom:8 }}>Redefinir senha</h2>
-        <p style={{ color:'#666', fontSize:14, marginBottom:20 }}>Digite seu e-mail e enviaremos um link.</p>
-        {resetMsg && <div style={{ color: resetMsg.startsWith('Erro') ? '#c00' : '#080', marginBottom:16, fontSize:14 }}>{resetMsg}</div>}
+        <p style={{ color:'var(--color-text-muted)', fontSize:14, marginBottom:20 }}>Digite seu e-mail e enviaremos um link.</p>
+        {resetMsg && <div style={{ color: resetMsg.startsWith('Erro') ? 'var(--color-danger)' : 'var(--color-success)', marginBottom:16, fontSize:14 }}>{resetMsg}</div>}
         <label>E-mail<br />
           <input type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)}
-            style={{ width:'100%', padding:8, marginTop:4, marginBottom:20, boxSizing:'border-box' }} required />
+            style={{ ...inputStyle, marginBottom:20 }} required />
         </label>
         <button type="submit" disabled={resetLoading}
-          style={{ width:'100%', padding:10, background:'#1a1a1a', color:'white', border:'none', borderRadius:8, cursor:'pointer', marginBottom:12 }}>
+          style={{ width:'100%', padding:10, background:'var(--color-accent)', color:'#fff', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', marginBottom:12 }}>
           {resetLoading ? 'Enviando...' : 'Enviar link'}
         </button>
         <button type="button" onClick={() => setResetMode(false)}
-          style={{ width:'100%', padding:10, background:'transparent', color:'#666', border:'1px solid #ddd', borderRadius:8, cursor:'pointer' }}>
+          style={{ width:'100%', padding:10, background:'transparent', color:'var(--color-text-muted)', border:'1px solid var(--color-border)', borderRadius:'var(--radius-sm)', cursor:'pointer' }}>
           Voltar ao login
         </button>
       </form>
@@ -65,22 +68,23 @@ export default function Login() {
 
   return (
     <div style={containerStyle}>
+      <div style={{ position:'fixed', top:16, right:16 }}><ThemeToggle /></div>
       <form onSubmit={handleSubmit} style={cardStyle}>
         <h2 style={{ marginBottom:24 }}>Painel Financeiro Cravelli</h2>
-        {error && <div style={{ color:'#c00', marginBottom:16 }}>{error}</div>}
+        {error && <div style={{ color:'var(--color-danger)', marginBottom:16 }}>{error}</div>}
         <label>E-mail<br />
           <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-            style={{ width:'100%', padding:8, marginTop:4, marginBottom:16, boxSizing:'border-box' }} required />
+            style={{ ...inputStyle, marginBottom:16 }} required />
         </label>
         <label>Senha<br />
           <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-            style={{ width:'100%', padding:8, marginTop:4, marginBottom:24, boxSizing:'border-box' }} required />
+            style={{ ...inputStyle, marginBottom:24 }} required />
         </label>
-        <button type="submit" style={{ width:'100%', padding:10, background:'#1a1a1a', color:'white', border:'none', borderRadius:8, cursor:'pointer', marginBottom:12 }}>
+        <button type="submit" style={{ width:'100%', padding:10, background:'var(--color-accent)', color:'#fff', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', marginBottom:12 }}>
           Entrar
         </button>
         <button type="button" onClick={() => setResetMode(true)}
-          style={{ width:'100%', padding:8, background:'transparent', color:'#888', border:'none', cursor:'pointer', fontSize:13 }}>
+          style={{ width:'100%', padding:8, background:'transparent', color:'var(--color-text-muted)', border:'none', cursor:'pointer', fontSize:13 }}>
           Esqueci minha senha
         </button>
       </form>

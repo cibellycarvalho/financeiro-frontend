@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../services/auth'
+import ThemeToggle from '../components/ThemeToggle'
 
 export default function ResetPassword() {
   const [password, setPassword] = useState('')
@@ -12,7 +13,6 @@ export default function ResetPassword() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Catch PASSWORD_RECOVERY if it fires after this page mounts
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if ((event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') && session) {
         setSessionOk(true)
@@ -20,7 +20,6 @@ export default function ResetPassword() {
       }
     })
 
-    // Check if session already exists (set by AuthContext before redirect)
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
         setSessionOk(true)
@@ -47,26 +46,28 @@ export default function ResetPassword() {
     setLoading(false)
   }
 
-  const containerStyle = { display:'flex', justifyContent:'center', alignItems:'center', minHeight:'100vh', background:'#f5f5f5' }
-  const cardStyle = { background:'white', padding:40, borderRadius:12, boxShadow:'0 2px 16px rgba(0,0,0,0.1)', width:340 }
+  const inputStyle = { width:'100%', padding:8, marginTop:4, boxSizing:'border-box', background:'var(--color-bg)', color:'var(--color-text)', border:'1px solid var(--color-border)', borderRadius:'var(--radius-sm)' }
+  const containerStyle = { display:'flex', justifyContent:'center', alignItems:'center', minHeight:'100vh', background:'var(--color-bg)' }
+  const cardStyle = { background:'var(--color-surface)', border:'1px solid var(--color-border)', padding:40, borderRadius:'var(--radius-md)', width:340 }
 
   if (checking) return (
     <div style={containerStyle}>
       <div style={cardStyle}>
-        <p style={{ color:'#666' }}>Verificando link...</p>
+        <p style={{ color:'var(--color-text-muted)' }}>Verificando link...</p>
       </div>
     </div>
   )
 
   if (!sessionOk) return (
     <div style={containerStyle}>
+      <div style={{ position:'fixed', top:16, right:16 }}><ThemeToggle /></div>
       <div style={cardStyle}>
         <h2 style={{ marginBottom:12 }}>Link inválido</h2>
-        <p style={{ color:'#666', fontSize:14, marginBottom:24 }}>
+        <p style={{ color:'var(--color-text-muted)', fontSize:14, marginBottom:24 }}>
           Este link expirou ou já foi usado. Solicite um novo pelo login.
         </p>
         <button onClick={() => navigate('/login')}
-          style={{ width:'100%', padding:10, background:'#1a1a1a', color:'white', border:'none', borderRadius:8, cursor:'pointer', fontSize:15 }}>
+          style={{ width:'100%', padding:10, background:'var(--color-accent)', color:'#fff', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', fontSize:15 }}>
           Ir para o login
         </button>
       </div>
@@ -75,22 +76,23 @@ export default function ResetPassword() {
 
   return (
     <div style={containerStyle}>
+      <div style={{ position:'fixed', top:16, right:16 }}><ThemeToggle /></div>
       <div style={cardStyle}>
         <h2 style={{ marginBottom:24 }}>Definir nova senha</h2>
-        {erro && <p style={{ color:'#c00', marginBottom:12 }}>{erro}</p>}
+        {erro && <p style={{ color:'var(--color-danger)', marginBottom:12 }}>{erro}</p>}
         <form onSubmit={handleSubmit}>
           <label style={{ display:'block', marginBottom:12 }}>
             Nova senha<br />
             <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-              required style={{ width:'100%', padding:8, marginTop:4, boxSizing:'border-box' }} />
+              required style={inputStyle} />
           </label>
           <label style={{ display:'block', marginBottom:20 }}>
             Confirmar senha<br />
             <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
-              required style={{ width:'100%', padding:8, marginTop:4, boxSizing:'border-box' }} />
+              required style={inputStyle} />
           </label>
           <button type="submit" disabled={loading}
-            style={{ width:'100%', padding:10, background:'#1a1a1a', color:'white', border:'none', borderRadius:8, cursor:'pointer', fontSize:15 }}>
+            style={{ width:'100%', padding:10, background:'var(--color-accent)', color:'#fff', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', fontSize:15 }}>
             {loading ? 'Salvando...' : 'Salvar senha'}
           </button>
         </form>
