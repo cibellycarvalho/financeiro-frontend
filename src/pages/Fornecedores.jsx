@@ -140,9 +140,10 @@ function LinhaPagamento({ pagamento, onEditar, onExcluir }) {
   )
 }
 
-function ModalPagamento({ pedido, onSalvar, onEditarPagamento, onExcluirPagamento, onFechar }) {
+function PainelPagamentos({ pedido, podeEditar, onRegistrar, onEditar, onExcluir }) {
   const saldoRestante = Number(pedido.valor_total) - Number(pedido.valor_pago)
-  const [valor, setValor] = useState(Math.max(saldoRestante, 0).toFixed(2))
+  const [mostrarForm, setMostrarForm] = useState(false)
+  const [valor, setValor] = useState('')
   const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().split('T')[0])
   const [erro, setErro] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -152,8 +153,9 @@ function ModalPagamento({ pedido, onSalvar, onEditarPagamento, onExcluirPagament
     setErro(null)
     setLoading(true)
     try {
-      await onSalvar(parseFloat(valor), dataPagamento)
-      onFechar()
+      await onRegistrar(parseFloat(valor), dataPagamento)
+      setValor('')
+      setMostrarForm(false)
     } catch (err) {
       setErro(err.response?.data?.error || 'Erro ao registrar pagamento.')
     } finally {
@@ -162,60 +164,182 @@ function ModalPagamento({ pedido, onSalvar, onEditarPagamento, onExcluirPagament
   }
 
   return (
-    <div style={modalOverlay} onClick={onFechar}>
-      <div style={modalBox} onClick={e => e.stopPropagation()}>
-        <h3 style={{ margin: 0 }}>Pagamentos</h3>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)' }}>
-          Saldo restante: <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(saldoRestante)}</strong>
-        </p>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>
+          Pagamentos{pedido.pagamentos?.length ? ` (${pedido.pagamentos.length})` : ''}
+        </span>
+        <span style={{ fontSize: 13 }}>
+          Saldo restante: <strong>{formatMoeda(saldoRestante)}</strong>
+        </span>
+      </div>
 
-        {pedido.pagamentos && pedido.pagamentos.length > 0 && (
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 6 }}>
-              Pagamentos já registrados
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
-              {pedido.pagamentos.map(p => (
-                <LinhaPagamento key={p.id} pagamento={p} onEditar={onEditarPagamento} onExcluir={onExcluirPagamento} />
-              ))}
-            </div>
+      {pedido.pagamentos && pedido.pagamentos.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+          {pedido.pagamentos.map(pg => (
+            <LinhaPagamento key={pg.id} pagamento={pg} onEditar={onEditar} onExcluir={onExcluir} />
+          ))}
+        </div>
+      )}
+
+      {(!pedido.pagamentos || pedido.pagamentos.length === 0) && (
+        <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--color-text-muted)' }}>Nenhum pagamento registrado ainda.</p>
+      )}
+
+      {podeEditar && saldoRestante > 0 && !mostrarForm && (
+        <button onClick={() => setMostrarForm(true)}
+          style={{ padding: '4px 12px', fontSize: 12, background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+          + Registrar pagamento
+        </button>
+      )}
+
+      {podeEditar && saldoRestante > 0 && mostrarForm && (
+        <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 12 }}>Valor (R$)<br />
+            <input required type="number" step="0.01" min="0.01" max={saldoRestante}
+              value={valor} onChange={e => setValor(e.target.value)}
+              style={{ ...inputStyle, marginTop: 4, width: 130 }} />
+          </label>
+          <label style={{ fontSize: 12 }}>Data<br />
+            <input required type="date" value={dataPagamento}
+              onChange={e => setDataPagamento(e.target.value)}
+              style={{ ...inputStyle, marginTop: 4, width: 150 }} />
+          </label>
+          <button type="submit" disabled={loading}
+            style={{ padding: '8px 16px', background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+            {loading ? 'Salvando...' : 'Registrar'}
+          </button>
+          <button type="button" onClick={() => setMostrarForm(false)}
+            style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--color-text)' }}>
+            Cancelar
+          </button>
+        </form>
+      )}
+
+      {erro && <p style={{ color: 'var(--color-danger)', fontSize: 12, margin: '6px 0 0' }}>{erro}</p>}
+    </div>
+  )
+}
+
+function ItemCells({ item, onEditar }) {
+  const [editando, setEditando] = useState(false)
+  const [produto, setProduto] = useState(item.produto)
+  const [quantidade, setQuantidade] = useState(item.quantidade)
+  const [valorUnitario, setValorUnitario] = useState(item.valor_unitario)
+  const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  async function salvar() {
+    setErro(null)
+    setLoading(true)
+    try {
+      await onEditar(produto, parseFloat(quantidade), parseFloat(valorUnitario))
+      setEditando(false)
+    } catch (err) {
+      setErro(err.response?.data?.error || 'Erro ao editar produto.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (editando) {
+    return (
+      <>
+        <td style={{ padding: '10px 16px' }}>
+          <input value={produto} onChange={e => setProduto(e.target.value)} style={{ ...inputStyle, marginTop: 0 }} />
+        </td>
+        <td style={{ padding: '10px 16px' }}>
+          <input type="number" step="0.01" min="0.01" value={quantidade} onChange={e => setQuantidade(e.target.value)} style={{ ...inputStyle, marginTop: 0 }} />
+        </td>
+        <td style={{ padding: '10px 16px' }}>
+          <input type="number" step="0.01" min="0" value={valorUnitario} onChange={e => setValorUnitario(e.target.value)} style={{ ...inputStyle, marginTop: 0 }} />
+        </td>
+        <td style={{ padding: '10px 16px', fontWeight: 600 }}>
+          {formatMoeda((parseFloat(quantidade) || 0) * (parseFloat(valorUnitario) || 0))}
+        </td>
+        <td style={{ padding: '10px 16px' }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button onClick={salvar} disabled={loading}
+              style={{ padding: '4px 8px', fontSize: 12, background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+              ✓
+            </button>
+            <button onClick={() => setEditando(false)} disabled={loading}
+              style={{ padding: '4px 8px', fontSize: 12, background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+              ✕
+            </button>
           </div>
-        )}
+          {erro && <p style={{ color: 'var(--color-danger)', fontSize: 11, margin: '4px 0 0' }}>{erro}</p>}
+        </td>
+      </>
+    )
+  }
 
-        {erro && <p style={{ color: 'var(--color-danger)', margin: 0 }}>{erro}</p>}
-
-        {saldoRestante > 0 && (
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <label>
-              Valor pago (R$) *
-              <input required type="number" step="0.01" min="0.01" max={saldoRestante}
-                value={valor} onChange={e => setValor(e.target.value)} style={inputStyle} />
-            </label>
-            <label>
-              Data do pagamento *
-              <input required type="date" value={dataPagamento}
-                onChange={e => setDataPagamento(e.target.value)} style={inputStyle} />
-            </label>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-              <button type="button" onClick={onFechar}
-                style={{ padding: '8px 20px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', cursor: 'pointer', background: 'transparent', color: 'var(--color-text)' }}>
-                Cancelar
-              </button>
-              <button type="submit" disabled={loading}
-                style={{ padding: '8px 20px', background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
-                {loading ? 'Salvando...' : 'Registrar'}
-              </button>
-            </div>
-          </form>
-        )}
-
-        {saldoRestante <= 0 && (
-          <button type="button" onClick={onFechar}
-            style={{ padding: '8px 20px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', cursor: 'pointer', background: 'transparent', color: 'var(--color-text)' }}>
-            Fechar
+  return (
+    <>
+      <td style={{ padding: '10px 16px' }}>{item.produto}</td>
+      <td style={{ padding: '10px 16px' }}>{Number(item.quantidade).toLocaleString('pt-BR')}</td>
+      <td style={{ padding: '10px 16px' }}>{formatMoeda(item.valor_unitario)}</td>
+      <td style={{ padding: '10px 16px', fontWeight: 600 }}>{formatMoeda(item.valor_total)}</td>
+      <td style={{ padding: '10px 16px' }}>
+        {onEditar && (
+          <button onClick={() => setEditando(true)} title="Editar produto"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, opacity: 0.6, padding: 2 }}>
+            ✏️
           </button>
         )}
+      </td>
+    </>
+  )
+}
+
+function ValorTotalEditavel({ pedido, onEditar }) {
+  const [editando, setEditando] = useState(false)
+  const [valor, setValor] = useState(pedido.valor_total)
+  const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  async function salvar() {
+    setErro(null)
+    setLoading(true)
+    try {
+      await onEditar(parseFloat(valor))
+      setEditando(false)
+    } catch (err) {
+      setErro(err.response?.data?.error || 'Erro ao editar valor.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (editando) {
+    return (
+      <div>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <input type="number" step="0.01" min="0.01" value={valor} onChange={e => setValor(e.target.value)}
+            style={{ ...inputStyle, marginTop: 0, width: 130 }} />
+          <button onClick={salvar} disabled={loading}
+            style={{ padding: '4px 8px', fontSize: 12, background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+            ✓
+          </button>
+          <button onClick={() => setEditando(false)} disabled={loading}
+            style={{ padding: '4px 8px', fontSize: 12, background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+            ✕
+          </button>
+        </div>
+        {erro && <p style={{ color: 'var(--color-danger)', fontSize: 11, margin: '4px 0 0' }}>{erro}</p>}
       </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ fontWeight: 600 }}>{formatMoeda(pedido.valor_total)}</span>
+      {onEditar && (
+        <button onClick={() => setEditando(true)} title="Editar valor"
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, opacity: 0.6, padding: 2 }}>
+          ✏️
+        </button>
+      )}
     </div>
   )
 }
@@ -232,7 +356,6 @@ export default function Fornecedores() {
   const [erro, setErro] = useState(null)
   const [modalNovo, setModalNovo] = useState(false)
   const [modalEditar, setModalEditar] = useState(null)
-  const [modalPagamento, setModalPagamento] = useState(null)
 
   async function carregarFornecedores() {
     const r = await api.get('/api/fornecedores')
@@ -285,30 +408,40 @@ export default function Fornecedores() {
     }
   }
 
-  async function recarregarPedidosEModal(pedidoId) {
+  async function recarregarPedidos() {
     const r = await api.get(`/api/fornecedores/${fornecedorSel.id}/pedidos`)
     setPedidos(r.data)
-    const atualizado = r.data.find(p => p.id === pedidoId)
-    if (atualizado) setModalPagamento(atualizado)
   }
 
   async function registrarPagamento(pedidoId, valor, dataPagamento) {
     await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/pagamentos`, {
       valor, data_pagamento: dataPagamento
     })
-    selecionarFornecedor(fornecedorSel)
+    await recarregarPedidos()
   }
 
   async function editarPagamento(pedidoId, pagamentoId, valor, dataPagamento) {
     await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/pagamentos/${pagamentoId}`, {
       valor, data_pagamento: dataPagamento
     })
-    await recarregarPedidosEModal(pedidoId)
+    await recarregarPedidos()
   }
 
   async function excluirPagamento(pedidoId, pagamentoId) {
     await api.delete(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/pagamentos/${pagamentoId}`)
-    await recarregarPedidosEModal(pedidoId)
+    await recarregarPedidos()
+  }
+
+  async function editarItem(pedidoId, itemId, produto, quantidade, valorUnitario) {
+    await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/itens/${itemId}`, {
+      produto, quantidade, valor_unitario: valorUnitario
+    })
+    await recarregarPedidos()
+  }
+
+  async function editarValorTotal(pedidoId, valorTotal) {
+    await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}`, { valor_total: valorTotal })
+    await recarregarPedidos()
   }
 
   async function salvarNovoFornecedor(dados) {
@@ -320,6 +453,17 @@ export default function Fornecedores() {
     const r = await api.put(`/api/fornecedores/${modalEditar.id}`, dados)
     await carregarFornecedores()
     if (fornecedorSel?.id === modalEditar.id) setFornecedorSel(r.data)
+  }
+
+  async function excluirFornecedor(f) {
+    if (!confirm(`Excluir fornecedor "${f.apelido || f.nome}"?`)) return
+    try {
+      await api.delete(`/api/fornecedores/${f.id}`)
+      if (fornecedorSel?.id === f.id) { setFornecedorSel(null); setPedidos([]) }
+      await carregarFornecedores()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Erro ao excluir fornecedor.')
+    }
   }
 
   return (
@@ -348,17 +492,28 @@ export default function Fornecedores() {
               </div>
             </div>
             {finRole === 'fin_admin' && (
-              <button
-                onClick={e => { e.stopPropagation(); setModalEditar(f) }}
-                title="Editar fornecedor"
-                style={{
-                  position: 'absolute', top: 8, right: 8,
-                  background: 'transparent', border: 'none', cursor: 'pointer',
-                  fontSize: 14, opacity: 0.6, padding: 4,
-                  color: fornecedorSel?.id === f.id ? 'var(--color-on-accent)' : 'var(--color-text)'
-                }}>
-                ✏️
-              </button>
+              <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 2 }}>
+                <button
+                  onClick={e => { e.stopPropagation(); setModalEditar(f) }}
+                  title="Editar fornecedor"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    fontSize: 14, opacity: 0.6, padding: 4,
+                    color: fornecedorSel?.id === f.id ? 'var(--color-on-accent)' : 'var(--color-text)'
+                  }}>
+                  ✏️
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); excluirFornecedor(f) }}
+                  title="Excluir fornecedor"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    fontSize: 14, opacity: 0.6, padding: 4,
+                    color: fornecedorSel?.id === f.id ? 'var(--color-on-accent)' : 'var(--color-text)'
+                  }}>
+                  🗑️
+                </button>
+              </div>
             )}
           </div>
         ))}
@@ -426,15 +581,15 @@ export default function Fornecedores() {
           <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)', textAlign: 'left' }}>
-                {['Data', 'Produto', 'Quantidade', 'Valor unitário', 'Valor total', 'Status', ''].map(h => (
-                  <th key={h} style={{ padding: '10px 16px', fontSize: 13 }}>{h}</th>
+                {['Data', 'Produto', 'Quantidade', 'Valor unitário', 'Valor total', '', 'Status'].map((h, i) => (
+                  <th key={i} style={{ padding: '10px 16px', fontSize: 13 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {pedidos.map(p => {
                 const itens = p.itens && p.itens.length > 0 ? p.itens : [null]
-                return itens.map((item, i) => (
+                const linhasItens = itens.map((item, i) => (
                   <tr key={item ? item.id : p.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                     {i === 0 && (
                       <td rowSpan={itens.length} style={{ padding: '10px 16px', verticalAlign: 'top' }}>
@@ -442,47 +597,44 @@ export default function Fornecedores() {
                       </td>
                     )}
                     {item ? (
-                      <>
-                        <td style={{ padding: '10px 16px' }}>{item.produto}</td>
-                        <td style={{ padding: '10px 16px' }}>{Number(item.quantidade).toLocaleString('pt-BR')}</td>
-                        <td style={{ padding: '10px 16px' }}>{formatMoeda(item.valor_unitario)}</td>
-                        <td style={{ padding: '10px 16px', fontWeight: 600 }}>{formatMoeda(item.valor_total)}</td>
-                      </>
+                      <ItemCells item={item}
+                        onEditar={finRole === 'fin_admin' ? (produto, quantidade, valorUnitario) => editarItem(p.id, item.id, produto, quantidade, valorUnitario) : null} />
                     ) : (
                       <>
                         <td colSpan={3} style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>{p.descricao_produtos || '—'}</td>
-                        <td style={{ padding: '10px 16px', fontWeight: 600 }}>{formatMoeda(p.valor_total)}</td>
+                        <td colSpan={2} style={{ padding: '10px 16px' }}>
+                          <ValorTotalEditavel pedido={p}
+                            onEditar={finRole === 'fin_admin' ? (valorTotal) => editarValorTotal(p.id, valorTotal) : null} />
+                        </td>
                       </>
                     )}
                     {i === 0 && (
-                      <>
-                        <td rowSpan={itens.length} style={{ padding: '10px 16px', verticalAlign: 'top' }}>
-                          <span style={{
-                            padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600,
-                            background: p.status === 'pago' ? 'color-mix(in srgb, var(--color-success) 18%, transparent)' : p.status === 'parcial' ? 'color-mix(in srgb, var(--color-warning) 18%, transparent)' : 'color-mix(in srgb, var(--color-danger) 18%, transparent)',
-                            color: p.status === 'pago' ? 'var(--color-success)' : p.status === 'parcial' ? 'var(--color-warning)' : 'var(--color-danger)'
-                          }}>
-                            {p.status}
-                          </span>
-                        </td>
-                        <td rowSpan={itens.length} style={{ padding: '10px 16px', verticalAlign: 'top' }}>
-                          {finRole === 'fin_admin' && p.status !== 'pago' && (
-                            <button onClick={() => setModalPagamento(p)}
-                              style={{ padding: '4px 12px', fontSize: 12, background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
-                              Registrar pagamento
-                            </button>
-                          )}
-                          {finRole === 'fin_admin' && p.status === 'pago' && p.pagamentos && p.pagamentos.length > 0 && (
-                            <button onClick={() => setModalPagamento(p)}
-                              style={{ padding: '4px 12px', fontSize: 12, background: 'transparent', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
-                              Ver pagamentos
-                            </button>
-                          )}
-                        </td>
-                      </>
+                      <td rowSpan={itens.length} style={{ padding: '10px 16px', verticalAlign: 'top' }}>
+                        <span style={{
+                          padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600,
+                          background: p.status === 'pago' ? 'color-mix(in srgb, var(--color-success) 18%, transparent)' : p.status === 'parcial' ? 'color-mix(in srgb, var(--color-warning) 18%, transparent)' : 'color-mix(in srgb, var(--color-danger) 18%, transparent)',
+                          color: p.status === 'pago' ? 'var(--color-success)' : p.status === 'parcial' ? 'var(--color-warning)' : 'var(--color-danger)'
+                        }}>
+                          {p.status}
+                        </span>
+                      </td>
                     )}
                   </tr>
                 ))
+                return [
+                  ...linhasItens,
+                  <tr key={`${p.id}-pagamentos`} style={{ borderTop: '1px solid var(--color-border)' }}>
+                    <td colSpan={7} style={{ padding: '12px 16px', background: 'var(--color-bg)' }}>
+                      <PainelPagamentos
+                        pedido={p}
+                        podeEditar={finRole === 'fin_admin'}
+                        onRegistrar={(valor, data) => registrarPagamento(p.id, valor, data)}
+                        onEditar={(pagamentoId, valor, data) => editarPagamento(p.id, pagamentoId, valor, data)}
+                        onExcluir={(pagamentoId) => excluirPagamento(p.id, pagamentoId)}
+                      />
+                    </td>
+                  </tr>
+                ]
               })}
               {pedidos.length === 0 && (
                 <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-muted)' }}>Nenhum pedido cadastrado.</td></tr>
@@ -510,15 +662,6 @@ export default function Fornecedores() {
         />
       )}
 
-      {modalPagamento && (
-        <ModalPagamento
-          pedido={modalPagamento}
-          onSalvar={(valor, data) => registrarPagamento(modalPagamento.id, valor, data)}
-          onEditarPagamento={(pagamentoId, valor, data) => editarPagamento(modalPagamento.id, pagamentoId, valor, data)}
-          onExcluirPagamento={(pagamentoId) => excluirPagamento(modalPagamento.id, pagamentoId)}
-          onFechar={() => setModalPagamento(null)}
-        />
-      )}
     </Layout>
   )
 }
