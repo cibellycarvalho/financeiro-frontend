@@ -1,0 +1,72 @@
+:root {
+  /* Cores base — modo claro */
+  --color-bg: #f0f4f8;
+  --color-surface: #ffffff;
+  --color-border: #e2e8f0;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+
+  /* Acento da marca */
+  --color-accent: #3b82f6;
+  --color-accent-hover: #2563eb;
+  --color-accent-solid: #2563eb;
+  --color-on-accent: #ffffff;
+
+  /* Semânticas (status) */
+  --color-success: #22c55e;
+  --color-success-dark: #15803d;
+  --color-success-solid: #15803d;
+  --color-on-success: #ffffff;
+  --color-danger: #dc2626;
+  --color-danger-light: #fee2e2;
+  --color-warning: #f59e0b;
+
+  /* Tipografia */
+  --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
+
+  /* Espaçamento e forma */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --space-unit: 4px;
+
+  color-scheme: light;
+}
+
+.dark {
+  --color-bg: #0f172a;
+  --color-surface: #1e293b;
+  --color-border: #334155;
+  --color-text: #f1f5f9;
+  --color-text-muted: #94a3b8;
+
+  --color-accent: #60a5fa;
+  --color-accent-hover: #3b82f6;
+  --color-accent-solid: #60a5fa;
+  --color-on-accent: #0f172a;
+
+  --color-success: #4ade80;
+  --color-success-dark: #22c55e;
+  --color-success-solid: #4ade80;
+  --color-on-success: #0f172a;
+  --color-danger: #f87171;
+  --color-danger-light: #7f1d1d55;
+  --color-warning: #fbbf24;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+  font-size: inherit;
+}
