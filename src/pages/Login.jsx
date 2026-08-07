@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { signIn, supabase } from '../services/auth'
 import { useNavigate } from 'react-router-dom'
 import ThemeToggle from '../components/ThemeToggle'
+import Logo from '../components/Logo'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -70,7 +71,7 @@ export default function Login() {
     <div style={containerStyle}>
       <div style={{ position:'fixed', top:16, right:16 }}><ThemeToggle /></div>
       <form onSubmit={handleSubmit} style={cardStyle}>
-        <h2 style={{ marginBottom:24 }}>Painel Financeiro Cravelli</h2>
+        <div style={{ marginBottom:24 }}><Logo titleSize={17} /></div>
         {error && <div style={{ color:'var(--color-danger)', marginBottom:16 }}>{error}</div>}
         <label>E-mail<br />
           <input type="email" value={email} onChange={e => setEmail(e.target.value)}

@@ -1,56 +1,55 @@
 :root {
   /* Cores base — modo claro */
-  --color-bg: #f0f4f8;
-  --color-surface: #ffffff;
-  --color-border: #e2e8f0;
-  --color-text: #1e293b;
-  --color-text-muted: #64748b;
+  --color-bg: #faf8f3;
+  --color-surface: #fffefb;
+  --color-border: #e8e2d5;
+  --color-text: #221f19;
+  --color-text-muted: #7d7666;
 
   /* Acento da marca */
-  --color-accent: #3b82f6;
-  --color-accent-hover: #2563eb;
-  --color-accent-solid: #2563eb;
+  --color-accent: #3d6b52;
+  --color-accent-hover: #2f5440;
+  --color-accent-solid: #3d6b52;
   --color-on-accent: #ffffff;
 
   /* Semânticas (status) */
-  --color-success: #22c55e;
-  --color-success-dark: #15803d;
-  --color-success-solid: #15803d;
+  --color-success: #2f8a5c;
+  --color-success-dark: #1f6b45;
+  --color-success-solid: #1f6b45;
   --color-on-success: #ffffff;
-  --color-danger: #dc2626;
-  --color-danger-light: #fee2e2;
-  --color-warning: #f59e0b;
+  --color-danger: #c94f3f;
+  --color-danger-light: #f6e0db;
+  --color-warning: #c08a2e;
 
   /* Tipografia */
-  --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Manrope', ui-sans-serif, -apple-system, sans-serif;
 
   /* Espaçamento e forma */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --space-unit: 4px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
 
   color-scheme: light;
 }
 
 .dark {
-  --color-bg: #0f172a;
-  --color-surface: #1e293b;
-  --color-border: #334155;
-  --color-text: #f1f5f9;
-  --color-text-muted: #94a3b8;
+  --color-bg: #18160f;
+  --color-surface: #221f19;
+  --color-border: #332f22;
+  --color-text: #ede8db;
+  --color-text-muted: #a89f8a;
 
-  --color-accent: #60a5fa;
-  --color-accent-hover: #3b82f6;
-  --color-accent-solid: #60a5fa;
-  --color-on-accent: #0f172a;
+  --color-accent: #6fa085;
+  --color-accent-hover: #8bb89d;
+  --color-accent-solid: #6fa085;
+  --color-on-accent: #14120c;
 
-  --color-success: #4ade80;
-  --color-success-dark: #22c55e;
-  --color-success-solid: #4ade80;
-  --color-on-success: #0f172a;
-  --color-danger: #f87171;
-  --color-danger-light: #7f1d1d55;
-  --color-warning: #fbbf24;
+  --color-success: #5cb98a;
+  --color-success-dark: #3fa273;
+  --color-success-solid: #5cb98a;
+  --color-on-success: #14120c;
+  --color-danger: #e2786a;
+  --color-danger-light: #4a2620;
+  --color-warning: #d1a44f;
 
   color-scheme: dark;
 }
@@ -69,4 +68,10 @@ body {
 input, select, textarea, button {
   font-family: inherit;
   font-size: inherit;
+}
+
+h1 {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
 }
