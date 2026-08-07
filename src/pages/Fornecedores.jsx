@@ -96,6 +96,23 @@ function ModalPagamento({ pedido, onSalvar, onFechar }) {
         <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)' }}>
           Saldo restante: <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(saldoRestante)}</strong>
         </p>
+
+        {pedido.pagamentos && pedido.pagamentos.length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 6 }}>
+              Pagamentos já registrados
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 120, overflowY: 'auto' }}>
+              {pedido.pagamentos.map(p => (
+                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '6px 10px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
+                  <span>{new Date(p.data_pagamento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                  <span style={{ fontWeight: 600 }}>{formatMoeda(p.valor)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {erro && <p style={{ color: 'var(--color-danger)', margin: 0 }}>{erro}</p>}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <label>
