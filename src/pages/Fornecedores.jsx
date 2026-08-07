@@ -322,6 +322,17 @@ export default function Fornecedores() {
     if (fornecedorSel?.id === modalEditar.id) setFornecedorSel(r.data)
   }
 
+  async function excluirFornecedor(f) {
+    if (!confirm(`Excluir fornecedor "${f.apelido || f.nome}"?`)) return
+    try {
+      await api.delete(`/api/fornecedores/${f.id}`)
+      if (fornecedorSel?.id === f.id) { setFornecedorSel(null); setPedidos([]) }
+      await carregarFornecedores()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Erro ao excluir fornecedor.')
+    }
+  }
+
   return (
     <Layout>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -348,17 +359,28 @@ export default function Fornecedores() {
               </div>
             </div>
             {finRole === 'fin_admin' && (
-              <button
-                onClick={e => { e.stopPropagation(); setModalEditar(f) }}
-                title="Editar fornecedor"
-                style={{
-                  position: 'absolute', top: 8, right: 8,
-                  background: 'transparent', border: 'none', cursor: 'pointer',
-                  fontSize: 14, opacity: 0.6, padding: 4,
-                  color: fornecedorSel?.id === f.id ? 'var(--color-on-accent)' : 'var(--color-text)'
-                }}>
-                ✏️
-              </button>
+              <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 2 }}>
+                <button
+                  onClick={e => { e.stopPropagation(); setModalEditar(f) }}
+                  title="Editar fornecedor"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    fontSize: 14, opacity: 0.6, padding: 4,
+                    color: fornecedorSel?.id === f.id ? 'var(--color-on-accent)' : 'var(--color-text)'
+                  }}>
+                  ✏️
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); excluirFornecedor(f) }}
+                  title="Excluir fornecedor"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    fontSize: 14, opacity: 0.6, padding: 4,
+                    color: fornecedorSel?.id === f.id ? 'var(--color-on-accent)' : 'var(--color-text)'
+                  }}>
+                  🗑️
+                </button>
+              </div>
             )}
           </div>
         ))}
