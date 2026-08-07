@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { jsPDF } from 'jspdf'
 import Layout from '../components/Layout'
 import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
@@ -16,6 +17,103 @@ const modalBox = {
 
 function formatMoeda(valor) {
   return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function formatData(data) {
+  return data ? new Date(data).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '—'
+}
+
+function paraDataInput(data) {
+  return data ? new Date(data).toISOString().split('T')[0] : ''
+}
+
+function gerarResumoPDF(fornecedor, pedidos) {
+  const doc = new jsPDF()
+  const marginX = 14
+  const pageWidth = doc.internal.pageSize.width
+  const pageHeight = doc.internal.pageSize.height
+  let y = 20
+
+  function quebrarPaginaSeNecessario(altura = 7) {
+    if (y + altura > pageHeight - 20) {
+      doc.addPage()
+      y = 20
+    }
+  }
+
+  doc.setFontSize(16)
+  doc.setFont(undefined, 'bold')
+  doc.text('CRAVELLI — Resumo de Pedidos', marginX, y)
+  y += 8
+  doc.setFontSize(12)
+  doc.text(`Fornecedor: ${fornecedor.nome}`, marginX, y)
+  y += 6
+  doc.setFontSize(10)
+  doc.setFont(undefined, 'normal')
+  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, marginX, y)
+  y += 10
+
+  const pedidosOrdenados = [...pedidos].sort((a, b) => new Date(a.data_pedido) - new Date(b.data_pedido))
+
+  let totalComprado = 0
+  let totalPago = 0
+
+  pedidosOrdenados.forEach(p => {
+    quebrarPaginaSeNecessario(14)
+    doc.setFontSize(11)
+    doc.setFont(undefined, 'bold')
+    doc.text(`${formatData(p.data_pedido)} — ${formatMoeda(p.valor_total)} — ${p.status}`, marginX, y)
+    y += 6
+    doc.setFont(undefined, 'normal')
+    doc.setFontSize(9)
+
+    if (p.itens && p.itens.length > 0) {
+      p.itens.forEach(item => {
+        quebrarPaginaSeNecessario()
+        doc.text(`  ${item.produto}`, marginX, y)
+        doc.text(`${Number(item.quantidade).toLocaleString('pt-BR')} x ${formatMoeda(item.valor_unitario)} = ${formatMoeda(item.valor_total)}`, marginX + 95, y)
+        y += 5
+      })
+    } else {
+      quebrarPaginaSeNecessario()
+      doc.text(`  ${p.descricao_produtos || '—'}`, marginX, y)
+      y += 5
+    }
+
+    quebrarPaginaSeNecessario()
+    if (p.pagamentos && p.pagamentos.length > 0) {
+      doc.text('  Pagamentos:', marginX, y)
+      y += 5
+      p.pagamentos.forEach(pg => {
+        quebrarPaginaSeNecessario()
+        doc.text(`    ${formatData(pg.data_pagamento)} — ${formatMoeda(pg.valor)}`, marginX, y)
+        y += 5
+      })
+    } else {
+      doc.text('  Pagamentos: nenhum', marginX, y)
+      y += 5
+    }
+
+    totalComprado += Number(p.valor_total)
+    totalPago += Number(p.valor_pago)
+    y += 4
+  })
+
+  quebrarPaginaSeNecessario(26)
+  y += 2
+  doc.setDrawColor(180)
+  doc.line(marginX, y, pageWidth - marginX, y)
+  y += 8
+  doc.setFontSize(11)
+  doc.setFont(undefined, 'bold')
+  doc.text(`Total comprado: ${formatMoeda(totalComprado)}`, marginX, y)
+  y += 6
+  doc.text(`Total pago: ${formatMoeda(totalPago)}`, marginX, y)
+  y += 6
+  doc.text(`Saldo em aberto: ${formatMoeda(totalComprado - totalPago)}`, marginX, y)
+
+  const nomeArquivo = `resumo-${(fornecedor.apelido || fornecedor.nome).toLowerCase().replace(/\s+/g, '-')}.pdf`
+  doc.save(nomeArquivo)
 }
 
 function ModalFornecedor({ titulo, inicial, onSalvar, onFechar }) {
@@ -363,6 +461,119 @@ function ValorTotalEditavel({ pedido, onEditar }) {
   )
 }
 
+function DataEditavel({ pedido, onEditar }) {
+  const [editando, setEditando] = useState(false)
+  const [data, setData] = useState(paraDataInput(pedido.data_pedido))
+  const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  async function salvar() {
+    setErro(null)
+    setLoading(true)
+    try {
+      await onEditar(data)
+      setEditando(false)
+    } catch (err) {
+      setErro(err.response?.data?.error || 'Erro ao editar data.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (editando) {
+    return (
+      <div>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <input type="date" value={data} onChange={e => setData(e.target.value)}
+            style={{ ...inputStyle, marginTop: 0, width: 140 }} />
+          <button onClick={salvar} disabled={loading}
+            style={{ padding: '4px 8px', fontSize: 12, background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+            ✓
+          </button>
+          <button onClick={() => setEditando(false)} disabled={loading}
+            style={{ padding: '4px 8px', fontSize: 12, background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+            ✕
+          </button>
+        </div>
+        {erro && <p style={{ color: 'var(--color-danger)', fontSize: 11, margin: '4px 0 0' }}>{erro}</p>}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <span>{formatData(pedido.data_pedido)}</span>
+      {onEditar && (
+        <button onClick={() => setEditando(true)} title="Editar data"
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>
+          ✏️
+        </button>
+      )}
+    </div>
+  )
+}
+
+function AdicionarItemForm({ onAdicionar }) {
+  const [mostrarForm, setMostrarForm] = useState(false)
+  const [produto, setProduto] = useState('')
+  const [quantidade, setQuantidade] = useState('')
+  const [valorUnitario, setValorUnitario] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setErro(null)
+    setLoading(true)
+    try {
+      await onAdicionar(produto, parseFloat(quantidade), parseFloat(valorUnitario))
+      setProduto('')
+      setQuantidade('')
+      setValorUnitario('')
+      setMostrarForm(false)
+    } catch (err) {
+      setErro(err.response?.data?.error || 'Erro ao adicionar produto.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!mostrarForm) {
+    return (
+      <button onClick={() => setMostrarForm(true)}
+        style={{ padding: '4px 12px', fontSize: 12, background: 'transparent', color: 'var(--color-accent-solid)', border: '1px solid var(--color-accent-solid)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+        + Adicionar produto
+      </button>
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <label style={{ fontSize: 12 }}>Produto<br />
+        <input required value={produto} onChange={e => setProduto(e.target.value)}
+          style={{ ...inputStyle, marginTop: 4, width: 180 }} />
+      </label>
+      <label style={{ fontSize: 12 }}>Quantidade<br />
+        <input required type="number" step="0.01" min="0.01" value={quantidade} onChange={e => setQuantidade(e.target.value)}
+          style={{ ...inputStyle, marginTop: 4, width: 100 }} />
+      </label>
+      <label style={{ fontSize: 12 }}>Valor unit. (R$)<br />
+        <input required type="number" step="0.01" min="0" value={valorUnitario} onChange={e => setValorUnitario(e.target.value)}
+          style={{ ...inputStyle, marginTop: 4, width: 100 }} />
+      </label>
+      <button type="submit" disabled={loading}
+        style={{ padding: '8px 16px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+        {loading ? 'Salvando...' : 'Adicionar'}
+      </button>
+      <button type="button" onClick={() => setMostrarForm(false)}
+        style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--color-text)' }}>
+        Cancelar
+      </button>
+      {erro && <p style={{ color: 'var(--color-danger)', fontSize: 12, margin: 0 }}>{erro}</p>}
+    </form>
+  )
+}
+
 const ITEM_VAZIO = { produto: '', quantidade: '', valor_unitario: '' }
 
 export default function Fornecedores() {
@@ -478,6 +689,18 @@ export default function Fornecedores() {
     }
   }
 
+  async function adicionarProdutoAoPedido(pedidoId, produto, quantidade, valorUnitario) {
+    await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/itens`, {
+      produto, quantidade, valor_unitario: valorUnitario
+    })
+    await recarregarPedidos()
+  }
+
+  async function editarDataPedido(pedidoId, dataPedido) {
+    await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}`, { data_pedido: dataPedido })
+    await recarregarPedidos()
+  }
+
   async function salvarNovoFornecedor(dados) {
     await api.post('/api/fornecedores', dados)
     await carregarFornecedores()
@@ -558,12 +781,18 @@ export default function Fornecedores() {
           {erro && <p style={{ color: 'var(--color-danger)', marginBottom: 12 }}>{erro}</p>}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2>Pedidos — {fornecedorSel.nome}</h2>
-            {finRole === 'fin_admin' && (
-              <button onClick={() => setShowForm(!showForm)}
-                style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
-                + Novo pedido
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => gerarResumoPDF(fornecedorSel, pedidos)} disabled={pedidos.length === 0}
+                style={{ padding: '8px 20px', background: 'transparent', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: pedidos.length === 0 ? 'not-allowed' : 'pointer', opacity: pedidos.length === 0 ? 0.5 : 1 }}>
+                📄 Baixar PDF
               </button>
-            )}
+              {finRole === 'fin_admin' && (
+                <button onClick={() => setShowForm(!showForm)}
+                  style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+                  + Novo pedido
+                </button>
+              )}
+            </div>
           </div>
 
           {showForm && finRole === 'fin_admin' && (
@@ -627,7 +856,8 @@ export default function Fornecedores() {
                   <tr key={item ? item.id : p.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                     {i === 0 && (
                       <td rowSpan={itens.length} style={{ padding: '10px 16px', verticalAlign: 'top' }}>
-                        {p.data_pedido ? new Date(p.data_pedido).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '—'}
+                        <DataEditavel pedido={p}
+                          onEditar={finRole === 'fin_admin' ? (dataPedido) => editarDataPedido(p.id, dataPedido) : null} />
                       </td>
                     )}
                     {item ? (
@@ -666,6 +896,14 @@ export default function Fornecedores() {
                 ))
                 return [
                   ...linhasItens,
+                  finRole === 'fin_admin' && (
+                    <tr key={`${p.id}-add-item`} style={{ borderTop: '1px solid var(--color-border)' }}>
+                      <td colSpan={7} style={{ padding: '8px 16px' }}>
+                        <AdicionarItemForm
+                          onAdicionar={(produto, quantidade, valorUnitario) => adicionarProdutoAoPedido(p.id, produto, quantidade, valorUnitario)} />
+                      </td>
+                    </tr>
+                  ),
                   <tr key={`${p.id}-pagamentos`} style={{ borderTop: '1px solid var(--color-border)' }}>
                     <td colSpan={7} style={{ padding: '12px 16px', background: 'var(--color-bg)' }}>
                       <PainelPagamentos
