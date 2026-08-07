@@ -14,6 +14,10 @@ const modalBox = {
   display: 'flex', flexDirection: 'column', gap: 16
 }
 
+function formatMoeda(valor) {
+  return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
 function ModalFornecedor({ titulo, inicial, onSalvar, onFechar }) {
   const [nome, setNome] = useState(inicial?.nome || '')
   const [apelido, setApelido] = useState(inicial?.apelido || '')
@@ -64,16 +68,75 @@ function ModalFornecedor({ titulo, inicial, onSalvar, onFechar }) {
   )
 }
 
+function ModalPagamento({ pedido, onSalvar, onFechar }) {
+  const saldoRestante = Number(pedido.valor_total) - Number(pedido.valor_pago)
+  const [valor, setValor] = useState(saldoRestante.toFixed(2))
+  const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().split('T')[0])
+  const [erro, setErro] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setErro(null)
+    setLoading(true)
+    try {
+      await onSalvar(parseFloat(valor), dataPagamento)
+      onFechar()
+    } catch (err) {
+      setErro(err.response?.data?.error || 'Erro ao registrar pagamento.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={modalOverlay} onClick={onFechar}>
+      <div style={modalBox} onClick={e => e.stopPropagation()}>
+        <h3 style={{ margin: 0 }}>Registrar pagamento</h3>
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)' }}>
+          Saldo restante: <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(saldoRestante)}</strong>
+        </p>
+        {erro && <p style={{ color: 'var(--color-danger)', margin: 0 }}>{erro}</p>}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <label>
+            Valor pago (R$) *
+            <input required type="number" step="0.01" min="0.01" max={saldoRestante}
+              value={valor} onChange={e => setValor(e.target.value)} style={inputStyle} />
+          </label>
+          <label>
+            Data do pagamento *
+            <input required type="date" value={dataPagamento}
+              onChange={e => setDataPagamento(e.target.value)} style={inputStyle} />
+          </label>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+            <button type="button" onClick={onFechar}
+              style={{ padding: '8px 20px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', cursor: 'pointer', background: 'transparent', color: 'var(--color-text)' }}>
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading}
+              style={{ padding: '8px 20px', background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+              {loading ? 'Salvando...' : 'Registrar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+const ITEM_VAZIO = { produto: '', quantidade: '', valor_unitario: '' }
+
 export default function Fornecedores() {
   const { finRole } = useAuth()
   const [fornecedores, setFornecedores] = useState([])
   const [pedidos, setPedidos] = useState([])
   const [fornecedorSel, setFornecedorSel] = useState(null)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ data_pedido: '', valor_total: '', prazo_combinado: '', descricao_produtos: '' })
+  const [form, setForm] = useState({ data_pedido: '', itens: [{ ...ITEM_VAZIO }] })
   const [erro, setErro] = useState(null)
   const [modalNovo, setModalNovo] = useState(false)
   const [modalEditar, setModalEditar] = useState(null)
+  const [modalPagamento, setModalPagamento] = useState(null)
 
   async function carregarFornecedores() {
     const r = await api.get('/api/fornecedores')
@@ -89,33 +152,48 @@ export default function Fornecedores() {
     setShowForm(false)
   }
 
+  function atualizarItem(index, campo, valor) {
+    const itens = form.itens.map((item, i) => i === index ? { ...item, [campo]: valor } : item)
+    setForm({ ...form, itens })
+  }
+
+  function adicionarItem() {
+    setForm({ ...form, itens: [...form.itens, { ...ITEM_VAZIO }] })
+  }
+
+  function removerItem(index) {
+    setForm({ ...form, itens: form.itens.filter((_, i) => i !== index) })
+  }
+
+  function totalDoItem(item) {
+    return (parseFloat(item.quantidade) || 0) * (parseFloat(item.valor_unitario) || 0)
+  }
+
+  const totalDoPedido = form.itens.reduce((soma, item) => soma + totalDoItem(item), 0)
+
   async function handleSubmit(e) {
     e.preventDefault()
     setErro(null)
     try {
-      await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos`, { ...form, valor_total: parseFloat(form.valor_total) })
+      const itens = form.itens.map(item => ({
+        produto: item.produto,
+        quantidade: parseFloat(item.quantidade),
+        valor_unitario: parseFloat(item.valor_unitario)
+      }))
+      await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos`, { data_pedido: form.data_pedido, itens })
       setShowForm(false)
-      setForm({ data_pedido: '', valor_total: '', prazo_combinado: '', descricao_produtos: '' })
+      setForm({ data_pedido: '', itens: [{ ...ITEM_VAZIO }] })
       selecionarFornecedor(fornecedorSel)
     } catch (err) {
       setErro(err.response?.data?.error || 'Erro ao salvar pedido.')
     }
   }
 
-  async function marcarPago(pedidoId) {
-    setErro(null)
-    try {
-      const hoje = new Date().toISOString().split('T')[0]
-      const pedido = pedidos.find(p => p.id === pedidoId)
-      await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}`, {
-        status: 'pago',
-        valor_pago: pedido.valor_total,
-        data_pagamento: hoje
-      })
-      selecionarFornecedor(fornecedorSel)
-    } catch {
-      setErro('Erro ao marcar pedido como pago.')
-    }
+  async function registrarPagamento(pedidoId, valor, dataPagamento) {
+    await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/pagamentos`, {
+      valor, data_pagamento: dataPagamento
+    })
+    selecionarFornecedor(fornecedorSel)
   }
 
   async function salvarNovoFornecedor(dados) {
@@ -151,7 +229,7 @@ export default function Fornecedores() {
             <div onClick={() => selecionarFornecedor(f)}>
               <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{f.apelido || f.nome}</div>
               <div style={{ fontSize: 13, opacity: fornecedorSel?.id === f.id ? 0.95 : 0.8 }}>
-                {Number(f.saldo_aberto).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} em aberto
+                {formatMoeda(f.saldo_aberto)} em aberto
               </div>
             </div>
             {finRole === 'fin_admin' && (
@@ -185,12 +263,45 @@ export default function Fornecedores() {
           </div>
 
           {showForm && finRole === 'fin_admin' && (
-            <form onSubmit={handleSubmit} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 24, marginBottom: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <label>Data do pedido<br /><input required type="date" value={form.data_pedido} onChange={e => setForm({ ...form, data_pedido: e.target.value })} style={inputStyle} /></label>
-              <label>Valor total (R$)<br /><input required type="number" step="0.01" value={form.valor_total} onChange={e => setForm({ ...form, valor_total: e.target.value })} style={inputStyle} /></label>
-              <label>Prazo combinado<br /><input type="date" value={form.prazo_combinado} onChange={e => setForm({ ...form, prazo_combinado: e.target.value })} style={inputStyle} /></label>
-              <label>Produtos<br /><input value={form.descricao_produtos} onChange={e => setForm({ ...form, descricao_produtos: e.target.value })} style={inputStyle} /></label>
-              <div style={{ gridColumn: 'span 2', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <form onSubmit={handleSubmit} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 24, marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <label style={{ maxWidth: 220 }}>Data do pedido<br /><input required type="date" value={form.data_pedido} onChange={e => setForm({ ...form, data_pedido: e.target.value })} style={inputStyle} /></label>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>Itens do pedido</span>
+                  <button type="button" onClick={adicionarItem}
+                    style={{ padding: '6px 14px', fontSize: 13, background: 'transparent', color: 'var(--color-accent-solid)', border: '1px solid var(--color-accent-solid)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+                    + Adicionar produto
+                  </button>
+                </div>
+
+                {form.itens.map((item, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
+                    <label style={{ fontSize: 12 }}>Produto<br />
+                      <input required value={item.produto} onChange={e => atualizarItem(i, 'produto', e.target.value)} style={inputStyle} />
+                    </label>
+                    <label style={{ fontSize: 12 }}>Quantidade<br />
+                      <input required type="number" step="0.01" min="0.01" value={item.quantidade} onChange={e => atualizarItem(i, 'quantidade', e.target.value)} style={inputStyle} />
+                    </label>
+                    <label style={{ fontSize: 12 }}>Valor unit. (R$)<br />
+                      <input required type="number" step="0.01" min="0" value={item.valor_unitario} onChange={e => atualizarItem(i, 'valor_unitario', e.target.value)} style={inputStyle} />
+                    </label>
+                    <div style={{ fontSize: 12 }}>Total<br />
+                      <div style={{ padding: '8px 0', fontWeight: 600 }}>{formatMoeda(totalDoItem(item))}</div>
+                    </div>
+                    <button type="button" onClick={() => removerItem(i)} disabled={form.itens.length === 1}
+                      style={{ padding: 8, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: form.itens.length === 1 ? 'not-allowed' : 'pointer', color: 'var(--color-text-muted)', opacity: form.itens.length === 1 ? 0.4 : 1 }}>
+                      ✕
+                    </button>
+                  </div>
+                ))}
+
+                <div style={{ textAlign: 'right', fontWeight: 700, marginTop: 8, fontSize: 15 }}>
+                  Total do pedido: {formatMoeda(totalDoPedido)}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button type="button" onClick={() => setShowForm(false)} style={{ padding: '8px 20px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', cursor: 'pointer', background: 'transparent', color: 'var(--color-text)' }}>Cancelar</button>
                 <button type="submit" style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>Salvar</button>
               </div>
@@ -200,39 +311,60 @@ export default function Fornecedores() {
           <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)', textAlign: 'left' }}>
-                {['Data', 'Produtos', 'Valor', 'Prazo', 'Status', ''].map(h => (
+                {['Data', 'Produto', 'Quantidade', 'Valor unitário', 'Valor total', 'Status', ''].map(h => (
                   <th key={h} style={{ padding: '10px 16px', fontSize: 13 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {pedidos.map(p => (
-                <tr key={p.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                  <td style={{ padding: '10px 16px' }}>{p.data_pedido ? new Date(p.data_pedido).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : '—'}</td>
-                  <td style={{ padding: '10px 16px', color: 'var(--color-text-muted)', maxWidth: 200 }}>{p.descricao_produtos || '—'}</td>
-                  <td style={{ padding: '10px 16px', fontWeight: 600 }}>{Number(p.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                  <td style={{ padding: '10px 16px' }}>{p.prazo_combinado ? new Date(p.prazo_combinado).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : '—'}</td>
-                  <td style={{ padding: '10px 16px' }}>
-                    <span style={{
-                      padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600,
-                      background: p.status === 'pago' ? 'color-mix(in srgb, var(--color-success) 18%, transparent)' : p.status === 'parcial' ? 'color-mix(in srgb, var(--color-warning) 18%, transparent)' : 'color-mix(in srgb, var(--color-danger) 18%, transparent)',
-                      color: p.status === 'pago' ? 'var(--color-success)' : p.status === 'parcial' ? 'var(--color-warning)' : 'var(--color-danger)'
-                    }}>
-                      {p.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '10px 16px' }}>
-                    {finRole === 'fin_admin' && p.status !== 'pago' && (
-                      <button onClick={() => marcarPago(p.id)}
-                        style={{ padding: '4px 12px', fontSize: 12, background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
-                        Marcar pago
-                      </button>
+              {pedidos.map(p => {
+                const itens = p.itens && p.itens.length > 0 ? p.itens : [null]
+                return itens.map((item, i) => (
+                  <tr key={item ? item.id : p.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                    {i === 0 && (
+                      <td rowSpan={itens.length} style={{ padding: '10px 16px', verticalAlign: 'top' }}>
+                        {p.data_pedido ? new Date(p.data_pedido).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '—'}
+                      </td>
                     )}
-                  </td>
-                </tr>
-              ))}
+                    {item ? (
+                      <>
+                        <td style={{ padding: '10px 16px' }}>{item.produto}</td>
+                        <td style={{ padding: '10px 16px' }}>{Number(item.quantidade).toLocaleString('pt-BR')}</td>
+                        <td style={{ padding: '10px 16px' }}>{formatMoeda(item.valor_unitario)}</td>
+                        <td style={{ padding: '10px 16px', fontWeight: 600 }}>{formatMoeda(item.valor_total)}</td>
+                      </>
+                    ) : (
+                      <>
+                        <td colSpan={3} style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>{p.descricao_produtos || '—'}</td>
+                        <td style={{ padding: '10px 16px', fontWeight: 600 }}>{formatMoeda(p.valor_total)}</td>
+                      </>
+                    )}
+                    {i === 0 && (
+                      <>
+                        <td rowSpan={itens.length} style={{ padding: '10px 16px', verticalAlign: 'top' }}>
+                          <span style={{
+                            padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600,
+                            background: p.status === 'pago' ? 'color-mix(in srgb, var(--color-success) 18%, transparent)' : p.status === 'parcial' ? 'color-mix(in srgb, var(--color-warning) 18%, transparent)' : 'color-mix(in srgb, var(--color-danger) 18%, transparent)',
+                            color: p.status === 'pago' ? 'var(--color-success)' : p.status === 'parcial' ? 'var(--color-warning)' : 'var(--color-danger)'
+                          }}>
+                            {p.status}
+                          </span>
+                        </td>
+                        <td rowSpan={itens.length} style={{ padding: '10px 16px', verticalAlign: 'top' }}>
+                          {finRole === 'fin_admin' && p.status !== 'pago' && (
+                            <button onClick={() => setModalPagamento(p)}
+                              style={{ padding: '4px 12px', fontSize: 12, background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+                              Registrar pagamento
+                            </button>
+                          )}
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))
+              })}
               {pedidos.length === 0 && (
-                <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-muted)' }}>Nenhum pedido cadastrado.</td></tr>
+                <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-muted)' }}>Nenhum pedido cadastrado.</td></tr>
               )}
             </tbody>
           </table>
@@ -254,6 +386,14 @@ export default function Fornecedores() {
           inicial={modalEditar}
           onSalvar={salvarEdicaoFornecedor}
           onFechar={() => setModalEditar(null)}
+        />
+      )}
+
+      {modalPagamento && (
+        <ModalPagamento
+          pedido={modalPagamento}
+          onSalvar={(valor, data) => registrarPagamento(modalPagamento.id, valor, data)}
+          onFechar={() => setModalPagamento(null)}
         />
       )}
     </Layout>
