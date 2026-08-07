@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { signOut } from '../services/auth'
 import { useAuth } from '../contexts/AuthContext'
 import ThemeToggle from './ThemeToggle'
+import Logo from './Logo'
 
 const nav = [
   { path: '/', label: 'Visão da Semana' },
@@ -20,8 +21,8 @@ export default function Layout({ children }) {
         width:220, background:'var(--color-surface)', borderRight:'1px solid var(--color-border)',
         padding:'24px 0', display:'flex', flexDirection:'column'
       }}>
-        <div style={{ color:'var(--color-text)', fontWeight:700, fontSize:16, padding:'0 20px 24px' }}>
-          Cravelli Financeiro
+        <div style={{ padding:'0 20px 24px' }}>
+          <Logo titleSize={14} />
         </div>
         {nav.map(({ path, label }) => (
           <Link key={path} to={path} style={{
