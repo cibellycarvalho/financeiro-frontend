@@ -27,31 +27,93 @@ function paraDataInput(data) {
   return data ? new Date(data).toISOString().split('T')[0] : ''
 }
 
+const PDF_COR_MARCA = [61, 107, 82]
+const PDF_COR_DEVEDOR = [201, 79, 63]
+const PDF_COR_DEVEDOR_FUNDO = [250, 227, 223]
+const PDF_COR_PAGO = [47, 138, 92]
+const PDF_COR_PAGO_FUNDO = [216, 237, 226]
+const PDF_COR_PENDENTE_FUNDO = [250, 235, 210]
+const PDF_COR_PENDENTE = [161, 110, 26]
+const PDF_COR_TEXTO = [40, 40, 40]
+const PDF_COR_BORDA = [214, 214, 214]
+
 function gerarResumoPDF(fornecedor, pedidos) {
   const doc = new jsPDF()
   const marginX = 14
   const pageWidth = doc.internal.pageSize.width
   const pageHeight = doc.internal.pageSize.height
+  const colWidths = [20, 60, 20, 24, 30, 28]
+  const colX = [marginX]
+  colWidths.forEach((w, i) => colX.push(colX[i] + w))
+  const tableWidth = colWidths.reduce((a, b) => a + b, 0)
+  const rowH = 7
   let y = 20
 
-  function quebrarPaginaSeNecessario(altura = 7) {
-    if (y + altura > pageHeight - 20) {
+  function quebrarPaginaSeNecessario(altura) {
+    if (y + altura > pageHeight - 34) {
       doc.addPage()
       y = 20
+      desenharCabecalhoTabela()
     }
+  }
+
+  function desenharCabecalhoTabela() {
+    doc.setFillColor(...PDF_COR_MARCA)
+    doc.rect(marginX, y, tableWidth, rowH, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont(undefined, 'bold')
+    doc.setFontSize(8)
+    const titulos = ['DATA', 'PRODUTO', 'QTD.', 'R$ UNIT.', 'SALDO DEVEDOR', 'PAG. FEITO']
+    titulos.forEach((titulo, i) => {
+      const alinhado = i >= 2 ? 'right' : 'left'
+      const posX = alinhado === 'right' ? colX[i + 1] - 2 : colX[i] + 2
+      doc.text(titulo, posX, y + 4.7, { align: alinhado })
+    })
+    doc.setTextColor(...PDF_COR_TEXTO)
+    y += rowH
+  }
+
+  function desenharLinha(colunas, opcoes = {}) {
+    quebrarPaginaSeNecessario(rowH)
+    if (opcoes.fundo) {
+      doc.setFillColor(...opcoes.fundo)
+      doc.rect(marginX, y, tableWidth, rowH, 'F')
+    }
+    doc.setDrawColor(...PDF_COR_BORDA)
+    doc.rect(marginX, y, tableWidth, rowH, 'S')
+    for (let i = 1; i < colX.length - 1; i++) {
+      doc.line(colX[i], y, colX[i], y + rowH)
+    }
+    doc.setFontSize(8)
+    doc.setFont(undefined, opcoes.negrito ? 'bold' : 'normal')
+    colunas.forEach((texto, i) => {
+      if (!texto) return
+      doc.setTextColor(...(opcoes.cores?.[i] || PDF_COR_TEXTO))
+      const alinhado = i >= 2 ? 'right' : 'left'
+      const posX = alinhado === 'right' ? colX[i + 1] - 2 : colX[i] + 2
+      doc.text(String(texto), posX, y + 4.7, { align: alinhado })
+    })
+    doc.setTextColor(...PDF_COR_TEXTO)
+    y += rowH
   }
 
   doc.setFontSize(16)
   doc.setFont(undefined, 'bold')
-  doc.text('CRAVELLI — Resumo de Pedidos', marginX, y)
-  y += 8
-  doc.setFontSize(12)
-  doc.text(`Fornecedor: ${fornecedor.nome}`, marginX, y)
+  doc.setTextColor(...PDF_COR_MARCA)
+  doc.text('CRAVELLI', marginX, y)
+  doc.setTextColor(...PDF_COR_TEXTO)
   y += 6
-  doc.setFontSize(10)
+  doc.setFontSize(11)
+  doc.text(`Resumo de Pedidos — ${fornecedor.nome}`, marginX, y)
+  y += 5
+  doc.setFontSize(8)
   doc.setFont(undefined, 'normal')
-  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, marginX, y)
-  y += 10
+  doc.setTextColor(130, 130, 130)
+  doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')}`, marginX, y)
+  doc.setTextColor(...PDF_COR_TEXTO)
+  y += 8
+
+  desenharCabecalhoTabela()
 
   const pedidosOrdenados = [...pedidos].sort((a, b) => new Date(a.data_pedido) - new Date(b.data_pedido))
 
@@ -59,58 +121,57 @@ function gerarResumoPDF(fornecedor, pedidos) {
   let totalPago = 0
 
   pedidosOrdenados.forEach(p => {
-    quebrarPaginaSeNecessario(14)
-    doc.setFontSize(11)
-    doc.setFont(undefined, 'bold')
-    doc.text(`${formatData(p.data_pedido)} — ${formatMoeda(p.valor_total)} — ${p.status}`, marginX, y)
-    y += 6
-    doc.setFont(undefined, 'normal')
-    doc.setFontSize(9)
-
     if (p.itens && p.itens.length > 0) {
-      p.itens.forEach(item => {
-        quebrarPaginaSeNecessario()
-        doc.text(`  ${item.produto}`, marginX, y)
-        doc.text(`${Number(item.quantidade).toLocaleString('pt-BR')} x ${formatMoeda(item.valor_unitario)} = ${formatMoeda(item.valor_total)}`, marginX + 95, y)
-        y += 5
+      p.itens.forEach((item, i) => {
+        desenharLinha(
+          [i === 0 ? formatData(p.data_pedido) : '', item.produto,
+            Number(item.quantidade).toLocaleString('pt-BR'), formatMoeda(item.valor_unitario),
+            formatMoeda(item.valor_total), ''],
+          { cores: { 4: PDF_COR_DEVEDOR } }
+        )
       })
     } else {
-      quebrarPaginaSeNecessario()
-      doc.text(`  ${p.descricao_produtos || '—'}`, marginX, y)
-      y += 5
+      desenharLinha(
+        [formatData(p.data_pedido), p.descricao_produtos || 'Saldo devedor', '', '', formatMoeda(p.valor_total), ''],
+        { negrito: true, cores: { 4: PDF_COR_DEVEDOR } }
+      )
     }
 
-    quebrarPaginaSeNecessario()
-    if (p.pagamentos && p.pagamentos.length > 0) {
-      doc.text('  Pagamentos:', marginX, y)
-      y += 5
+    if (p.pagamentos) {
       p.pagamentos.forEach(pg => {
-        quebrarPaginaSeNecessario()
-        doc.text(`    ${formatData(pg.data_pagamento)} — ${formatMoeda(pg.valor)}`, marginX, y)
-        y += 5
+        desenharLinha(
+          [formatData(pg.data_pagamento), 'PAGAMENTO REALIZADO', '', '', '', formatMoeda(pg.valor)],
+          { fundo: PDF_COR_PAGO_FUNDO, negrito: true, cores: { 1: PDF_COR_PAGO, 5: PDF_COR_PAGO } }
+        )
       })
-    } else {
-      doc.text('  Pagamentos: nenhum', marginX, y)
-      y += 5
     }
 
     totalComprado += Number(p.valor_total)
     totalPago += Number(p.valor_pago)
-    y += 4
   })
 
-  quebrarPaginaSeNecessario(26)
-  y += 2
-  doc.setDrawColor(180)
-  doc.line(marginX, y, pageWidth - marginX, y)
   y += 8
-  doc.setFontSize(11)
-  doc.setFont(undefined, 'bold')
-  doc.text(`Total comprado: ${formatMoeda(totalComprado)}`, marginX, y)
-  y += 6
-  doc.text(`Total pago: ${formatMoeda(totalPago)}`, marginX, y)
-  y += 6
-  doc.text(`Saldo em aberto: ${formatMoeda(totalComprado - totalPago)}`, marginX, y)
+  quebrarPaginaSeNecessario(24)
+
+  const gap = 6
+  const boxW = (tableWidth - gap * 2) / 3
+  const boxH = 18
+
+  function caixaResumo(x, label, valor, corFundo, corTexto) {
+    doc.setFillColor(...corFundo)
+    doc.rect(x, y, boxW, boxH, 'F')
+    doc.setTextColor(...corTexto)
+    doc.setFont(undefined, 'bold')
+    doc.setFontSize(8)
+    doc.text(label, x + boxW / 2, y + 7, { align: 'center' })
+    doc.setFontSize(12)
+    doc.text(formatMoeda(valor), x + boxW / 2, y + 14, { align: 'center' })
+    doc.setTextColor(...PDF_COR_TEXTO)
+  }
+
+  caixaResumo(marginX, 'TOTAL COMPRADO', totalComprado, PDF_COR_PENDENTE_FUNDO, PDF_COR_PENDENTE)
+  caixaResumo(marginX + boxW + gap, 'TOTAL PAGO', totalPago, PDF_COR_PAGO_FUNDO, PDF_COR_PAGO)
+  caixaResumo(marginX + (boxW + gap) * 2, 'SALDO DEVEDOR', totalComprado - totalPago, PDF_COR_DEVEDOR_FUNDO, PDF_COR_DEVEDOR)
 
   const nomeArquivo = `resumo-${(fornecedor.apelido || fornecedor.nome).toLowerCase().replace(/\s+/g, '-')}.pdf`
   doc.save(nomeArquivo)
