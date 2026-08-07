@@ -54,7 +54,7 @@ function ModalFornecedor({ titulo, inicial, onSalvar, onFechar }) {
               Cancelar
             </button>
             <button type="submit" disabled={loading}
-              style={{ padding: '8px 20px', background: 'var(--color-accent)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+              style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
               {loading ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
@@ -135,7 +135,7 @@ export default function Fornecedores() {
         <h1 style={{ margin: 0 }}>Fornecedores</h1>
         {finRole === 'fin_admin' && (
           <button onClick={() => setModalNovo(true)}
-            style={{ padding: '8px 20px', background: 'var(--color-accent)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+            style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
             + Novo Fornecedor
           </button>
         )}
@@ -144,13 +144,13 @@ export default function Fornecedores() {
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 32 }}>
         {fornecedores.map(f => (
           <div key={f.id}
-            style={{ position: 'relative', cursor: 'pointer', background: fornecedorSel?.id === f.id ? 'var(--color-accent)' : 'var(--color-surface)',
+            style={{ position: 'relative', cursor: 'pointer', background: fornecedorSel?.id === f.id ? 'var(--color-accent-solid)' : 'var(--color-surface)',
               border: '1px solid var(--color-border)',
-              color: fornecedorSel?.id === f.id ? '#fff' : 'var(--color-text)',
+              color: fornecedorSel?.id === f.id ? 'var(--color-on-accent)' : 'var(--color-text)',
               borderRadius: 'var(--radius-md)', padding: '16px 20px', minWidth: 160 }}>
             <div onClick={() => selecionarFornecedor(f)}>
               <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{f.apelido || f.nome}</div>
-              <div style={{ fontSize: 13, opacity: 0.8 }}>
+              <div style={{ fontSize: 13, opacity: fornecedorSel?.id === f.id ? 0.95 : 0.8 }}>
                 {Number(f.saldo_aberto).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} em aberto
               </div>
             </div>
@@ -162,7 +162,7 @@ export default function Fornecedores() {
                   position: 'absolute', top: 8, right: 8,
                   background: 'transparent', border: 'none', cursor: 'pointer',
                   fontSize: 14, opacity: 0.6, padding: 4,
-                  color: fornecedorSel?.id === f.id ? '#fff' : 'var(--color-text)'
+                  color: fornecedorSel?.id === f.id ? 'var(--color-on-accent)' : 'var(--color-text)'
                 }}>
                 ✏️
               </button>
@@ -178,7 +178,7 @@ export default function Fornecedores() {
             <h2>Pedidos — {fornecedorSel.nome}</h2>
             {finRole === 'fin_admin' && (
               <button onClick={() => setShowForm(!showForm)}
-                style={{ padding: '8px 20px', background: 'var(--color-accent)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+                style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
                 + Novo pedido
               </button>
             )}
@@ -192,7 +192,7 @@ export default function Fornecedores() {
               <label>Produtos<br /><input value={form.descricao_produtos} onChange={e => setForm({ ...form, descricao_produtos: e.target.value })} style={inputStyle} /></label>
               <div style={{ gridColumn: 'span 2', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button type="button" onClick={() => setShowForm(false)} style={{ padding: '8px 20px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', cursor: 'pointer', background: 'transparent', color: 'var(--color-text)' }}>Cancelar</button>
-                <button type="submit" style={{ padding: '8px 20px', background: 'var(--color-accent)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>Salvar</button>
+                <button type="submit" style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>Salvar</button>
               </div>
             </form>
           )}
@@ -224,7 +224,7 @@ export default function Fornecedores() {
                   <td style={{ padding: '10px 16px' }}>
                     {finRole === 'fin_admin' && p.status !== 'pago' && (
                       <button onClick={() => marcarPago(p.id)}
-                        style={{ padding: '4px 12px', fontSize: 12, background: 'var(--color-success)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+                        style={{ padding: '4px 12px', fontSize: 12, background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
                         Marcar pago
                       </button>
                     )}

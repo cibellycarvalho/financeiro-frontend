@@ -9,10 +9,14 @@
   /* Acento da marca */
   --color-accent: #3b82f6;
   --color-accent-hover: #2563eb;
+  --color-accent-solid: #2563eb;
+  --color-on-accent: #ffffff;
 
   /* Semânticas (status) */
   --color-success: #22c55e;
   --color-success-dark: #15803d;
+  --color-success-solid: #15803d;
+  --color-on-success: #ffffff;
   --color-danger: #dc2626;
   --color-danger-light: #fee2e2;
   --color-warning: #f59e0b;
@@ -24,6 +28,8 @@
   --radius-sm: 6px;
   --radius-md: 10px;
   --space-unit: 4px;
+
+  color-scheme: light;
 }
 
 .dark {
@@ -35,12 +41,18 @@
 
   --color-accent: #60a5fa;
   --color-accent-hover: #3b82f6;
+  --color-accent-solid: #60a5fa;
+  --color-on-accent: #0f172a;
 
   --color-success: #4ade80;
   --color-success-dark: #22c55e;
+  --color-success-solid: #4ade80;
+  --color-on-success: #0f172a;
   --color-danger: #f87171;
   --color-danger-light: #7f1d1d55;
   --color-warning: #fbbf24;
+
+  color-scheme: dark;
 }
 
 * {
@@ -52,4 +64,9 @@ body {
   font-family: var(--font-sans);
   background: var(--color-bg);
   color: var(--color-text);
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+  font-size: inherit;
 }

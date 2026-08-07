@@ -10,7 +10,11 @@ export function useTheme() {
   function toggleTheme() {
     const next = !isDark
     document.documentElement.classList.toggle('dark', next)
-    localStorage.setItem(STORAGE_KEY, next ? 'dark' : 'light')
+    try {
+      localStorage.setItem(STORAGE_KEY, next ? 'dark' : 'light')
+    } catch {
+      // localStorage indisponível (ex: storage bloqueado) — tema ainda funciona nesta sessão
+    }
     setIsDark(next)
   }
 

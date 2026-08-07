@@ -44,7 +44,7 @@ export default function Admin() {
               <option value="fin_admin">Administrador</option>
             </select>
           </label>
-          <button type="submit" style={{padding:'10px',background:'var(--color-accent)',color:'white',border:'none',borderRadius:'var(--radius-sm)',cursor:'pointer'}}>
+          <button type="submit" style={{padding:'10px',background:'var(--color-accent-solid)',color:'var(--color-on-accent)',border:'none',borderRadius:'var(--radius-sm)',cursor:'pointer'}}>
             Adicionar
           </button>
         </form>

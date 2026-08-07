@@ -4,7 +4,12 @@ import App from './App'
 import './design-tokens.css'
 
 const STORAGE_KEY = 'cravelli-theme'
-const savedTheme = localStorage.getItem(STORAGE_KEY)
+let savedTheme = null
+try {
+  savedTheme = localStorage.getItem(STORAGE_KEY)
+} catch {
+  savedTheme = null
+}
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
 if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
   document.documentElement.classList.add('dark')

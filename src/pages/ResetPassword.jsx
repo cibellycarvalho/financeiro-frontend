@@ -67,7 +67,7 @@ export default function ResetPassword() {
           Este link expirou ou já foi usado. Solicite um novo pelo login.
         </p>
         <button onClick={() => navigate('/login')}
-          style={{ width:'100%', padding:10, background:'var(--color-accent)', color:'#fff', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', fontSize:15 }}>
+          style={{ width:'100%', padding:10, background:'var(--color-accent-solid)', color:'var(--color-on-accent)', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', fontSize:15 }}>
           Ir para o login
         </button>
       </div>
@@ -92,7 +92,7 @@ export default function ResetPassword() {
               required style={inputStyle} />
           </label>
           <button type="submit" disabled={loading}
-            style={{ width:'100%', padding:10, background:'var(--color-accent)', color:'#fff', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', fontSize:15 }}>
+            style={{ width:'100%', padding:10, background:'var(--color-accent-solid)', color:'var(--color-on-accent)', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', fontSize:15 }}>
             {loading ? 'Salvando...' : 'Salvar senha'}
           </button>
         </form>

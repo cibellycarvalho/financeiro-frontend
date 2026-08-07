@@ -55,7 +55,7 @@ export default function Login() {
             style={{ ...inputStyle, marginBottom:20 }} required />
         </label>
         <button type="submit" disabled={resetLoading}
-          style={{ width:'100%', padding:10, background:'var(--color-accent)', color:'#fff', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', marginBottom:12 }}>
+          style={{ width:'100%', padding:10, background:'var(--color-accent-solid)', color:'var(--color-on-accent)', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', marginBottom:12 }}>
           {resetLoading ? 'Enviando...' : 'Enviar link'}
         </button>
         <button type="button" onClick={() => setResetMode(false)}
@@ -80,7 +80,7 @@ export default function Login() {
           <input type="password" value={password} onChange={e => setPassword(e.target.value)}
             style={{ ...inputStyle, marginBottom:24 }} required />
         </label>
-        <button type="submit" style={{ width:'100%', padding:10, background:'var(--color-accent)', color:'#fff', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', marginBottom:12 }}>
+        <button type="submit" style={{ width:'100%', padding:10, background:'var(--color-accent-solid)', color:'var(--color-on-accent)', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', marginBottom:12 }}>
           Entrar
         </button>
         <button type="button" onClick={() => setResetMode(true)}

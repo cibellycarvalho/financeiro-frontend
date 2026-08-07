@@ -25,8 +25,8 @@ export default function Layout({ children }) {
         </div>
         {nav.map(({ path, label }) => (
           <Link key={path} to={path} style={{
-            padding:'10px 20px', color: pathname === path ? '#fff' : 'var(--color-text-muted)',
-            background: pathname === path ? 'var(--color-accent)' : 'transparent',
+            padding:'10px 20px', color: pathname === path ? 'var(--color-on-accent)' : 'var(--color-text-muted)',
+            background: pathname === path ? 'var(--color-accent-solid)' : 'transparent',
             textDecoration:'none', fontSize:14
           }}>
             {label}

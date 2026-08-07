@@ -61,7 +61,7 @@ export default function RepasesML() {
               {syncLoading ? 'Sincronizando...' : '↻ Sincronizar MP'}
             </button>
             <button onClick={() => setShowForm(!showForm)}
-              style={{ padding:'8px 20px', background:'var(--color-accent)', color:'white', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer' }}>
+              style={{ padding:'8px 20px', background:'var(--color-accent-solid)', color:'var(--color-on-accent)', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer' }}>
               + Lançar repasse
             </button>
           </div>
@@ -112,7 +112,7 @@ export default function RepasesML() {
           <label style={{gridColumn:'span 2'}}>Descrição<br /><input value={form.descricao} onChange={e => setForm({...form, descricao:e.target.value})} style={inputStyle} /></label>
           <div style={{gridColumn:'span 2', display:'flex', gap:8, justifyContent:'flex-end'}}>
             <button type="button" onClick={() => setShowForm(false)} style={{padding:'8px 20px',borderRadius:'var(--radius-sm)',border:'1px solid var(--color-border)',cursor:'pointer', background:'transparent', color:'var(--color-text)'}}>Cancelar</button>
-            <button type="submit" style={{padding:'8px 20px',background:'var(--color-accent)',color:'white',border:'none',borderRadius:'var(--radius-sm)',cursor:'pointer'}}>Salvar</button>
+            <button type="submit" style={{padding:'8px 20px',background:'var(--color-accent-solid)',color:'var(--color-on-accent)',border:'none',borderRadius:'var(--radius-sm)',cursor:'pointer'}}>Salvar</button>
           </div>
         </form>
       )}
