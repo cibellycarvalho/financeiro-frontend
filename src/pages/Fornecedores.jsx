@@ -37,7 +37,7 @@ const PDF_COR_PENDENTE = [161, 110, 26]
 const PDF_COR_TEXTO = [40, 40, 40]
 const PDF_COR_BORDA = [214, 214, 214]
 
-function gerarResumoPDF(fornecedor, pedidos) {
+function gerarResumoPDF(fornecedor, pedidos, pagamentos) {
   const doc = new jsPDF()
   const marginX = 14
   const pageWidth = doc.internal.pageSize.width
@@ -115,39 +115,47 @@ function gerarResumoPDF(fornecedor, pedidos) {
 
   desenharCabecalhoTabela()
 
-  const pedidosOrdenados = [...pedidos].sort((a, b) => new Date(a.data_pedido) - new Date(b.data_pedido))
+  const linhas = []
+  pedidos.forEach(p => {
+    if (p.itens && p.itens.length > 0) {
+      p.itens.forEach(item => {
+        linhas.push({
+          tipo: 'item', data: p.data_pedido, produto: item.produto,
+          quantidade: item.quantidade, valorUnitario: item.valor_unitario, valorTotal: item.valor_total
+        })
+      })
+    } else {
+      linhas.push({
+        tipo: 'item', data: p.data_pedido, produto: p.descricao_produtos || 'Saldo devedor',
+        quantidade: null, valorUnitario: null, valorTotal: p.valor_total
+      })
+    }
+  })
+  pagamentos.forEach(pg => {
+    linhas.push({ tipo: 'pagamento', data: pg.data_pagamento, valor: pg.valor })
+  })
+  linhas.sort((a, b) => new Date(a.data) - new Date(b.data))
 
   let totalComprado = 0
   let totalPago = 0
 
-  pedidosOrdenados.forEach(p => {
-    if (p.itens && p.itens.length > 0) {
-      p.itens.forEach((item, i) => {
-        desenharLinha(
-          [i === 0 ? formatData(p.data_pedido) : '', item.produto,
-            Number(item.quantidade).toLocaleString('pt-BR'), formatMoeda(item.valor_unitario),
-            formatMoeda(item.valor_total), ''],
-          { cores: { 4: PDF_COR_DEVEDOR } }
-        )
-      })
+  linhas.forEach(linha => {
+    if (linha.tipo === 'item') {
+      desenharLinha(
+        [formatData(linha.data), linha.produto,
+          linha.quantidade != null ? Number(linha.quantidade).toLocaleString('pt-BR') : '',
+          linha.valorUnitario != null ? formatMoeda(linha.valorUnitario) : '',
+          formatMoeda(linha.valorTotal), ''],
+        { cores: { 4: PDF_COR_DEVEDOR } }
+      )
+      totalComprado += Number(linha.valorTotal)
     } else {
       desenharLinha(
-        [formatData(p.data_pedido), p.descricao_produtos || 'Saldo devedor', '', '', formatMoeda(p.valor_total), ''],
-        { negrito: true, cores: { 4: PDF_COR_DEVEDOR } }
+        [formatData(linha.data), 'PAGAMENTO REALIZADO', '', '', '', formatMoeda(linha.valor)],
+        { fundo: PDF_COR_PAGO_FUNDO, negrito: true, cores: { 1: PDF_COR_PAGO, 5: PDF_COR_PAGO } }
       )
+      totalPago += Number(linha.valor)
     }
-
-    if (p.pagamentos) {
-      p.pagamentos.forEach(pg => {
-        desenharLinha(
-          [formatData(pg.data_pagamento), 'PAGAMENTO REALIZADO', '', '', '', formatMoeda(pg.valor)],
-          { fundo: PDF_COR_PAGO_FUNDO, negrito: true, cores: { 1: PDF_COR_PAGO, 5: PDF_COR_PAGO } }
-        )
-      })
-    }
-
-    totalComprado += Number(p.valor_total)
-    totalPago += Number(p.valor_pago)
   })
 
   y += 8
@@ -299,8 +307,7 @@ function LinhaPagamento({ pagamento, onEditar, onExcluir }) {
   )
 }
 
-function PainelPagamentos({ pedido, podeEditar, onRegistrar, onEditar, onExcluir }) {
-  const saldoRestante = Number(pedido.valor_total) - Number(pedido.valor_pago)
+function PainelPagamentosFornecedor({ pagamentos, saldoAberto, podeEditar, onRegistrar, onEditar, onExcluir }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [valor, setValor] = useState('')
   const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().split('T')[0])
@@ -324,38 +331,36 @@ function PainelPagamentos({ pedido, podeEditar, onRegistrar, onEditar, onExcluir
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>
-          Pagamentos{pedido.pagamentos?.length ? ` (${pedido.pagamentos.length})` : ''}
+          Pagamentos{pagamentos.length ? ` (${pagamentos.length})` : ''}
         </span>
         <span style={{ fontSize: 13 }}>
-          Saldo restante: <strong>{formatMoeda(saldoRestante)}</strong>
+          Saldo devedor: <strong>{formatMoeda(saldoAberto)}</strong>
         </span>
       </div>
 
-      {pedido.pagamentos && pedido.pagamentos.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
-          {pedido.pagamentos.map(pg => (
+      {pagamentos.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+          {pagamentos.map(pg => (
             <LinhaPagamento key={pg.id} pagamento={pg} onEditar={onEditar} onExcluir={onExcluir} />
           ))}
         </div>
+      ) : (
+        <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--color-text-muted)' }}>Nenhum pagamento registrado ainda.</p>
       )}
 
-      {(!pedido.pagamentos || pedido.pagamentos.length === 0) && (
-        <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--color-text-muted)' }}>Nenhum pagamento registrado ainda.</p>
-      )}
-
-      {podeEditar && saldoRestante > 0 && !mostrarForm && (
+      {podeEditar && saldoAberto > 0 && !mostrarForm && (
         <button onClick={() => setMostrarForm(true)}
           style={{ padding: '4px 12px', fontSize: 12, background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
           + Registrar pagamento
         </button>
       )}
 
-      {podeEditar && saldoRestante > 0 && mostrarForm && (
+      {podeEditar && saldoAberto > 0 && mostrarForm && (
         <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <label style={{ fontSize: 12 }}>Valor (R$)<br />
-            <input required type="number" step="0.01" min="0.01" max={saldoRestante}
+            <input required type="number" step="0.01" min="0.01" max={saldoAberto}
               value={valor} onChange={e => setValor(e.target.value)}
               style={{ ...inputStyle, marginTop: 4, width: 130 }} />
           </label>
@@ -641,6 +646,7 @@ export default function Fornecedores() {
   const { finRole } = useAuth()
   const [fornecedores, setFornecedores] = useState([])
   const [pedidos, setPedidos] = useState([])
+  const [pagamentos, setPagamentos] = useState([])
   const [fornecedorSel, setFornecedorSel] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ data_pedido: '', itens: [{ ...ITEM_VAZIO }] })
@@ -657,8 +663,12 @@ export default function Fornecedores() {
 
   async function selecionarFornecedor(f) {
     setFornecedorSel(f)
-    const r = await api.get(`/api/fornecedores/${f.id}/pedidos`)
-    setPedidos(r.data)
+    const [rPedidos, rPagamentos] = await Promise.all([
+      api.get(`/api/fornecedores/${f.id}/pedidos`),
+      api.get(`/api/fornecedores/${f.id}/pagamentos`)
+    ])
+    setPedidos(rPedidos.data)
+    setPagamentos(rPagamentos.data)
     setShowForm(false)
   }
 
@@ -681,6 +691,19 @@ export default function Fornecedores() {
 
   const totalDoPedido = form.itens.reduce((soma, item) => soma + totalDoItem(item), 0)
 
+  async function recarregarDados() {
+    const [rPedidos, rPagamentos, rFornecedores] = await Promise.all([
+      api.get(`/api/fornecedores/${fornecedorSel.id}/pedidos`),
+      api.get(`/api/fornecedores/${fornecedorSel.id}/pagamentos`),
+      api.get('/api/fornecedores')
+    ])
+    setPedidos(rPedidos.data)
+    setPagamentos(rPagamentos.data)
+    setFornecedores(rFornecedores.data)
+    const atualizado = rFornecedores.data.find(f => f.id === fornecedorSel.id)
+    if (atualizado) setFornecedorSel(atualizado)
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setErro(null)
@@ -693,58 +716,53 @@ export default function Fornecedores() {
       await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos`, { data_pedido: form.data_pedido, itens })
       setShowForm(false)
       setForm({ data_pedido: '', itens: [{ ...ITEM_VAZIO }] })
-      selecionarFornecedor(fornecedorSel)
+      await recarregarDados()
     } catch (err) {
       setErro(err.response?.data?.error || 'Erro ao salvar pedido.')
     }
   }
 
-  async function recarregarPedidos() {
-    const r = await api.get(`/api/fornecedores/${fornecedorSel.id}/pedidos`)
-    setPedidos(r.data)
-  }
-
-  async function registrarPagamento(pedidoId, valor, dataPagamento) {
-    await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/pagamentos`, {
+  async function registrarPagamentoFornecedor(valor, dataPagamento) {
+    await api.post(`/api/fornecedores/${fornecedorSel.id}/pagamentos`, {
       valor, data_pagamento: dataPagamento
     })
-    await recarregarPedidos()
+    await recarregarDados()
   }
 
-  async function editarPagamento(pedidoId, pagamentoId, valor, dataPagamento) {
-    await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/pagamentos/${pagamentoId}`, {
+  async function editarPagamentoFornecedor(pagamentoId, valor, dataPagamento) {
+    await api.put(`/api/fornecedores/${fornecedorSel.id}/pagamentos/${pagamentoId}`, {
       valor, data_pagamento: dataPagamento
     })
-    await recarregarPedidos()
+    await recarregarDados()
   }
 
-  async function excluirPagamento(pedidoId, pagamentoId) {
-    await api.delete(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/pagamentos/${pagamentoId}`)
-    await recarregarPedidos()
+  async function excluirPagamentoFornecedor(pagamentoId) {
+    await api.delete(`/api/fornecedores/${fornecedorSel.id}/pagamentos/${pagamentoId}`)
+    await recarregarDados()
   }
 
   async function editarItem(pedidoId, itemId, produto, quantidade, valorUnitario) {
     await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/itens/${itemId}`, {
       produto, quantidade, valor_unitario: valorUnitario
     })
-    await recarregarPedidos()
+    await recarregarDados()
   }
 
   async function editarValorTotal(pedidoId, valorTotal) {
     await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}`, { valor_total: valorTotal })
-    await recarregarPedidos()
+    await recarregarDados()
   }
 
   async function excluirItem(pedidoId, itemId) {
     await api.delete(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/itens/${itemId}`)
-    await recarregarPedidos()
+    await recarregarDados()
   }
 
   async function excluirPedido(pedidoId) {
     if (!confirm('Excluir este pedido inteiro? Essa ação não pode ser desfeita.')) return
     try {
       await api.delete(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}`)
-      await recarregarPedidos()
+      await recarregarDados()
     } catch (err) {
       alert(err.response?.data?.error || 'Erro ao excluir pedido.')
     }
@@ -754,12 +772,12 @@ export default function Fornecedores() {
     await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/itens`, {
       produto, quantidade, valor_unitario: valorUnitario
     })
-    await recarregarPedidos()
+    await recarregarDados()
   }
 
   async function editarDataPedido(pedidoId, dataPedido) {
     await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}`, { data_pedido: dataPedido })
-    await recarregarPedidos()
+    await recarregarDados()
   }
 
   async function salvarNovoFornecedor(dados) {
@@ -777,7 +795,7 @@ export default function Fornecedores() {
     if (!confirm(`Excluir fornecedor "${f.apelido || f.nome}"?`)) return
     try {
       await api.delete(`/api/fornecedores/${f.id}`)
-      if (fornecedorSel?.id === f.id) { setFornecedorSel(null); setPedidos([]) }
+      if (fornecedorSel?.id === f.id) { setFornecedorSel(null); setPedidos([]); setPagamentos([]) }
       await carregarFornecedores()
     } catch (err) {
       alert(err.response?.data?.error || 'Erro ao excluir fornecedor.')
@@ -843,8 +861,9 @@ export default function Fornecedores() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2>Pedidos — {fornecedorSel.nome}</h2>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => gerarResumoPDF(fornecedorSel, pedidos)} disabled={pedidos.length === 0}
-                style={{ padding: '8px 20px', background: 'transparent', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: pedidos.length === 0 ? 'not-allowed' : 'pointer', opacity: pedidos.length === 0 ? 0.5 : 1 }}>
+              <button onClick={() => gerarResumoPDF(fornecedorSel, pedidos, pagamentos)}
+                disabled={pedidos.length === 0 && pagamentos.length === 0}
+                style={{ padding: '8px 20px', background: 'transparent', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: (pedidos.length === 0 && pagamentos.length === 0) ? 'not-allowed' : 'pointer', opacity: (pedidos.length === 0 && pagamentos.length === 0) ? 0.5 : 1 }}>
                 📄 Baixar PDF
               </button>
               {finRole === 'fin_admin' && (
@@ -905,7 +924,7 @@ export default function Fornecedores() {
           <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg)', textAlign: 'left' }}>
-                {['Data', 'Produto', 'Quantidade', 'Valor unitário', 'Valor total', '', 'Status'].map((h, i) => (
+                {['Data', 'Produto', 'Quantidade', 'Valor unitário', 'Valor total', ''].map((h, i) => (
                   <th key={i} style={{ padding: '10px 16px', fontSize: 13 }}>{h}</th>
                 ))}
               </tr>
@@ -917,8 +936,16 @@ export default function Fornecedores() {
                   <tr key={item ? item.id : p.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                     {i === 0 && (
                       <td rowSpan={itens.length} style={{ padding: '10px 16px', verticalAlign: 'top' }}>
-                        <DataEditavel pedido={p}
-                          onEditar={finRole === 'fin_admin' ? (dataPedido) => editarDataPedido(p.id, dataPedido) : null} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <DataEditavel pedido={p}
+                            onEditar={finRole === 'fin_admin' ? (dataPedido) => editarDataPedido(p.id, dataPedido) : null} />
+                          {finRole === 'fin_admin' && (
+                            <button onClick={() => excluirPedido(p.id)} title="Excluir pedido"
+                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>
+                              🗑️
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                     {item ? (
@@ -934,55 +961,39 @@ export default function Fornecedores() {
                         </td>
                       </>
                     )}
-                    {i === 0 && (
-                      <td rowSpan={itens.length} style={{ padding: '10px 16px', verticalAlign: 'top' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{
-                            padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600,
-                            background: p.status === 'pago' ? 'color-mix(in srgb, var(--color-success) 18%, transparent)' : p.status === 'parcial' ? 'color-mix(in srgb, var(--color-warning) 18%, transparent)' : 'color-mix(in srgb, var(--color-danger) 18%, transparent)',
-                            color: p.status === 'pago' ? 'var(--color-success)' : p.status === 'parcial' ? 'var(--color-warning)' : 'var(--color-danger)'
-                          }}>
-                            {p.status}
-                          </span>
-                          {finRole === 'fin_admin' && (
-                            <button onClick={() => excluirPedido(p.id)} title="Excluir pedido"
-                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, opacity: 0.6, padding: 2 }}>
-                              🗑️
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
                   </tr>
                 ))
                 return [
                   ...linhasItens,
                   finRole === 'fin_admin' && (
                     <tr key={`${p.id}-add-item`} style={{ borderTop: '1px solid var(--color-border)' }}>
-                      <td colSpan={7} style={{ padding: '8px 16px' }}>
+                      <td colSpan={6} style={{ padding: '8px 16px' }}>
                         <AdicionarItemForm
                           onAdicionar={(produto, quantidade, valorUnitario) => adicionarProdutoAoPedido(p.id, produto, quantidade, valorUnitario)} />
                       </td>
                     </tr>
-                  ),
-                  <tr key={`${p.id}-pagamentos`} style={{ borderTop: '1px solid var(--color-border)' }}>
-                    <td colSpan={7} style={{ padding: '12px 16px', background: 'var(--color-bg)' }}>
-                      <PainelPagamentos
-                        pedido={p}
-                        podeEditar={finRole === 'fin_admin'}
-                        onRegistrar={(valor, data) => registrarPagamento(p.id, valor, data)}
-                        onEditar={(pagamentoId, valor, data) => editarPagamento(p.id, pagamentoId, valor, data)}
-                        onExcluir={(pagamentoId) => excluirPagamento(p.id, pagamentoId)}
-                      />
-                    </td>
-                  </tr>
+                  )
                 ]
               })}
               {pedidos.length === 0 && (
-                <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-muted)' }}>Nenhum pedido cadastrado.</td></tr>
+                <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-muted)' }}>Nenhum pedido cadastrado.</td></tr>
               )}
             </tbody>
           </table>
+
+          <div style={{ marginTop: 32 }}>
+            <h2 style={{ marginBottom: 16 }}>Pagamentos — {fornecedorSel.nome}</h2>
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
+              <PainelPagamentosFornecedor
+                pagamentos={pagamentos}
+                saldoAberto={fornecedorSel.saldo_aberto}
+                podeEditar={finRole === 'fin_admin'}
+                onRegistrar={registrarPagamentoFornecedor}
+                onEditar={editarPagamentoFornecedor}
+                onExcluir={excluirPagamentoFornecedor}
+              />
+            </div>
+          </div>
         </>
       )}
 
