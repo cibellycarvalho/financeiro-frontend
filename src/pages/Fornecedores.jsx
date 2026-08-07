@@ -221,7 +221,7 @@ function PainelPagamentos({ pedido, podeEditar, onRegistrar, onEditar, onExcluir
   )
 }
 
-function ItemCells({ item, onEditar }) {
+function ItemCells({ item, onEditar, onExcluir }) {
   const [editando, setEditando] = useState(false)
   const [produto, setProduto] = useState(item.produto)
   const [quantidade, setQuantidade] = useState(item.quantidade)
@@ -238,6 +238,17 @@ function ItemCells({ item, onEditar }) {
     } catch (err) {
       setErro(err.response?.data?.error || 'Erro ao editar produto.')
     } finally {
+      setLoading(false)
+    }
+  }
+
+  async function excluir() {
+    if (!confirm(`Excluir o produto "${item.produto}"?`)) return
+    setLoading(true)
+    try {
+      await onExcluir()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Erro ao excluir produto.')
       setLoading(false)
     }
   }
@@ -281,12 +292,20 @@ function ItemCells({ item, onEditar }) {
       <td style={{ padding: '10px 16px' }}>{formatMoeda(item.valor_unitario)}</td>
       <td style={{ padding: '10px 16px', fontWeight: 600 }}>{formatMoeda(item.valor_total)}</td>
       <td style={{ padding: '10px 16px' }}>
-        {onEditar && (
-          <button onClick={() => setEditando(true)} title="Editar produto"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, opacity: 0.6, padding: 2 }}>
-            ✏️
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 4 }}>
+          {onEditar && (
+            <button onClick={() => setEditando(true)} title="Editar produto" disabled={loading}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, opacity: 0.6, padding: 2 }}>
+              ✏️
+            </button>
+          )}
+          {onExcluir && (
+            <button onClick={excluir} title="Excluir produto" disabled={loading}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, opacity: 0.6, padding: 2 }}>
+              🗑️
+            </button>
+          )}
+        </div>
       </td>
     </>
   )
@@ -444,6 +463,21 @@ export default function Fornecedores() {
     await recarregarPedidos()
   }
 
+  async function excluirItem(pedidoId, itemId) {
+    await api.delete(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/itens/${itemId}`)
+    await recarregarPedidos()
+  }
+
+  async function excluirPedido(pedidoId) {
+    if (!confirm('Excluir este pedido inteiro? Essa ação não pode ser desfeita.')) return
+    try {
+      await api.delete(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}`)
+      await recarregarPedidos()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Erro ao excluir pedido.')
+    }
+  }
+
   async function salvarNovoFornecedor(dados) {
     await api.post('/api/fornecedores', dados)
     await carregarFornecedores()
@@ -598,7 +632,8 @@ export default function Fornecedores() {
                     )}
                     {item ? (
                       <ItemCells item={item}
-                        onEditar={finRole === 'fin_admin' ? (produto, quantidade, valorUnitario) => editarItem(p.id, item.id, produto, quantidade, valorUnitario) : null} />
+                        onEditar={finRole === 'fin_admin' ? (produto, quantidade, valorUnitario) => editarItem(p.id, item.id, produto, quantidade, valorUnitario) : null}
+                        onExcluir={finRole === 'fin_admin' ? () => excluirItem(p.id, item.id) : null} />
                     ) : (
                       <>
                         <td colSpan={3} style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>{p.descricao_produtos || '—'}</td>
@@ -610,13 +645,21 @@ export default function Fornecedores() {
                     )}
                     {i === 0 && (
                       <td rowSpan={itens.length} style={{ padding: '10px 16px', verticalAlign: 'top' }}>
-                        <span style={{
-                          padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600,
-                          background: p.status === 'pago' ? 'color-mix(in srgb, var(--color-success) 18%, transparent)' : p.status === 'parcial' ? 'color-mix(in srgb, var(--color-warning) 18%, transparent)' : 'color-mix(in srgb, var(--color-danger) 18%, transparent)',
-                          color: p.status === 'pago' ? 'var(--color-success)' : p.status === 'parcial' ? 'var(--color-warning)' : 'var(--color-danger)'
-                        }}>
-                          {p.status}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{
+                            padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600,
+                            background: p.status === 'pago' ? 'color-mix(in srgb, var(--color-success) 18%, transparent)' : p.status === 'parcial' ? 'color-mix(in srgb, var(--color-warning) 18%, transparent)' : 'color-mix(in srgb, var(--color-danger) 18%, transparent)',
+                            color: p.status === 'pago' ? 'var(--color-success)' : p.status === 'parcial' ? 'var(--color-warning)' : 'var(--color-danger)'
+                          }}>
+                            {p.status}
+                          </span>
+                          {finRole === 'fin_admin' && (
+                            <button onClick={() => excluirPedido(p.id)} title="Excluir pedido"
+                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, opacity: 0.6, padding: 2 }}>
+                              🗑️
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
