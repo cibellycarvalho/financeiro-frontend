@@ -238,7 +238,7 @@ function ModalFornecedor({ titulo, inicial, onSalvar, onFechar }) {
 function LinhaPagamento({ pagamento, onEditar, onExcluir }) {
   const [editando, setEditando] = useState(false)
   const [valor, setValor] = useState(pagamento.valor)
-  const [data, setData] = useState(pagamento.data_pagamento)
+  const [data, setData] = useState(paraDataInput(pagamento.data_pagamento))
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState(null)
 
@@ -291,7 +291,7 @@ function LinhaPagamento({ pagamento, onEditar, onExcluir }) {
 
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '6px 10px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
-      <span>{new Date(pagamento.data_pagamento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+      <span>{formatData(pagamento.data_pagamento)}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontWeight: 600 }}>{formatMoeda(pagamento.valor)}</span>
         <button onClick={() => setEditando(true)} title="Editar" disabled={loading}
