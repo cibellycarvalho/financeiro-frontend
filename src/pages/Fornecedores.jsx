@@ -68,9 +68,81 @@ function ModalFornecedor({ titulo, inicial, onSalvar, onFechar }) {
   )
 }
 
-function ModalPagamento({ pedido, onSalvar, onFechar }) {
+function LinhaPagamento({ pagamento, onEditar, onExcluir }) {
+  const [editando, setEditando] = useState(false)
+  const [valor, setValor] = useState(pagamento.valor)
+  const [data, setData] = useState(pagamento.data_pagamento)
+  const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  async function salvar() {
+    setErro(null)
+    setLoading(true)
+    try {
+      await onEditar(pagamento.id, parseFloat(valor), data)
+      setEditando(false)
+    } catch (err) {
+      setErro(err.response?.data?.error || 'Erro ao editar pagamento.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function excluir() {
+    if (!confirm('Excluir este pagamento?')) return
+    setErro(null)
+    setLoading(true)
+    try {
+      await onExcluir(pagamento.id)
+    } catch (err) {
+      setErro(err.response?.data?.error || 'Erro ao excluir pagamento.')
+      setLoading(false)
+    }
+  }
+
+  if (editando) {
+    return (
+      <div style={{ padding: '8px 10px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input type="date" value={data} onChange={e => setData(e.target.value)}
+            style={{ ...inputStyle, marginTop: 0, fontSize: 12, padding: 6 }} />
+          <input type="number" step="0.01" min="0.01" value={valor} onChange={e => setValor(e.target.value)}
+            style={{ ...inputStyle, marginTop: 0, fontSize: 12, padding: 6 }} />
+          <button onClick={salvar} disabled={loading}
+            style={{ padding: '6px 10px', fontSize: 12, background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+            ✓
+          </button>
+          <button onClick={() => setEditando(false)} disabled={loading}
+            style={{ padding: '6px 10px', fontSize: 12, background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+            ✕
+          </button>
+        </div>
+        {erro && <p style={{ color: 'var(--color-danger)', fontSize: 11, margin: '4px 0 0' }}>{erro}</p>}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '6px 10px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
+      <span>{new Date(pagamento.data_pagamento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontWeight: 600 }}>{formatMoeda(pagamento.valor)}</span>
+        <button onClick={() => setEditando(true)} title="Editar" disabled={loading}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>
+          ✏️
+        </button>
+        <button onClick={excluir} title="Excluir" disabled={loading}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>
+          🗑️
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ModalPagamento({ pedido, onSalvar, onEditarPagamento, onExcluirPagamento, onFechar }) {
   const saldoRestante = Number(pedido.valor_total) - Number(pedido.valor_pago)
-  const [valor, setValor] = useState(saldoRestante.toFixed(2))
+  const [valor, setValor] = useState(Math.max(saldoRestante, 0).toFixed(2))
   const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().split('T')[0])
   const [erro, setErro] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -92,7 +164,7 @@ function ModalPagamento({ pedido, onSalvar, onFechar }) {
   return (
     <div style={modalOverlay} onClick={onFechar}>
       <div style={modalBox} onClick={e => e.stopPropagation()}>
-        <h3 style={{ margin: 0 }}>Registrar pagamento</h3>
+        <h3 style={{ margin: 0 }}>Pagamentos</h3>
         <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)' }}>
           Saldo restante: <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(saldoRestante)}</strong>
         </p>
@@ -102,40 +174,47 @@ function ModalPagamento({ pedido, onSalvar, onFechar }) {
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 6 }}>
               Pagamentos já registrados
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 120, overflowY: 'auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 160, overflowY: 'auto' }}>
               {pedido.pagamentos.map(p => (
-                <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '6px 10px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
-                  <span>{new Date(p.data_pagamento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
-                  <span style={{ fontWeight: 600 }}>{formatMoeda(p.valor)}</span>
-                </div>
+                <LinhaPagamento key={p.id} pagamento={p} onEditar={onEditarPagamento} onExcluir={onExcluirPagamento} />
               ))}
             </div>
           </div>
         )}
 
         {erro && <p style={{ color: 'var(--color-danger)', margin: 0 }}>{erro}</p>}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <label>
-            Valor pago (R$) *
-            <input required type="number" step="0.01" min="0.01" max={saldoRestante}
-              value={valor} onChange={e => setValor(e.target.value)} style={inputStyle} />
-          </label>
-          <label>
-            Data do pagamento *
-            <input required type="date" value={dataPagamento}
-              onChange={e => setDataPagamento(e.target.value)} style={inputStyle} />
-          </label>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-            <button type="button" onClick={onFechar}
-              style={{ padding: '8px 20px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', cursor: 'pointer', background: 'transparent', color: 'var(--color-text)' }}>
-              Cancelar
-            </button>
-            <button type="submit" disabled={loading}
-              style={{ padding: '8px 20px', background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
-              {loading ? 'Salvando...' : 'Registrar'}
-            </button>
-          </div>
-        </form>
+
+        {saldoRestante > 0 && (
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <label>
+              Valor pago (R$) *
+              <input required type="number" step="0.01" min="0.01" max={saldoRestante}
+                value={valor} onChange={e => setValor(e.target.value)} style={inputStyle} />
+            </label>
+            <label>
+              Data do pagamento *
+              <input required type="date" value={dataPagamento}
+                onChange={e => setDataPagamento(e.target.value)} style={inputStyle} />
+            </label>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+              <button type="button" onClick={onFechar}
+                style={{ padding: '8px 20px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', cursor: 'pointer', background: 'transparent', color: 'var(--color-text)' }}>
+                Cancelar
+              </button>
+              <button type="submit" disabled={loading}
+                style={{ padding: '8px 20px', background: 'var(--color-success-solid)', color: 'var(--color-on-success)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+                {loading ? 'Salvando...' : 'Registrar'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {saldoRestante <= 0 && (
+          <button type="button" onClick={onFechar}
+            style={{ padding: '8px 20px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', cursor: 'pointer', background: 'transparent', color: 'var(--color-text)' }}>
+            Fechar
+          </button>
+        )}
       </div>
     </div>
   )
@@ -206,11 +285,30 @@ export default function Fornecedores() {
     }
   }
 
+  async function recarregarPedidosEModal(pedidoId) {
+    const r = await api.get(`/api/fornecedores/${fornecedorSel.id}/pedidos`)
+    setPedidos(r.data)
+    const atualizado = r.data.find(p => p.id === pedidoId)
+    if (atualizado) setModalPagamento(atualizado)
+  }
+
   async function registrarPagamento(pedidoId, valor, dataPagamento) {
     await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/pagamentos`, {
       valor, data_pagamento: dataPagamento
     })
     selecionarFornecedor(fornecedorSel)
+  }
+
+  async function editarPagamento(pedidoId, pagamentoId, valor, dataPagamento) {
+    await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/pagamentos/${pagamentoId}`, {
+      valor, data_pagamento: dataPagamento
+    })
+    await recarregarPedidosEModal(pedidoId)
+  }
+
+  async function excluirPagamento(pedidoId, pagamentoId) {
+    await api.delete(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/pagamentos/${pagamentoId}`)
+    await recarregarPedidosEModal(pedidoId)
   }
 
   async function salvarNovoFornecedor(dados) {
@@ -374,6 +472,12 @@ export default function Fornecedores() {
                               Registrar pagamento
                             </button>
                           )}
+                          {finRole === 'fin_admin' && p.status === 'pago' && p.pagamentos && p.pagamentos.length > 0 && (
+                            <button onClick={() => setModalPagamento(p)}
+                              style={{ padding: '4px 12px', fontSize: 12, background: 'transparent', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+                              Ver pagamentos
+                            </button>
+                          )}
                         </td>
                       </>
                     )}
@@ -410,6 +514,8 @@ export default function Fornecedores() {
         <ModalPagamento
           pedido={modalPagamento}
           onSalvar={(valor, data) => registrarPagamento(modalPagamento.id, valor, data)}
+          onEditarPagamento={(pagamentoId, valor, data) => editarPagamento(modalPagamento.id, pagamentoId, valor, data)}
+          onExcluirPagamento={(pagamentoId) => excluirPagamento(modalPagamento.id, pagamentoId)}
           onFechar={() => setModalPagamento(null)}
         />
       )}
