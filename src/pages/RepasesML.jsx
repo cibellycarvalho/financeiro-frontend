@@ -57,7 +57,7 @@ export default function RepasesML() {
         {finRole === 'fin_admin' && (
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={sincronizarMP} disabled={syncLoading}
-              style={{ padding:'8px 20px', background:'#2563eb', color:'white', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', opacity: syncLoading ? 0.6 : 1 }}>
+              style={{ padding:'8px 20px', background:'var(--color-accent-solid)', color:'var(--color-on-accent)', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', opacity: syncLoading ? 0.6 : 1 }}>
               {syncLoading ? 'Sincronizando...' : '↻ Sincronizar MP'}
             </button>
             <button onClick={() => setShowForm(!showForm)}

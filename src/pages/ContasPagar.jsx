@@ -84,12 +84,12 @@ export default function ContasPagar() {
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
             {pluggyStatus?.conectado ? (
               <button onClick={sincronizarDDA} disabled={syncLoading}
-                style={{ padding:'8px 20px', background:'#7c3aed', color:'white', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', opacity: syncLoading ? 0.6 : 1 }}>
+                style={{ padding:'8px 20px', background:'var(--color-accent-solid)', color:'var(--color-on-accent)', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', opacity: syncLoading ? 0.6 : 1 }}>
                 {syncLoading ? 'Sincronizando...' : '↻ Sync DDA Sicredi'}
               </button>
             ) : (
               <button onClick={conectarSicredi} disabled={connectLoading}
-                style={{ padding:'8px 20px', background:'#0ea5e9', color:'white', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', opacity: connectLoading ? 0.6 : 1 }}>
+                style={{ padding:'8px 20px', background:'var(--color-accent-solid)', color:'var(--color-on-accent)', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', opacity: connectLoading ? 0.6 : 1 }}>
                 {connectLoading ? 'Gerando link...' : '🔗 Conectar Sicredi'}
               </button>
             )}
