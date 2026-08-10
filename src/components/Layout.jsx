@@ -29,6 +29,15 @@ export default function Layout({ children }) {
           </Link>
         ))}
         {finRole === 'fin_admin' && (
+          <Link to="/conciliacao" style={{
+            padding:'10px 20px', color: pathname === '/conciliacao' ? '#fff' : '#aaa',
+            background: pathname === '/conciliacao' ? '#333' : 'transparent',
+            textDecoration:'none', fontSize:14
+          }}>
+            Conciliação Bancária
+          </Link>
+        )}
+        {finRole === 'fin_admin' && (
           <Link to="/admin" style={{ padding:'10px 20px', color:'#aaa', textDecoration:'none', fontSize:14, marginTop:'auto' }}>
             Admin
           </Link>

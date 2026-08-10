@@ -7,6 +7,7 @@ import RepasesML from './pages/RepasesML'
 import Fornecedores from './pages/Fornecedores'
 import Admin from './pages/Admin'
 import ResetPassword from './pages/ResetPassword'
+import ConciliacaoBancaria from './pages/ConciliacaoBancaria'
 
 function ProtectedRoute({ children }) {
   const { user, loading, needsPasswordReset } = useAuth()
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/repasses" element={<ProtectedRoute><RepasesML /></ProtectedRoute>} />
           <Route path="/fornecedores" element={<ProtectedRoute><Fornecedores /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute><AdminRoute><Admin /></AdminRoute></ProtectedRoute>} />
+          <Route path="/conciliacao" element={<ProtectedRoute><AdminRoute><ConciliacaoBancaria /></AdminRoute></ProtectedRoute>} />
           <Route path="/reset-password" element={<ResetPassword />} />
         </Routes>
       </BrowserRouter>
