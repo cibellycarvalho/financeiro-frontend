@@ -21,24 +21,33 @@ export default function ConciliacaoBancaria() {
     setMsg(null)
     const formData = new FormData()
     formData.append('arquivo', arquivo)
+    let r
     try {
-      const r = await api.post('/api/conciliacao/importar', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      setResumo(r.data)
-      if (r.data.lote_id) {
+      r = await api.post('/api/conciliacao/importar', formData)
+    } catch (err) {
+      setMsg({ tipo: 'erro', texto: err.response?.data?.error || 'Erro ao importar extrato.' })
+      e.target.value = ''
+      return
+    }
+
+    if (r.data.lote_id) {
+      try {
         const lote = await api.get(`/api/conciliacao/lotes/${r.data.lote_id}`)
+        setResumo(r.data)
         setTransacoes(lote.data)
         const acoesIniciais = {}
         lote.data.forEach(t => {
           acoesIniciais[t.id] = t.match_tabela ? 'confirmar_match' : (t.tipo === 'DEBIT' ? 'criar_conta' : 'ignorar')
         })
         setAcoes(acoesIniciais)
-      } else {
+      } catch (err) {
+        setResumo(null)
         setTransacoes([])
+        setMsg({ tipo: 'erro', texto: err.response?.data?.error || 'Extrato importado, mas houve erro ao carregar a revisão. Tente novamente.' })
       }
-    } catch (err) {
-      setMsg({ tipo: 'erro', texto: err.response?.data?.error || 'Erro ao importar extrato.' })
+    } else {
+      setResumo(r.data)
+      setTransacoes([])
     }
     e.target.value = ''
   }
