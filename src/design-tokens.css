@@ -6,10 +6,10 @@
   --color-text: #221f19;
   --color-text-muted: #7d7666;
 
-  /* Acento da marca */
-  --color-accent: #3d6b52;
-  --color-accent-hover: #2f5440;
-  --color-accent-solid: #3d6b52;
+  /* Acento da marca — Bordô Cravelli */
+  --color-accent: #6b2436;
+  --color-accent-hover: #551c2a;
+  --color-accent-solid: #6b2436;
   --color-on-accent: #ffffff;
 
   /* Semânticas (status) */
@@ -38,9 +38,9 @@
   --color-text: #ede8db;
   --color-text-muted: #a89f8a;
 
-  --color-accent: #6fa085;
-  --color-accent-hover: #8bb89d;
-  --color-accent-solid: #6fa085;
+  --color-accent: #cc5c78;
+  --color-accent-hover: #d4778f;
+  --color-accent-solid: #cc5c78;
   --color-on-accent: #14120c;
 
   --color-success: #5cb98a;
