@@ -6,10 +6,10 @@
   --color-text: #221f19;
   --color-text-muted: #7d7666;
 
-  /* Acento da marca — Bordô Cravelli */
-  --color-accent: #6b2436;
-  --color-accent-hover: #551c2a;
-  --color-accent-solid: #6b2436;
+  /* Acento da marca — verde garrafa Cravelli (harmonizado com ink/marfim) */
+  --color-accent: #2f4a3b;
+  --color-accent-hover: #24382d;
+  --color-accent-solid: #2f4a3b;
   --color-on-accent: #ffffff;
 
   /* Semânticas (status) */
@@ -38,10 +38,10 @@
   --color-text: #ede8db;
   --color-text-muted: #a89f8a;
 
-  --color-accent: #cc5c78;
-  --color-accent-hover: #d4778f;
-  --color-accent-solid: #cc5c78;
-  --color-on-accent: #14120c;
+  --color-accent: #73a689;
+  --color-accent-hover: #88b49c;
+  --color-accent-solid: #73a689;
+  --color-on-accent: #14231a;
 
   --color-success: #5cb98a;
   --color-success-dark: #3fa273;
