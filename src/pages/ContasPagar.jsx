@@ -10,10 +10,6 @@ export default function ContasPagar() {
   const [periodo, setPeriodo] = useState('semana')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ descricao:'', categoria:'IMPOSTO_DAS', valor:'', vencimento:'', marca:'GERAL', observacao:'' })
-  const [pluggyStatus, setPluggyStatus] = useState(null)
-  const [syncLoading, setSyncLoading] = useState(false)
-  const [syncMsg, setSyncMsg] = useState(null)
-  const [connectLoading, setConnectLoading] = useState(false)
 
   async function carregar() {
     const params = periodo === 'todos' ? '' : `?periodo=${periodo}`
@@ -21,46 +17,7 @@ export default function ContasPagar() {
     setContas(r.data)
   }
 
-  async function carregarPluggyStatus() {
-    try {
-      const r = await api.get('/api/pluggy/status')
-      setPluggyStatus(r.data)
-    } catch {
-      setPluggyStatus({ conectado: false, items: [] })
-    }
-  }
-
   useEffect(() => { carregar() }, [periodo])
-  useEffect(() => { carregarPluggyStatus() }, [])
-
-  async function conectarSicredi() {
-    setConnectLoading(true)
-    setSyncMsg(null)
-    try {
-      const r = await api.post('/api/pluggy/connect-token')
-      window.open(r.data.url, '_blank', 'width=500,height=700')
-      setSyncMsg({ tipo: 'info', texto: 'Widget aberto. Após conectar, clique em "Sincronizar DDA" para importar os lançamentos.' })
-      setTimeout(() => carregarPluggyStatus(), 5000)
-    } catch (err) {
-      setSyncMsg({ tipo: 'erro', texto: err.response?.data?.error || 'Erro ao gerar link de conexão.' })
-    } finally {
-      setConnectLoading(false)
-    }
-  }
-
-  async function sincronizarDDA() {
-    setSyncLoading(true)
-    setSyncMsg(null)
-    try {
-      const r = await api.post('/api/pluggy/sync')
-      setSyncMsg({ tipo: 'ok', texto: `${r.data.sincronizados} lançamentos importados do Sicredi (${r.data.periodo}).` })
-      await carregar()
-    } catch (err) {
-      setSyncMsg({ tipo: 'erro', texto: err.response?.data?.error || 'Erro ao sincronizar DDA.' })
-    } finally {
-      setSyncLoading(false)
-    }
-  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -82,17 +39,6 @@ export default function ContasPagar() {
         <h1 style={{ margin:0 }}>Contas a Pagar</h1>
         {finRole === 'fin_admin' && (
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-            {pluggyStatus?.conectado ? (
-              <button onClick={sincronizarDDA} disabled={syncLoading}
-                style={{ padding:'8px 20px', background:'#7c3aed', color:'white', border:'none', borderRadius:8, cursor:'pointer', opacity: syncLoading ? 0.6 : 1 }}>
-                {syncLoading ? 'Sincronizando...' : '↻ Sync DDA Sicredi'}
-              </button>
-            ) : (
-              <button onClick={conectarSicredi} disabled={connectLoading}
-                style={{ padding:'8px 20px', background:'#0ea5e9', color:'white', border:'none', borderRadius:8, cursor:'pointer', opacity: connectLoading ? 0.6 : 1 }}>
-                {connectLoading ? 'Gerando link...' : '🔗 Conectar Sicredi'}
-              </button>
-            )}
             <button onClick={() => setShowForm(!showForm)}
               style={{ padding:'8px 20px', background:'#1a1a1a', color:'white', border:'none', borderRadius:8, cursor:'pointer' }}>
               + Nova conta
@@ -100,14 +46,6 @@ export default function ContasPagar() {
           </div>
         )}
       </div>
-
-      {syncMsg && (
-        <div style={{ marginBottom:16, padding:'10px 16px', borderRadius:8,
-          background: syncMsg.tipo === 'ok' ? '#22c55e22' : syncMsg.tipo === 'info' ? '#0ea5e922' : '#ef444422',
-          color: syncMsg.tipo === 'ok' ? '#15803d' : syncMsg.tipo === 'info' ? '#0369a1' : '#b91c1c', fontSize:14 }}>
-          {syncMsg.texto}
-        </div>
-      )}
 
       <div style={{ marginBottom:20, display:'flex', gap:8 }}>
         {['semana','mes','todos'].map(p => (
