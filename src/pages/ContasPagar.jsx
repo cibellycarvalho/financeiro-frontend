@@ -153,9 +153,9 @@ export default function ContasPagar() {
         </thead>
         <tbody>
           {contas.map(c => (
-            <tr key={c.id} style={{ borderTop:'1px solid var(--color-border)', background: c.origem === 'dda' ? 'color-mix(in srgb, #7c3aed 10%, var(--color-surface))' : 'var(--color-surface)' }}>
+            <tr key={c.id} style={{ borderTop:'1px solid var(--color-border)', background: c.origem === 'dda' ? 'color-mix(in srgb, var(--color-accent) 10%, var(--color-surface))' : 'var(--color-surface)' }}>
               <td style={{ padding:'10px 16px' }}>
-                {c.origem === 'dda' && <span title="Importado do Sicredi via DDA" style={{ marginRight:6, fontSize:11, padding:'1px 6px', borderRadius:99, background:'#7c3aed22', color:'#7c3aed' }}>DDA</span>}
+                {c.origem === 'dda' && <span title="Importado do Sicredi via DDA" style={{ marginRight:6, fontSize:11, padding:'1px 6px', borderRadius:99, background:'color-mix(in srgb, var(--color-accent) 15%, transparent)', color:'var(--color-accent)' }}>DDA</span>}
                 {c.descricao}
               </td>
               <td style={{ padding:'10px 16px', fontSize:12, color:'var(--color-text-muted)' }}>{c.categoria}</td>
