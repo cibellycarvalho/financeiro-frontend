@@ -965,6 +965,13 @@ export default function Fornecedores() {
                 ))
                 return [
                   ...linhasItens,
+                  itens.length > 1 && itens[0] && (
+                    <tr key={`${p.id}-total`} style={{ borderTop: '1px solid var(--color-border)' }}>
+                      <td colSpan={4} />
+                      <td style={{ padding: '10px 16px', fontWeight: 700 }}>Total do pedido: {formatMoeda(p.valor_total)}</td>
+                      <td />
+                    </tr>
+                  ),
                   finRole === 'fin_admin' && (
                     <tr key={`${p.id}-add-item`} style={{ borderTop: '1px solid var(--color-border)' }}>
                       <td colSpan={6} style={{ padding: '8px 16px' }}>
