@@ -77,13 +77,18 @@ rodar uma vez ao dia.
 
 ### Consequências
 
-1. **Corrida no refresh token — a mais grave.** O `refresh_token` do ML com
-   `offline_access` é de uso único. Dois workers renovando juntos: o primeiro
-   consome o token e grava o novo; o segundo tenta usar o token já consumido e
-   é rejeitado. Dependendo do que `renovar_token` faz nesse erro, o sintoma vai
-   de falha intermitente de autenticação até a conta desconectar sozinha.
-   **A verificar:** o que `renovar_token` grava quando a troca falha, e se há
-   histórico de conta ML caindo sem motivo aparente.
+1. **Corrida no refresh token — verificada, não corrompe.** O `refresh_token` do
+   ML é de uso único, então dois workers renovando juntos garantem que um receba
+   400. Mas o caminho de erro do `renovar_token` (l. 38-64) não grava nada: o
+   `raise_for_status()` estoura antes do `save_ml_refresh_token`, a coluna fica
+   como estava e o vencedor da corrida deixa um token válido. **O banco está
+   seguro.** O que falta é o perdedor se recuperar em vez de desistir — ver
+   Fase 0b.
+
+   **Agravante:** os 2 workers sobem juntos no deploy, então os TTLs de 5h dos
+   caches de token ficam alinhados e tendem a expirar quase ao mesmo tempo. A
+   corrida é periódica, não aleatória. Jitter no TTL por processo resolve na
+   origem.
 2. **O semáforo do `ml_http` é por processo, não global.** O teto real em
    produção é `2 × ML_HTTP_MAX_CONCURRENCY`. Correção é de configuração —
    definir a variável pela metade do teto desejado. Um limitador de fato
@@ -176,6 +181,20 @@ Três regras que vêm da topologia acima:
    linhas, não muda deploy.
 3. **`ML_HTTP_MAX_ELAPSED_SECONDS` maior para o coletor** que o padrão de 120s,
    que foi dimensionado para o dashboard.
+4. **`renovar_token` resiliente à corrida.** Captura o 400 especificamente,
+   relê o `refresh_token` do banco e tenta mais uma vez — se outro processo
+   venceu a corrida, o token válido já está gravado e a segunda tentativa passa.
+   Logar como `REFRESH_TOKEN_CONFLICT`, distinguível de um refresh token
+   realmente inválido: um é normal e se resolve sozinho, o outro exige refazer
+   o OAuth. Esgotadas as duas tentativas, propaga.
+
+   **Por que entra no escopo:** o scheduler tolera perder a corrida porque tenta
+   de novo em 15 min. O coletor roda uma vez por dia — perder a corrida às 6h
+   mata a coleta do dia inteiro, e dado de visita não se recupera depois. É
+   exatamente o modo de falha que a Fase 0a existe para eliminar.
+
+   Junto: jitter no TTL do cache de token, por processo, para desalinhar os
+   workers na origem.
 
 O coletor não reusa as funções permissivas do `ml_client` — chama `ml_get`
 direto, ou por wrappers estritos, nas cinco fontes: visitas, detalhe do item,
@@ -216,7 +235,13 @@ jobs de uma vez, não só o coletor. É mudança de deploy e mexe em produção 
 está funcionando, então vira tarefa própria. O advisory lock da Fase 0b resolve
 o caso do coletor sem esperar por isso.
 
-**4. Os 26 testes que já falham** (JWT desatualizado). Enquanto existirem, a
+**4. `renovar_token` chamado sem `try/except` em rota HTTP** (`routes/dashboard.py:243`,
+entre outros). A exceção sobe, vira 500 não tratado, o Traefik derruba os headers
+de CORS e o navegador mostra "Failed to fetch" — sem diagnóstico nenhum. Candidato
+forte para episódios de "o painel não abriu e depois voltou sozinho". Levantar a
+lista completa de call sites expostos antes de corrigir.
+
+**5. Os 26 testes que já falham** (JWT desatualizado). Enquanto existirem, a
 suíte tem ruído de fundo que pode esconder uma regressão nova — hoje só foi
 possível isolar comparando baseline à mão, e isso não escala.
 
