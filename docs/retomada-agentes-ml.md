@@ -6,8 +6,35 @@ Este arquivo guarda só o que ficou fora dela.
 
 ## Onde estamos
 
-Spec escrita e revisada. **Nada implementado.** Próximo passo é a Fase 0
-(coletor + tabelas), que não depende de nenhuma decisão pendente.
+Spec escrita e revisada. **Fase 0a implementada** (`ml_http.py` + troca dos 20
+call sites + 11 testes novos; 425 passando, 26 falhas pré-existentes de JWT
+desatualizado, zero regressão). Próximo passo é a Fase 0b — tabelas e job
+diário — mais dois ajustes pendentes na 0a (abaixo).
+
+### Ajustes pendentes na Fase 0a
+
+1. **O cap de 30s não pode valer para o `Retry-After`.** Capar o backoff
+   próprio está certo; capar a instrução do servidor não. Se o ML manda
+   `Retry-After: 60` e a camada volta aos 30, ela bate na porta antes da hora
+   durante throttling, e o ML pode estender o bloqueio. Regra: `Retry-After`
+   dentro do orçamento restante é respeitado integralmente, sem cap; acima do
+   orçamento, desiste na hora e loga `RETRY_EXHAUSTED`, sem dormir. Nunca
+   tentar antes do que o servidor mandou. Tratar também o formato data HTTP,
+   além de segundos.
+2. **Tetos de tentativa e de tempo precisam ser configuráveis por variável de
+   ambiente**, como já é o `ML_HTTP_MAX_CONCURRENCY`. Os 120s fixos servem ao
+   dashboard, onde há alguém esperando na tela, e são curtos para o cron do
+   coletor, que pode esperar minutos e ainda assim salvar o dado do dia.
+
+### Dívida aceita conscientemente
+
+`ml_get`/`ml_post` despacham por lookup dinâmico em `requests.get`/`requests.post`
+em vez de uma `Session` própria — decisão forçada pelos 15 testes existentes que
+mockam `patch("requests.get")`. Custo: sem `Session` não há keep-alive, e cada
+chamada paga handshake TCP + TLS. Invisível no uso atual; perceptível no coletor,
+que faz centenas de requisições em janela curta. **Medir quando a Fase 0b estiver
+rodando.** Se aparecer, a correção é mover o mock dos 15 testes para o novo ponto
+de costura — não desfazer a camada.
 
 ## Decisões já tomadas
 
