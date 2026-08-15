@@ -6,25 +6,33 @@ Este arquivo guarda só o que ficou fora dela.
 
 ## Onde estamos
 
-Spec escrita e revisada. **Fase 0a implementada** (`ml_http.py` + troca dos 20
-call sites + 11 testes novos; 425 passando, 26 falhas pré-existentes de JWT
-desatualizado, zero regressão). Próximo passo é a Fase 0b — tabelas e job
-diário — mais dois ajustes pendentes na 0a (abaixo).
+Spec escrita e revisada. **Fase 0a concluída.** Próximo passo é a Fase 0b —
+tabelas e job diário.
 
-### Ajustes pendentes na Fase 0a
+### Fase 0a — entregue
 
-1. **O cap de 30s não pode valer para o `Retry-After`.** Capar o backoff
-   próprio está certo; capar a instrução do servidor não. Se o ML manda
-   `Retry-After: 60` e a camada volta aos 30, ela bate na porta antes da hora
-   durante throttling, e o ML pode estender o bloqueio. Regra: `Retry-After`
-   dentro do orçamento restante é respeitado integralmente, sem cap; acima do
-   orçamento, desiste na hora e loga `RETRY_EXHAUSTED`, sem dormir. Nunca
-   tentar antes do que o servidor mandou. Tratar também o formato data HTTP,
-   além de segundos.
-2. **Tetos de tentativa e de tempo precisam ser configuráveis por variável de
-   ambiente**, como já é o `ML_HTTP_MAX_CONCURRENCY`. Os 120s fixos servem ao
-   dashboard, onde há alguém esperando na tela, e são curtos para o cron do
-   coletor, que pode esperar minutos e ainda assim salvar o dado do dia.
+`ml_http.py` novo, com `ml_get`/`ml_post` centralizando retry e limitação, os 20
+call sites do `ml_client.py` trocados mecanicamente, os dois `timeout` faltantes
+fechados e 14 testes novos. 428 testes, 26 falhas pré-existentes (JWT
+desatualizado), zero regressão.
+
+Comportamento:
+
+- Retry em `GET` por padrão; `POST` só com opt-in explícito (os dois
+  `oauth/token` optam, `responder_pergunta` não).
+- Backoff exponencial com jitter, capado em 30s. **O `Retry-After` do servidor
+  é isento do cap:** se cabe no tempo restante, dorme exatamente o que ele
+  mandou; se não cabe, desiste na hora com
+  `RETRY_EXHAUSTED motivo=retry_after_maior_que_orcamento`, sem dormir. Aceita
+  segundos e HTTP-date.
+- Transitório = `{429, 500, 502, 503, 504}`. Qualquer outro status volta na hora.
+- `ML_HTTP_MAX_CONCURRENCY` (10), `ML_HTTP_MAX_RETRIES` (5) e
+  `ML_HTTP_MAX_ELAPSED_SECONDS` (120) por variável de ambiente. **O coletor deve
+  subir o `MAX_ELAPSED`** — 120s serve ao dashboard, onde há alguém esperando na
+  tela; o cron pode esperar minutos e ainda assim salvar o dado do dia.
+- Semáforo global liberado antes de dormir e readquirido na tentativa seguinte.
+- Ao esgotar, devolve a última `Response` (ou relança a exceção de rede) — nunca
+  inventa sucesso.
 
 ### Dívida aceita conscientemente
 
