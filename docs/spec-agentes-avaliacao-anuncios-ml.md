@@ -43,7 +43,53 @@ Explicitados para não virarem escopo por acidente:
 
 **Endpoints a validar na documentação oficial antes de implementar.** A API do ML muda; nada aqui deve ser codado de memória.
 
-**O que não existe na API: posição orgânica na busca.** Se a pergunta é "caí de posição depois da mudança?", isso exige consulta própria a `/sites/MLB/search` guardando o rank diariamente. Sem essa coleta, o sistema vê a visita cair e não consegue distinguir "a foto ficou pior" de "perdi ranking por outro motivo".
+**Posição orgânica na busca não vem pronta da API** — exige varrer `/sites/MLB/search` e localizar o próprio item. Isso já está implementado no `ml-seller-api` (ver §4.5).
+
+### 4.5 Estado atual da integração — `ml-seller-api`
+
+Levantamento feito no backend existente. Muda substancialmente o escopo.
+
+**Já implementado e reaproveitável:**
+
+| Necessidade | Função existente |
+|---|---|
+| Visitas por item | `buscar_visitas_item` |
+| Snapshot do anúncio | `buscar_anuncios_ativos`, `buscar_item_detalhe` |
+| Vendas | `buscar_pedidos` |
+| Preço promocional | `buscar_precos_promocionais` |
+| Perguntas | `buscar_perguntas` |
+| Posição na busca | `buscar_posicao_anuncio` |
+| Gasto de ADS por item | `buscar_ads_gastos`, `buscar_ads_por_item` |
+| Reclamações | `buscar_reclamacoes` |
+
+Autenticação resolvida em nível de produção: OAuth2 com PKCE, `refresh_token`
+persistido em `ml_contas` (Postgres), renovação automática, `access_token` em
+cache de 5h contra TTL real de ~6h. Multi-conta suportado nativamente — o que
+o grupo de controle de §4.3 exige.
+
+**A consequência mais importante:** o sistema hoje sabe consultar tudo e **não
+guarda nada**. Todo cache é em memória com TTL de 300s. A Fase 0 não é escrever
+integração — é criar persistência em cima de chamadas que já existem.
+
+**Lacunas identificadas:**
+
+1. **Sem tratamento de rate limit.** Não há retry, backoff nem tratamento de
+   HTTP 429 em nenhum ponto do `ml_client.py`. Erros não-200 são logados e a
+   função desiste. `buscar_pedidos` e `buscar_collections` rodam com
+   `max_workers=10`. Ver §11 — isso é pré-requisito bloqueante da Fase 0.
+2. **`buscar_posicao_anuncio` descarta os concorrentes.** Ele varre as páginas
+   de busca, encontra a própria posição e joga fora os itens que estão acima.
+   Os dados do top N já passam pela função — falta só não descartá-los.
+   Extensão pequena, não integração nova.
+3. **Sem `health` do anúncio** (`/items/{id}/health`). Opcional.
+4. **Sem reviews** (perguntas existem, reviews não). Entra na Fase 2.
+
+**Nota de segurança (fora do escopo deste projeto):** `client_secret` e
+`refresh_token` ficam em texto puro na tabela `ml_contas`, protegidos apenas
+por RLS do Supabase. Juntos, dão acesso completo à conta ML. Considerando que
+uma auditoria anterior já encontrou credenciais vazadas no histórico do git,
+cifrar essas colunas merece uma tarefa própria — mas **não bloqueia** este
+projeto e não deve ser absorvido no escopo dele.
 
 ### 4.2 O limite estatístico — a restrição mais importante
 
@@ -285,11 +331,22 @@ O terceiro caso é o mais importante do desenho: o sistema precisa saber dizer q
 
 | Fase | Entrega | Duração | Depende de |
 |---|---|---|---|
-| **0** | Coletor + tabelas. Só acumula dado. | 1 semana | — |
+| **0a** | Camada de retry/backoff com tratamento de 429 no `ml_client` | 1 dia | — |
+| **0b** | Tabelas + job diário chamando as funções existentes | 2 dias | 0a |
 | **1** | Alarme de desastre no Telegram | 1 semana | Fase 0 rodando |
 | **2** | Vigia de concorrência + leitor de objeções | 2 semanas | Fase 1 estável |
 | **3** | Calculadora + avaliação D+7/D+21 | 2 semanas | ~4 semanas de linha de base |
 | **4** | Agregado: o que funciona no nosso catálogo | contínuo | ~50 eventos registrados |
+
+**Por que a Fase 0a existe e é bloqueante.** Hoje o `ml-seller-api` é usado de
+forma interativa: alguém abre o painel, uma chamada falha, a pessoa recarrega.
+Um coletor diário não tem ninguém olhando. Sem tratamento de 429, um pico de
+throttling do ML faz o job perder o dado do dia **em silêncio** — e esse dado
+não volta, porque o histórico de visitas do ML é limitado e não permite busca
+retroativa. Além disso, o coletor multiplica requisições (visitas + detalhe +
+posição + pedidos, por anúncio, por dia), o que torna o 429 provável em vez de
+hipotético. A camada de retry beneficia todo o sistema existente, não só este
+projeto — não é overhead deste escopo, é uma dívida que já estava lá.
 
 **Por que concorrência vem antes de avaliação.** O dado de concorrência é determinístico: não depende de volume, não depende de linha de base acumulada e é acionável no mesmo dia em que chega. A avaliação estatística precisa de um mês de histórico, precisa de volume e vai devolver "inconclusivo" boa parte do tempo. Colocar a avaliação antes faz a operação esperar dois meses para chegar na parte mais frustrante, e só depois na parte imediatamente útil.
 
@@ -333,15 +390,19 @@ O terceiro caso é o mais importante do desenho: o sistema precisa saber dizer q
 Riscos reais, em ordem de probabilidade:
 
 1. **Fadiga de alerta.** Bot fala demais, operação para de ler, sistema morre sem ninguém perceber. Mitigação: §8, mudo por padrão.
-2. **Coletor quebra em silêncio.** API muda, token expira, dado para de entrar e ninguém nota por semanas. Mitigação: alerta de "não coletei ontem" — o único aviso que o sistema dá sobre si mesmo.
+2. **Coletor quebra em silêncio.** API muda, token expira, rate limit derruba a coleta e ninguém nota por semanas. **Risco confirmado, não hipotético:** o `ml_client` não trata HTTP 429 hoje (§4.5). Mitigação em duas partes — a camada de retry da Fase 0a e o alerta de "não coletei ontem", único aviso que o sistema dá sobre si mesmo. Dado de visita perdido não se recupera depois.
 3. **Falso positivo por comparação múltipla.** Monitorando 40 anúncios, testar tudo a 5% gera ~2 alarmes falsos por semana. Mitigação: limiar por MDE do próprio anúncio, não por p-valor genérico.
 4. **Agente confiante demais.** LLM escreve "a foto melhorou 12%" onde o dado não permite. Mitigação: o veredito vem da calculadora (código); o redator só tem permissão de traduzir, nunca de concluir.
 5. **Violação da disciplina de uma-mudança-por-vez.** Mitigação: detectar e marcar `nao_atribuivel`.
 
 ## 14. Perguntas em aberto
 
-1. **Volume:** visitas/dia e vendas/semana de um anúncio típico, e quantos anúncios entram no monitoramento. Define o MDE real e calibra os limiares de §8.
-2. **Onde vive o código:** o "seller ML" é o repositório `ml-sync-worker`, o `sales-stream-pulse`, ou outro? Se já existe autenticação com a API do ML lá, ela deve ser reaproveitada.
-3. **Contas ML:** só YUSO ou mais de uma? O controle sintético é por conta.
-4. **Mercado Livre Ads:** há investimento em publicidade? Se sim, tráfego pago precisa ser separado do orgânico, senão contamina toda a análise de visitas.
-5. **Termos de busca:** para a coleta de posição, quais termos importam por anúncio? Precisa de uma lista curada.
+1. **Volume:** visitas/dia e vendas/semana de um anúncio típico, e quantos anúncios entram no monitoramento. Define o MDE real e calibra os limiares de §8, e decide se a Fase 3 entra no projeto.
+2. **Termos de busca:** para a coleta de posição, quais termos importam por anúncio? Precisa de uma lista curada — `buscar_posicao_anuncio` depende dela.
+3. **Hospedagem:** Hostinger é VPS ou compartilhada? O painel tem cron job? Define onde o coletor roda.
+
+### Resolvidas
+
+- ~~**Onde vive o código**~~ → `ml-seller-api`, backend Python. Integração mapeada em §4.5.
+- ~~**Contas ML**~~ → multi-conta já suportado via tabela `ml_contas`. O controle de §4.3 é calculado por conta.
+- ~~**Mercado Livre Ads — como separar pago de orgânico**~~ → `buscar_ads_por_item` já entrega gasto por item, e o OAuth já pede os escopos de advertising. O dado existe. **Deixa de ser risco e vira requisito:** se houver investimento em ADS, a calculadora precisa descontar o efeito de tráfego pago antes de avaliar variação de visitas — senão uma campanha ligada no meio da janela é lida como "a alteração funcionou". (Se há ou não investimento hoje é operacional, não bloqueia o desenho.)

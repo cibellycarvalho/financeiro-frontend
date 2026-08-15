@@ -25,7 +25,9 @@ Spec escrita e revisada. **Nada implementado.** Próximo passo é a Fase 0
 
 ## Ambiente
 
-- **Código do seller ML:** local, no Mac. Não está no GitHub.
+- **Código do seller ML:** `ml-seller-api` (Python), local no Mac em
+  `/Users/macbookpro/ml-seller-api`. Não está no GitHub. Integração com a API
+  do ML já mapeada — ver §4.5 da spec.
 - **Hospedagem disponível:** Hostinger, com painel. A definir se é VPS ou
   compartilhada, e se o painel tem cron job.
 - **Onde o coletor deve rodar:** na Hostinger, não no Mac. O coletor precisa
@@ -33,16 +35,28 @@ Spec escrita e revisada. **Nada implementado.** Próximo passo é a Fase 0
   histórico de visitas do ML não permite buscar retroativamente.
 - **Banco:** Supabase (mesmo já usado no sistema financeiro).
 
+## Primeira tarefa (bloqueante)
+
+**Fase 0a — camada de retry/backoff com tratamento de HTTP 429 no `ml_client.py`.**
+Hoje não existe nenhum: erros não-200 são logados e a função desiste. Isso é
+tolerável no uso interativo do painel e inaceitável num coletor diário sem
+ninguém olhando — dado de visita perdido não se recupera. Beneficia todo o
+sistema existente, não só este projeto.
+
 ## Pendências
 
 1. **Números de volume** — visitas/dia e vendas/semana de três anúncios
    (campeão, mediano, fraco) + total de anúncios ativos. Ordem de grandeza
    basta. **Decide se a fase de avaliação estatística entra no projeto.**
 2. **Hostinger** — VPS ou compartilhada? O painel tem cron job?
-3. **Contas ML** — só YUSO ou mais de uma?
-4. **Mercado Livre Ads** — há investimento em publicidade? Se sim, tráfego pago
-   precisa ser separado do orgânico antes de qualquer análise de visitas.
-5. **Termos de busca** por anúncio, para a coleta de posição orgânica.
+3. **Termos de busca** por anúncio, para a coleta de posição orgânica.
+
+## Fora do escopo, mas registrado
+
+`client_secret` e `refresh_token` estão em texto puro na tabela `ml_contas`,
+protegidos só por RLS. Juntos dão acesso completo à conta ML, e uma auditoria
+anterior já achou credenciais vazadas no histórico do git. Cifrar essas colunas
+merece tarefa própria — **não absorver no escopo deste projeto.**
 
 ## Como retomar
 
