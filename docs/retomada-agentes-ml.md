@@ -58,6 +58,44 @@ de costura — não desfazer a camada.
 - **Rigor de medição só nos ~10 anúncios principais.** O resto do catálogo muda
   livremente, sem medição.
 
+## Topologia de deploy — e o problema que ela cria
+
+EasyPanel (Docker), build disparado por push na `main`. Start:
+`gunicorn app:create_app() --workers 2 --worker-class gthread --threads 4`.
+Não há cron nativo da plataforma. O agendamento é interno: `scheduler.py::init_scheduler(app)`
+sobe um `BackgroundScheduler` (APScheduler) dentro de `create_app()`.
+
+**`create_app()` roda uma vez por worker do Gunicorn.** O guard existente
+(`if hasattr(app, "scheduler")`) só protege dentro do mesmo objeto `app` — não
+impede o segundo processo de subir o próprio scheduler. Não há eleição de líder.
+Consequência: todos os jobs agendados provavelmente rodam em duplicata,
+incluindo `sync_ml_recente` a cada 15 min em todas as contas.
+
+**Confirmar nos logs** antes de agir: duas execuções do mesmo job no mesmo
+minuto, com PIDs diferentes. O `daily_conciliacao` (08:00) é o melhor alvo por
+rodar uma vez ao dia.
+
+### Consequências
+
+1. **Corrida no refresh token — a mais grave.** O `refresh_token` do ML com
+   `offline_access` é de uso único. Dois workers renovando juntos: o primeiro
+   consome o token e grava o novo; o segundo tenta usar o token já consumido e
+   é rejeitado. Dependendo do que `renovar_token` faz nesse erro, o sintoma vai
+   de falha intermitente de autenticação até a conta desconectar sozinha.
+   **A verificar:** o que `renovar_token` grava quando a troca falha, e se há
+   histórico de conta ML caindo sem motivo aparente.
+2. **O semáforo do `ml_http` é por processo, não global.** O teto real em
+   produção é `2 × ML_HTTP_MAX_CONCURRENCY`. Correção é de configuração —
+   definir a variável pela metade do teto desejado. Um limitador de fato
+   compartilhado exigiria estado externo (Redis ou lock no Postgres) e não se
+   paga agora.
+3. **Cache de token e de dados duplicado** por processo: cada worker renova seu
+   próprio token e repete as mesmas chamadas.
+4. **Provável causa raiz do bug de rate limit** documentado no guia de debugging
+   do SPEC.md. Atenção: a camada de retry da Fase 0a vai **mascarar** esse
+   sintoma — as chamadas passam a ter sucesso após esperar. Para de doer sem
+   ter sido corrigido, e é exatamente por isso que fica registrado aqui.
+
 ## Ambiente
 
 - **Código do seller ML:** `ml-seller-api` (Python), local no Mac em
@@ -123,13 +161,37 @@ interpretação de resposta.
 6. **Soltar a vaga do semáforo durante o backoff.** Dormir segurando o slot
    transforma o limitador no gargalo: adquire, envia, solta, dorme, readquire.
 
+## Fase 0b — o que construir
+
+Tabelas da §7 da spec + job diário, pendurado no APScheduler que já existe.
+Três regras que vêm da topologia acima:
+
+1. **Nenhuma escrita pode depender de rodar exatamente uma vez.**
+   `ml_metricas_diarias` já tem chave primária `(anuncio_id, data)`, então uma
+   execução em duplicata vira UPSERT na mesma linha e a correção não sofre.
+   Estender essa disciplina a todas as tabelas do coletor. Isso é mais robusto
+   que qualquer lock, porque continua valendo se um dia forem quatro workers.
+2. **Advisory lock do Postgres em volta do job diário**, para não gastar o dobro
+   de quota da API. Quem pega roda; quem não pega desiste em silêncio. ~20
+   linhas, não muda deploy.
+3. **`ML_HTTP_MAX_ELAPSED_SECONDS` maior para o coletor** que o padrão de 120s,
+   que foi dimensionado para o dashboard.
+
+O coletor não reusa as funções permissivas do `ml_client` — chama `ml_get`
+direto, ou por wrappers estritos, nas cinco fontes: visitas, detalhe do item,
+pedidos, posição e ADS. Falha vira `NULL` e registro de fonte falhada, nunca `0`.
+
 ## Pendências
 
 1. **Números de volume** — visitas/dia e vendas/semana de três anúncios
    (campeão, mediano, fraco) + total de anúncios ativos. Ordem de grandeza
    basta. **Decide se a fase de avaliação estatística entra no projeto.**
-2. **Hostinger** — VPS ou compartilhada? O painel tem cron job?
-3. **Termos de busca** por anúncio, para a coleta de posição orgânica.
+2. **Termos de busca** por anúncio, para a coleta de posição orgânica.
+3. **Confirmar a duplicação de jobs nos logs** e o comportamento de
+   `renovar_token` em falha.
+
+~~Hostinger~~ → não se aplica. O serviço roda em EasyPanel e o agendamento é
+interno via APScheduler; o coletor entra como mais um job registrado ali.
 
 ## Fora do escopo, mas registrado
 
@@ -147,6 +209,16 @@ l. 243-255), assim como `buscar_cancelamentos`. Diferente de `_buscar_pedidos_di
 que propaga a exceção de propósito. Isso alimenta repasse — ou seja, é dinheiro
 sendo calculado sobre dado silenciosamente incompleto. A camada de retry reduz a
 frequência, mas não corrige a semântica.
+
+**3. Scheduler dentro dos workers do Gunicorn.** O lugar certo é um serviço
+separado, a partir da mesma imagem, com outro `CMD` — isso conserta todos os
+jobs de uma vez, não só o coletor. É mudança de deploy e mexe em produção que
+está funcionando, então vira tarefa própria. O advisory lock da Fase 0b resolve
+o caso do coletor sem esperar por isso.
+
+**4. Os 26 testes que já falham** (JWT desatualizado). Enquanto existirem, a
+suíte tem ruído de fundo que pode esconder uma regressão nova — hoje só foi
+possível isolar comparando baseline à mão, e isso não escala.
 
 ## Como retomar
 
