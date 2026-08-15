@@ -150,8 +150,13 @@ ml_anuncios (
   titulo          text,
   categoria_id    text,
   ativo           boolean,
+  prioritario     boolean,            -- entra no ciclo de avaliação e de posição
+  keywords        text[],             -- termos alvo; máx. 3, só se prioritário
   criado_em       timestamptz
 )
+-- Coleta de posição é a parte mais cara do coletor: N anúncios × M keywords ×
+-- páginas de busca, cada página uma requisição. Limitar a 3 keywords e coletar
+-- posição apenas nos anúncios prioritários, nunca no catálogo inteiro.
 
 -- Snapshot diário. Uma linha por anúncio por dia.
 ml_metricas_diarias (
@@ -165,8 +170,22 @@ ml_metricas_diarias (
   estoque         int,
   status          text,               -- active, paused, closed
   health          numeric,
-  posicao_busca   int null,           -- coleta própria; null se não coletado
+  fontes_falha    text[],             -- fontes que falharam nesta coleta
   primary key (anuncio_id, data)
+)
+-- Toda métrica aceita NULL. Falha de coleta vira ausência + registro em
+-- fontes_falha — nunca 0, que entraria na série como dado real.
+
+-- Posição orgânica. Tabela separada porque é por keyword, não por anúncio.
+-- Se keyword entrasse na PK de ml_metricas_diarias, visitas/vendas/preço se
+-- repetiriam em cada linha e qualquer soma multiplicaria silenciosamente.
+ml_posicao_diaria (
+  anuncio_id      uuid fk,
+  data            date,
+  keyword         text,
+  posicao         int null,
+  pagina          int null,
+  primary key (anuncio_id, data, keyword)
 )
 
 -- O que mudou, quando. Alimentado por detecção automática + registro manual.
@@ -182,16 +201,20 @@ ml_eventos (
   observacao      text
 )
 
--- Concorrência: top N da categoria/termo, snapshot diário
+-- Concorrência: top N por termo de busca, snapshot diário.
+-- Carrega keyword pelo mesmo motivo de ml_posicao_diaria — quem está acima de
+-- nós é por termo, não por anúncio.
 ml_concorrentes_diario (
   anuncio_id      uuid fk,            -- nosso anúncio de referência
   data            date,
+  keyword         text,
   ml_item_id      text,               -- do concorrente
   posicao         int,
   preco           numeric,
   titulo          text,
   foto_url        text,
-  vendidos        int
+  vendidos        int,
+  primary key (anuncio_id, data, keyword, ml_item_id)
 )
 
 -- Veredito do avaliador
