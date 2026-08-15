@@ -287,15 +287,48 @@ O terceiro caso é o mais importante do desenho: o sistema precisa saber dizer q
 |---|---|---|---|
 | **0** | Coletor + tabelas. Só acumula dado. | 1 semana | — |
 | **1** | Alarme de desastre no Telegram | 1 semana | Fase 0 rodando |
-| **2** | Calculadora + avaliação D+7/D+21 | 2 semanas | ~4 semanas de linha de base |
-| **3** | Vigia de concorrência + leitor de objeções | 2 semanas | Fase 2 estável |
+| **2** | Vigia de concorrência + leitor de objeções | 2 semanas | Fase 1 estável |
+| **3** | Calculadora + avaliação D+7/D+21 | 2 semanas | ~4 semanas de linha de base |
 | **4** | Agregado: o que funciona no nosso catálogo | contínuo | ~50 eventos registrados |
 
-**A Fase 0 precisa começar antes de qualquer alteração de anúncio.** Sem linha de base anterior à mudança, não há o que comparar. Cada semana de atraso é uma semana de avaliação perdida.
+**Por que concorrência vem antes de avaliação.** O dado de concorrência é determinístico: não depende de volume, não depende de linha de base acumulada e é acionável no mesmo dia em que chega. A avaliação estatística precisa de um mês de histórico, precisa de volume e vai devolver "inconclusivo" boa parte do tempo. Colocar a avaliação antes faz a operação esperar dois meses para chegar na parte mais frustrante, e só depois na parte imediatamente útil.
+
+**A Fase 0 precisa começar antes de qualquer alteração de anúncio.** Sem linha de base anterior à mudança, não há o que comparar. Cada semana de atraso é uma semana de avaliação perdida, e ela não volta.
+
+**A Fase 3 é opcional e depende do volume.** Se os anúncios tiverem tráfego baixo (ver §4.2), a avaliação estatística não se paga e o sistema fica sendo vigilância + concorrência. Isso já é bom negócio, e é um projeto bem menor.
 
 **A Fase 4 é onde está o maior retorno** e é a mais subestimada. Cada teste individual é ruidoso, mas a média de 50 testes ruidosos é sinal. Em 6 meses isso vira dado próprio sobre o que funciona neste catálogo — algo que quase nenhum vendedor tem.
 
-## 12. Como isso falha
+## 12. Expectativas realistas
+
+### 12.1 O que aparece, mês a mês
+
+| Período | O que a operação recebe |
+|---|---|
+| **Mês 1** | Quase nada. Duas ou três mensagens no mês inteiro, todas do tipo "anúncio pausado" ou "visitas caíram 40%". Parece pouco. É justamente o que hoje passa despercebido por uma semana. |
+| **Mês 2–3** | Concorrência e objeções. "O 2º colocado baixou 12% ontem", "quatro pessoas perguntaram sobre voltagem". Acionável no mesmo dia. |
+| **Mês 4–5** | Avaliação de alterações. **A maior parte vai voltar `inconclusivo`.** Não é defeito: é o dado sendo honesto sobre o próprio volume. |
+| **Mês 6+** | Agregado. "Das 23 trocas de foto de capa, 14 subiram visita, média +11%." |
+
+### 12.2 O que o sistema nunca faz
+
+- **Não escolhe a foto.** Diz se a que foi trocada mudou alguma coisa. Criação continua humana.
+- **Não prevê.** Nada de "se baixar 5% você vende 20% mais".
+- **Não explica o porquê na maioria dos casos.** Diz *que* caiu e lista o que mudou em volta. Correlação com contexto, não causa.
+- **Não entende o algoritmo do ML.** Vai haver queda sem explicação alcançável por dado nenhum do vendedor. O sistema levanta a mão e não tem resposta.
+
+### 12.3 Onde ficar com o pé atrás
+
+1. **O número parece mais firme do que é.** "+17%" tem margem em volta; repetindo o teste podia dar +9% ou +25%. Serve para decidir direção, não para calcular retorno.
+2. **Não é ligar e esquecer.** API muda, token expira, endpoint some. Precisa de dono.
+3. **O risco principal é comportamental, não técnico.** Se o bot falar demais, a operação para de ler e o sistema morre sem ninguém perceber. A regra de silêncio (§8) é mais importante que a matemática.
+4. **Medir pode reduzir a velocidade de teste.** Uma mudança por vez, com janela de 7 a 21 dias, significa poucos testes por anúncio por ano.
+
+### 12.4 Recomendação de aplicação
+
+**Aplicar o rigor de medição apenas nos ~10 anúncios principais.** No restante do catálogo, alterar livremente e sem medir. Coletar métricas de todos (é barato e alimenta o grupo de controle), mas só rodar o ciclo de avaliação nos que têm volume para sustentá-lo. Medir tudo leva à paralisia e não produz mais informação.
+
+## 13. Como isso falha
 
 Riscos reais, em ordem de probabilidade:
 
@@ -305,7 +338,7 @@ Riscos reais, em ordem de probabilidade:
 4. **Agente confiante demais.** LLM escreve "a foto melhorou 12%" onde o dado não permite. Mitigação: o veredito vem da calculadora (código); o redator só tem permissão de traduzir, nunca de concluir.
 5. **Violação da disciplina de uma-mudança-por-vez.** Mitigação: detectar e marcar `nao_atribuivel`.
 
-## 13. Perguntas em aberto
+## 14. Perguntas em aberto
 
 1. **Volume:** visitas/dia e vendas/semana de um anúncio típico, e quantos anúncios entram no monitoramento. Define o MDE real e calibra os limiares de §8.
 2. **Onde vive o código:** o "seller ML" é o repositório `ml-sync-worker`, o `sales-stream-pulse`, ou outro? Se já existe autenticação com a API do ML lá, ela deve ser reaproveitada.
