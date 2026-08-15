@@ -163,18 +163,28 @@ ml_metricas_diarias (
   anuncio_id      uuid fk,
   data            date,
   visitas         int,
-  pedidos         int,
-  unidades        int,
-  receita         numeric,
   preco           numeric,
   estoque         int,
   status          text,               -- active, paused, closed
   health          numeric,
   fontes_falha    text[],             -- fontes que falharam nesta coleta
+  pedidos_sync_ok boolean,            -- a sync de pedidos do dia estava completa?
   primary key (anuncio_id, data)
 )
 -- Toda métrica aceita NULL. Falha de coleta vira ausência + registro em
 -- fontes_falha — nunca 0, que entraria na série como dado real.
+--
+-- NÃO guarda pedidos/unidades/receita. Vendas são deriváveis de ml_pedidos e,
+-- ao contrário de visitas, mudam depois: cancelamento e reembolso acontecem
+-- dias após a venda. Uma contagem congelada no dia D diverge da realidade até
+-- D+7 e cria dois números discordantes. Para avaliação o número certo é o
+-- liquidado — venda cancelada não é venda. Conversão é uma view sobre
+-- ml_pedidos, que se autocorrige quando o status muda. pedidos_sync_ok existe
+-- para a calculadora saber quando a conversão daquele dia não é confiável.
+--
+-- A view precisa usar a mesma semântica de data do resto do sistema
+-- (date_approved, com o buffer de 3 dias em date_created). Divergir disso
+-- produz números que não batem e demoram a ser explicados.
 
 -- Posição orgânica. Tabela separada porque é por keyword, não por anúncio.
 -- Se keyword entrasse na PK de ml_metricas_diarias, visitas/vendas/preço se
