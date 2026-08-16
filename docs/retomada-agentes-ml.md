@@ -166,29 +166,32 @@ interpretação de resposta.
 6. **Soltar a vaga do semáforo durante o backoff.** Dormir segurando o slot
    transforma o limitador no gargalo: adquire, envia, solta, dorme, readquire.
 
-## Fase 0b — implementada, com dois bloqueios antes de produção
+## Fase 0b — código concluído
 
 Entregue: `migrations/024_agentes_ml.sql` (7 tabelas), `services/coletor_ml.py`
 (fontes estritas, upserts idempotentes, advisory lock `847300010`), job às 06:00
-BRT no scheduler, `max_elapsed_seconds` por chamada no `ml_http`, 23 testes
-novos, zero regressão.
+BRT no scheduler, `max_elapsed_seconds` por chamada no `ml_http`, 25 testes
+novos, zero regressão (457/483, mesmo baseline de 26 falhas pré-existentes).
 
-### Bloqueios
+Anúncio de catálogo tratado: `catalog_listing` e `catalog_product_id` gravados
+pelo `sync_ml_anuncios` sem chamada extra (já vinham no payload de
+`buscar_anuncios_ativos`), e o `search_id` da posição é o `catalog_product_id`
+quando for catálogo. **Catálogo sem `catalog_product_id` não cai para o
+`ml_item_id` como fallback** — marca `posicao` em `fontes_falha` e para.
 
-1. **Anúncio de catálogo grava posição errada em silêncio.** A busca por termo
-   lista o vencedor do catálogo, não o item individual — procurar pelo
-   `ml_item_id` devolve posição errada ou nenhuma. Número errado é pior que
-   buraco e viola a regra do coletor. Corrigir com `catalog_listing` e
-   `catalog_product_id` em `ml_anuncios`, usando o `catalog_product_id` como
-   `search_id` quando for o caso. Até estar certo: `NULL` + `fontes_falha`.
-2. **Aplicar a migração no Supabase.** Migrações não rodam sozinhas neste
-   projeto. Enquanto não for aplicada, o job das 06:00 falha todo dia.
+### Falta para entrar em produção — só a operação pode fazer
 
-### Ação que só a operação pode fazer
+1. **Aplicar `024_agentes_ml.sql` no Supabase.** Migrações não rodam sozinhas
+   neste projeto. Enquanto não for aplicada, o job das 06:00 falha todo dia.
+2. **Marcar `prioritario` e preencher `keywords`** (até 3 por anúncio). Sem essa
+   lista, a fonte de posição não coleta nada. Palpite serve — ajusta-se depois,
+   e cada dia sem coletar não volta.
 
-Marcar `prioritario` e preencher `keywords` (até 3 por anúncio). Sem essa lista,
-a fonte de posição não coleta nada. Palpite serve — ajusta-se depois, e cada dia
-sem coletar não volta.
+### A confirmar antes da Fase 2
+
+`buy_box_winner` em `GET /products/{catalog_product_id}` — confiança média, veio
+de busca indexada e não da documentação oficial (bloqueada por proteção de bot).
+Reconfirmar antes de implementar a coleta de vencedor do catálogo.
 
 ## Fase 0b — decisões de construção
 
