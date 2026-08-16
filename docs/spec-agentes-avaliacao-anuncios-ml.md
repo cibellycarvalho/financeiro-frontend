@@ -167,6 +167,9 @@ ml_metricas_diarias (
   estoque         int,
   status          text,               -- active, paused, closed
   health          numeric,
+  ads_gasto       numeric,            -- ADS: R$ do dia
+  ads_impressoes  int,
+  ads_cliques     int,                -- o que a calculadora usa de fato
   fontes_falha    text[],             -- fontes que falharam nesta coleta
   pedidos_sync_ok boolean,            -- a sync de pedidos do dia estava completa?
   primary key (anuncio_id, data)
@@ -185,6 +188,18 @@ ml_metricas_diarias (
 -- A view precisa usar a mesma semântica de data do resto do sistema
 -- (date_approved, com o buffer de 3 dias em date_created). Divergir disso
 -- produz números que não batem e demoram a ser explicados.
+--
+-- ADS é congelado, ao contrário de vendas. O que tirou vendas do snapshot foi
+-- a combinação "recuperável E mutável" — cancelamento cria dois números
+-- discordantes. Gasto de ADS não é estornado: o número de ontem continua sendo
+-- o de ontem. E a aposta é assimétrica — se a API de advertising for
+-- retroativa, congelar custa três colunas; se não for, não congelar torna toda
+-- alteração feita antes da Fase 3 impossível de avaliar, para sempre, porque
+-- não há como saber se a visita foi paga ou orgânica.
+--
+-- ads_cliques é a coluna que faz o trabalho: para separar tráfego pago de
+-- orgânico o que serve é clique pago, não reais gastos. ads_gasto e
+-- ads_impressoes servem a margem e ROI, na Fase 3.
 
 -- Posição orgânica. Tabela separada porque é por keyword, não por anúncio.
 -- Se keyword entrasse na PK de ml_metricas_diarias, visitas/vendas/preço se
