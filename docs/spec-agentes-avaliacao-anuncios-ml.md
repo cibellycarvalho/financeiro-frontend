@@ -152,8 +152,15 @@ ml_anuncios (
   ativo           boolean,
   prioritario     boolean,            -- entra no ciclo de avaliação e de posição
   keywords        text[],             -- termos alvo; máx. 3, só se prioritário
+  catalog_listing boolean,            -- é anúncio de catálogo?
+  catalog_product_id text,            -- usado como search_id quando for catálogo
   criado_em       timestamptz
 )
+-- catalog_listing/catalog_product_id não são opcionais: a busca por termo lista
+-- o vencedor do catálogo, não o item individual do vendedor. Procurar pelo
+-- ml_item_id num anúncio de catálogo devolve posição errada ou nenhuma — e
+-- gravar isso como número viola a regra do coletor. Sem a distinção, grava NULL
+-- e registra em fontes_falha.
 -- Coleta de posição é a parte mais cara do coletor: N anúncios × M keywords ×
 -- páginas de busca, cada página uma requisição. Limitar a 3 keywords e coletar
 -- posição apenas nos anúncios prioritários, nunca no catálogo inteiro.
@@ -210,8 +217,15 @@ ml_posicao_diaria (
   keyword         text,
   posicao         int null,
   pagina          int null,
+  ganhador_catalogo boolean null,     -- só faz sentido em anúncio de catálogo
   primary key (anuncio_id, data, keyword)
 )
+-- Em anúncio de catálogo, quem determina o tráfego não é a posição na busca e
+-- sim ganhar ou perder o buy box: dá para estar em primeiro e receber quase
+-- nada porque outro vendedor é o vencedor. Sem rastrear isso, uma queda de
+-- visitas por perda de buy box aparece como queda inexplicável. A coluna existe
+-- desde já para evitar migração; o preenchimento entra na Fase 2, junto do
+-- vigia de concorrência.
 
 -- O que mudou, quando. Alimentado por detecção automática + registro manual.
 ml_eventos (

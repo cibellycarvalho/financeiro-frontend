@@ -166,7 +166,31 @@ interpretação de resposta.
 6. **Soltar a vaga do semáforo durante o backoff.** Dormir segurando o slot
    transforma o limitador no gargalo: adquire, envia, solta, dorme, readquire.
 
-## Fase 0b — o que construir
+## Fase 0b — implementada, com dois bloqueios antes de produção
+
+Entregue: `migrations/024_agentes_ml.sql` (7 tabelas), `services/coletor_ml.py`
+(fontes estritas, upserts idempotentes, advisory lock `847300010`), job às 06:00
+BRT no scheduler, `max_elapsed_seconds` por chamada no `ml_http`, 23 testes
+novos, zero regressão.
+
+### Bloqueios
+
+1. **Anúncio de catálogo grava posição errada em silêncio.** A busca por termo
+   lista o vencedor do catálogo, não o item individual — procurar pelo
+   `ml_item_id` devolve posição errada ou nenhuma. Número errado é pior que
+   buraco e viola a regra do coletor. Corrigir com `catalog_listing` e
+   `catalog_product_id` em `ml_anuncios`, usando o `catalog_product_id` como
+   `search_id` quando for o caso. Até estar certo: `NULL` + `fontes_falha`.
+2. **Aplicar a migração no Supabase.** Migrações não rodam sozinhas neste
+   projeto. Enquanto não for aplicada, o job das 06:00 falha todo dia.
+
+### Ação que só a operação pode fazer
+
+Marcar `prioritario` e preencher `keywords` (até 3 por anúncio). Sem essa lista,
+a fonte de posição não coleta nada. Palpite serve — ajusta-se depois, e cada dia
+sem coletar não volta.
+
+## Fase 0b — decisões de construção
 
 Tabelas da §7 da spec + job diário, pendurado no APScheduler que já existe.
 Três regras que vêm da topologia acima:
@@ -241,7 +265,18 @@ de CORS e o navegador mostra "Failed to fetch" — sem diagnóstico nenhum. Cand
 forte para episódios de "o painel não abriu e depois voltou sozinho". Levantar a
 lista completa de call sites expostos antes de corrigir.
 
-**5. Os 26 testes que já falham** (JWT desatualizado). Enquanto existirem, a
+**5. Duplicação do advertiser_id/ADS no coletor.** O `coletor_ml.py` reimplementou
+essas duas chamadas em vez de reusar `ml_client.buscar_advertiser_id` e
+`buscar_ads_por_item`. A regra original era sobre não reusar as funções
+*permissivas*, e essas duas são estritas — mas o motivo real é melhor que a
+regra: desacoplar do cache em memória do dashboard, que tem TTL longo para
+`advertiser_id`, e o coletor precisa do dado de hoje. **Decisão: mantém.** Mas é
+duplicação e duplicação apodrece — se o ML mudar o endpoint de advertising,
+viram dois lugares para corrigir e o do coletor é o que ninguém lembra.
+Resolução preferida quando houver tempo: parâmetro de bypass de cache nas duas
+funções originais, e o coletor volta a reusá-las.
+
+**6. Os 26 testes que já falham** (JWT desatualizado). Enquanto existirem, a
 suíte tem ruído de fundo que pode esconder uma regressão nova — hoje só foi
 possível isolar comparando baseline à mão, e isso não escala.
 
