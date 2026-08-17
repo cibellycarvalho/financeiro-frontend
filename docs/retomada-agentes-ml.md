@@ -4,6 +4,52 @@ Arquivo de contexto para continuar o trabalho em outra sessão (terminal, no Mac
 A spec completa está em `spec-agentes-avaliacao-anuncios-ml.md`, nesta mesma pasta.
 Este arquivo guarda só o que ficou fora dela.
 
+## ATENÇÃO — nada da Fase 0a/0b está em produção
+
+O clone local do `ml-seller-api` estava **79 commits atrás de `origin/main`**, e
+o `git log origin/main..HEAD` vazio que parecia indicar "tudo sincronizado" era
+leitura de uma referência desatualizada, antes de um `git fetch`. O push nunca
+aconteceu — teria sido recusado. **A produção roda o código antigo:** sem camada
+de retry, sem coletor.
+
+Os 79 commits vieram de **outra sessão do Claude trabalhando no mesmo
+repositório**, sem que as duas soubessem uma da outra. Incluem a extração do
+módulo financeiro para outro repo, correções no `ml_client.py` (cancelamentos,
+taxas de ADS, preço promocional), uma função nova `buscar_pedidos_por_aprovacao`
+e um `scheduler.py` bem mais enxuto.
+
+### Regra de processo, para não repetir
+
+1. **`git fetch && git status` antes de começar qualquer trabalho.** O estado do
+   `origin/main` só é confiável depois de um fetch.
+2. **Uma sessão por repositório por vez.** Duas sessões editando o mesmo projeto
+   em paralelo produzem exatamente esta situação, e a segunda a chegar perde.
+3. Commitar cedo e em pedaços pequenos reduz o custo quando isso acontece
+   mesmo assim.
+
+### Como reconciliar (decidido)
+
+Não resolver conflito por hunk — **refazer por cima da versão nova.** A maior
+parte do trabalho da 0a no `ml_client.py` é mecânica (trocar `requests.get` por
+`ml_get` em 20 pontos), e costurar duas versões arrisca reintroduzir código que
+`origin/main` removeu de propósito.
+
+1. Preservar os arquivos que não colidem: `ml_http.py`, `services/coletor_ml.py`,
+   `migrations/024_agentes_ml.sql`, `tests/test_ml_http.py`,
+   `tests/test_coletor_ml.py`.
+2. Descartar as alterações locais em `ml_client.py`, `scheduler.py`,
+   `tests/test_ml_client.py` e `CLAUDE.md`; sincronizar com `origin/main`, que é
+   a autoridade.
+3. **Rodar a suíte e anotar o baseline novo de falhas.** O antigo era 26, mas
+   `origin/main` acrescentou ~200 testes. Sem baseline atualizado não há como
+   separar regressão nova de falha preexistente.
+4. Reaplicar do zero sobre a versão nova: a troca mecânica para `ml_get`/`ml_post`
+   (sem mexer no tratamento de resposta que já existe lá — `try/except` que
+   `origin/main` removeu fica removido), a resiliência do `renovar_token`, o
+   jitter no TTL, o registro do job às 06:00 e os testes de `renovar_token`.
+5. Avaliar se `buscar_pedidos_por_aprovacao` deve substituir o que o coletor usa.
+6. Rodar a suíte de novo e comparar com o baseline do passo 3.
+
 ## Onde estamos
 
 Spec escrita e revisada. **Fase 0a concluída.** Próximo passo é a Fase 0b —
