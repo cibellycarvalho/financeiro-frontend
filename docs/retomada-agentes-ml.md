@@ -179,13 +179,33 @@ pelo `sync_ml_anuncios` sem chamada extra (já vinham no payload de
 quando for catálogo. **Catálogo sem `catalog_product_id` não cai para o
 `ml_item_id` como fallback** — marca `posicao` em `fontes_falha` e para.
 
+### Schema aplicado
+
+As 7 tabelas foram criadas no Supabase pelo SQL Editor, a partir do DDL da spec
+(não pelo arquivo `024_agentes_ml.sql`, que deve ser reconciliado para refletir
+o banco). Comparação com o que o `coletor_ml.py` escreve: **sem divergência** —
+nomes de coluna batem, e todos os alvos de `ON CONFLICT` têm constraint
+correspondente (`ml_item_id` é `unique`; as demais são PK composta).
+
+RLS ativado nas 7 tabelas, sem policies: bloqueia a chave pública do frontend e
+não afeta o backend, que conecta como dono das tabelas.
+
+Notas: `health` fica sempre `NULL` (lacuna conhecida, marcada como opcional);
+`ml_eventos`, `ml_avaliacoes` e `ml_alertas` ficam vazias até as Fases 1 e 3; o
+coletor já grava `ml_concorrentes_diario`, o que adianta parte da Fase 2.
+
 ### Falta para entrar em produção — só a operação pode fazer
 
-1. **Aplicar `024_agentes_ml.sql` no Supabase.** Migrações não rodam sozinhas
-   neste projeto. Enquanto não for aplicada, o job das 06:00 falha todo dia.
-2. **Marcar `prioritario` e preencher `keywords`** (até 3 por anúncio). Sem essa
-   lista, a fonte de posição não coleta nada. Palpite serve — ajusta-se depois,
-   e cada dia sem coletar não volta.
+**Marcar `prioritario` e preencher `keywords`** (até 3 por anúncio). Sem essa
+lista, a fonte de posição não coleta nada. Palpite serve — ajusta-se depois, e
+cada dia sem coletar não volta.
+
+### Atrito conhecido
+
+A sessão local não conecta no Supabase (`tenant or user not found` — provável
+formato do usuário na connection string do pooler, que exige
+`postgres.<project-ref>`). Enquanto não for resolvido, toda consulta ao banco
+passa pela operação manualmente, pelo SQL Editor.
 
 ### A confirmar antes da Fase 2
 
