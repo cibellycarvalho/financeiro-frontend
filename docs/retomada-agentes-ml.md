@@ -392,3 +392,36 @@ A execução de 17/08 gravou 133 linhas **com data de 17/08** (as 3 linhas de
 estiver capturando o dia corrente às 06:00, cada linha é um dia pela metade — e
 uma série inteira de dias incompletos não serve para comparação, sem que nada
 avise.
+
+### Acoplamento implícito na coleta de visitas — corrigir
+
+`coletar_visitas` chama o endpoint com `last=1&unit=day` e **não recebe
+`data_alvo` nem passa `ending`** — pede "o último dia" relativo ao momento da
+chamada. A coluna `data` recebe corretamente `date.today() - 1`, calculado em
+`run_coletor_diario`, mas os dois valores só coincidem porque o job roda às
+06:00 BRT.
+
+**Isso é hábito, não garantia.** Disparo manual fora do horário, atraso do
+scheduler ou mudança de fuso gravam a visita de um dia com a data de outro —
+em silêncio, com `falhou=False`. É exatamente a falha que o projeto existe para
+evitar, e o caso não é hipotético: um disparo manual foi tentado em 17/08 fora
+das 06:00.
+
+**Correção:** `coletar_visitas` recebe `data_alvo` e envia `ending` derivado
+dele. Vale independentemente de o valor bater hoje — remove a dependência de
+horário.
+
+**Validação separada:** comparar `total_visits` com e sem `ending` para um item
+real responde outra pergunta — se as 133 linhas de 17/08 são confiáveis ou
+precisam ser recoletadas. Também define a convenção de borda do `ending` (fim
+do dia alvo ou início do dia seguinte), que a doc deixa ambígua.
+
+### Correção de premissa: visita perdida é recuperável em 48h
+
+A documentação do ML indica que as visitas ficam disponíveis por **48 horas**.
+Ao longo do projeto foi assumido que dado de visita não coletado nunca volta —
+isso é verdade só depois de dois dias.
+
+Consequência prática: o alerta "não coletei ontem" (Fase 1) deixa de ser apenas
+um aviso e passa a ter conserto. **Construir a recoleta junto com o alerta** —
+detectou, recoleta dentro da janela, salva o dia.
