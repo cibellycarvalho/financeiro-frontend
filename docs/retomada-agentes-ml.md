@@ -718,3 +718,48 @@ para quem quiser o detalhe.
 
 Consulta sob demanda por anúncio (mandar o MLB e receber relatório) fica para
 depois — exige o bot receber mensagens, que é outra peça de infraestrutura.
+
+## Fase 1 e detector de mudanças em produção — 18/08/2026
+
+Cadeia completa no ar: **coletor 06:00 → detector de mudanças 06:10 → alertas
+06:20**, mais o resumo semanal segunda 08:30 BRT. 577 testes passando, as 18
+falhas pré-existentes de mock de auth intactas.
+
+Entregue: `alertas.py` (diagnóstico com recoleta antes de avisar, alarme de
+desastre por SKU, detector de concorrência com estado em `ml_concorrencia_estado`,
+resumo semanal com CSV anexo), `sku_grupos.py`, `telegram.py`,
+`detector_mudancas.py`, e as correções do coletor (SKU, bug do silêncio, data das
+visitas).
+
+**O detector de mudanças destrava a Fase 3.** `ml_eventos` passa a ter escritor —
+sem ele não havia o que avaliar, porque avaliação é sobre eventos.
+
+### Primeiro achado real do sistema
+
+No primeiro dia, o alarme pegou o SKU FV0019 (Cabo HDMI 2 metros) caindo de 133,9
+para 38,7 visitas/dia com a conta YUSO estável. Olhando a série, não é queda
+súbita: amolecimento gradual desde 05/08 e **um degrau discreto em 14/08**
+(95 → 52 visitas, -45% em um dia).
+
+Hipótese principal — campanha de ADS desligada — **não é testável ainda**: o
+backfill trouxe só visitas, então `ads_*` e `preco` estão nulos em todo o
+histórico. O único dia com ADS (17/08) mostra 3 cliques, irrelevante.
+
+Nota de lado: o irmão desse SKU (`MLB4449875867`) faz **zero visitas** há cinco
+meses. Vale medir quantos dos 58 pares têm irmão morto.
+
+### Colisão de migrations é sintoma recorrente
+
+Duas sessões numeraram 027/028 simultaneamente — mesma classe de problema dos 79
+commits. Correção definitiva: **nomear migrations por timestamp**
+(`20260818_1430_nome.sql`) em vez de sequência. Duas sessões em paralelo nunca
+colidem, porque o timestamp é único por construção.
+
+### Pendências, em ordem de valor
+
+1. **Backfill de ADS, 90 dias** — testa a hipótese do FV0019 e é pré-requisito
+   para separar pago de orgânico em qualquer avaliação.
+2. **Preço histórico**, se alguma API permitir recuperar — sem ele metade das
+   explicações de queda fica invisível.
+3. **Fase 2** — concorrentes por lista curada de MLBs, via `/items/{id}`.
+4. **Fase 3** — a calculadora, agora destravada pelo detector de mudanças.
