@@ -622,3 +622,99 @@ tocar no endpoint bloqueado. Se funcionar, vale mais que a posição para anúnc
 de catálogo — quem perde o buy box perde a venda mesmo bem colocado na busca.
 Preencheria o `ganhador_catalogo` que já existe. Verificar também se identifica
 **quem** venceu e a que preço.
+
+## SKU: a unidade de avaliação deixa de ser o anúncio
+
+Levantamento sobre os 133 anúncios: **100% têm `SELLER_SKU` preenchido**
+(`seller_custom_field` está vazio em todos — campo morto, ignorar). São **73 SKUs
+distintos**, e **89% dos anúncios têm irmão** — 58 pares, todos na composição
+"um de catálogo + um tradicional".
+
+O catálogo real tem ~73 produtos, não 133 anúncios. Os dois números vinham sendo
+usados como se fossem o mesmo.
+
+### Por que isso muda o desenho, não só a arrumação
+
+Anúncios do mesmo SKU **disputam o mesmo cliente**. Quem entra por um não entra
+pelo outro. Isso quebra duas coisas:
+
+- **Grupo de controle:** o irmão absorve exatamente o tráfego que saiu, então se
+  move na direção contrária e exagera o efeito medido. **Irmão nunca entra no
+  controle do outro.**
+- **Unidade de avaliação:** trocar a foto do tradicional pode só migrar tráfego
+  para o de catálogo — um mostra queda, o outro alta, e as duas leituras estão
+  erradas isoladas. **Quando o SKU tem mais de um anúncio, avalia-se a soma.**
+  É o que responde a pergunta de negócio: o produto ganhou gente?
+
+### Colisão de SKU: regra, não lista de exceção
+
+Um SKU (FV0020) agrupava três anúncios, um deles produto completamente diferente
+— SKU reaproveitado por engano. Lista de exceção manual apodrece, então vale uma
+**regra de validação**: um grupo só é válido com exatamente um
+`catalog_listing=true` e no máximo um `false`. Grupo inválido → membros tratados
+como anúncios isolados (conservador) e o SKU entra na lista de qualidade de dado
+do resumo semanal, porque o conserto é humano — corrigir o SKU no anúncio.
+
+### Prioritários redefinidos por volume real, em duas faixas
+
+Somando irmãos, o volume por produto sobe e mais unidades passam a ser
+mensuráveis. 75 unidades no total (58 SKUs + 3 do grupo inválido + 14 sem par).
+
+| Faixa | Unidades | Detectável | Janela |
+|---|---:|---:|---|
+| ≥ 150/dia | 9 | ~9-12% | 7 dias |
+| 70-150/dia | 14 | 12-20% | **14 dias** |
+| 20-70/dia | 26 | 20-35% | só alarme |
+| < 20/dia | 26 | — | fora do ranking |
+
+**23 unidades prioritárias** (43 anúncios marcados), com `janela_deteccao_dias`
+explícito em `ml_anuncios` — a calculadora precisa saber qual janela usar por
+unidade. O argumento anterior para limitar a ~10 era operacional, mas a
+disciplina de "uma mudança por vez" é **por produto**, não global: dá para mexer
+em 23 produtos na mesma semana sem atrapalhar medição nenhuma.
+
+Keywords passam a ser compartilhadas entre irmãos (mesmo produto, mesma busca).
+
+## Keywords estão inertes até existir fonte de posição
+
+As keywords só alimentam a coleta de posição, que depende do `/sites/MLB/search`
+bloqueado. **Não vale cadastrar as 19 faltantes** — as 13 já cadastradas também
+não fazem nada hoje. Pendência condicional: se aparecer fonte de posição
+(ferramenta de terceiro ou desbloqueio do ML), preencher o resto.
+
+## Fase 1 — decisões de desenho
+
+- **O alerta do sistema tenta recoletar antes de avisar.** Visitas ficam
+  disponíveis por 48h, então falha recuperável não deve virar notificação. Só
+  alerta se a segunda tentativa também falhar — e aí a mensagem vira prazo
+  ("fora da janela de recuperação em DD/MM"), não informação.
+- **Queda de visitas usa 3 dias contra a média dos 14 anteriores**, não um dia
+  contra a média. Dia isolado é ruído — o projeto inteiro assume isso, e o
+  alarme não deveria ser exceção. Os casos onde velocidade importa (pausado, sem
+  estoque) são checagem de status, exatos e imediatos, então a queda de visitas
+  pode se dar ao luxo de ser mais lenta e mais precisa.
+- **Limiar pelo desvio-padrão histórico do próprio anúncio**, não pela fórmula
+  teórica — a fórmula subestima o ruído real (dia da semana, rajadas) e vinha
+  sendo corrigida por um fator de 1,5 no olho. Com 150 dias de histórico, o
+  desvio empírico mede isso de verdade.
+- **Piso de 20 visitas/dia** no ranking e no alarme: abaixo disso a variação
+  percentual é dominada por ruído e o alerta vira falso positivo.
+- **Supressão de 72h por (unidade, tipo), mas não esconde agravamento.** Alertou
+  queda de 30% e no dia seguinte está em 80% — é situação nova.
+- **"Última alteração registrada: X"** no alerta de queda. É a informação mais
+  acionável da mensagem: separa "eu mexi e estraguei" de "aconteceu algo fora".
+
+### Resumo semanal — resolve a ambiguidade do silêncio
+
+Mudo por padrão tem um problema não tratado: **silêncio é ambíguo** entre "tudo
+bem" e "o bot morreu" — desconfiança justificada depois de uma fonte parada em
+silêncio por dias. Um resumo semanal fixo resolve sem virar ruído diário.
+
+Conteúdo: linha de saúde (✅ / 🟡 com detalhe), maiores altas e quedas entre as
+**75 unidades** (3 a 5 de cada, não a lista inteira — 133 linhas viram três
+mensagens e ninguém lê na segunda semana), variação da conta como referência,
+contagem dos que ficaram abaixo do piso, e a **tabela completa em anexo (CSV)**
+para quem quiser o detalhe.
+
+Consulta sob demanda por anúncio (mandar o MLB e receber relatório) fica para
+depois — exige o bot receber mensagens, que é outra peça de infraestrutura.
