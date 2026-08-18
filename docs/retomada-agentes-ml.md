@@ -569,3 +569,56 @@ Hoje "não achei nas 5 páginas varridas" (`max_paginas=5 × 50 = 250 resultados
 e "a keyword não retorna nada" são indistinguíveis no banco. Com o total, o
 primeiro caso vira diagnóstico de mau posicionamento e o segundo, de keyword
 errada.
+
+## Posição por busca: abandonada. A Fase 2 muda de desenho.
+
+### Correções aplicadas
+
+**Silêncio corrigido.** Causa raiz: `fontes_falha` era montado e gravado por
+`upsert_metrica_diaria` **antes** do loop de keywords. Visitas, detalhe e ADS
+escrevem na mesma linha da mesma tabela, então cabem no padrão "calcula falhou →
+append → uma escrita". Posição e concorrentes escrevem em tabelas separadas, com
+N linhas por anúncio/dia e sem coluna própria de falha — só existem quando dão
+certo. Não é descuido, é descompasso estrutural, e afeta **apenas esse par**
+(as outras três fontes estão limpas). A coleta de posição passou a rodar antes
+do upsert, acumulando `posicao_falhou` e anexando a `fontes_falha`.
+
+**`paging.total` implementado** (`ml_posicao_diaria.total_resultados`, migração
+027). Distingue "mal posicionado além das 5 páginas varridas" de "keyword sem
+resultado relevante".
+
+### `/products/search` reprovado no critério de aceitação
+
+Testado contra keyword real: a busca que o comprador vê traz o item por volta da
+posição 26-32, com 1.256 resultados; o `/products/search` não traz o
+`catalog_product_id` nos primeiros 1.000 e devolve `paging.total = 10000`, valor
+genérico que se repete entre buscas. **Não é a mesma ordenação nem o mesmo
+universo.** Migrar produziria um número que parece posição e não é.
+`ml_posicao_diaria` fica vazia e honesta.
+
+### Scraping: decidido que não
+
+O dado é obtível pelo navegador — foi assim que a verificação acima foi feita.
+**Automatizar isso não vale.** Raspagem da busca viola os termos da plataforma, e
+o que fica em risco é a conta que gera todo o faturamento. O prejuízo possível é
+o negócio; o ganho é uma coluna. Caminho legítimo, se um dia a posição for
+mesmo necessária: ferramenta de terceiro licenciada (Nubimetrics, Real Trends).
+
+### Fase 2 redesenhada: concorrentes por lista, não por busca
+
+Em vez de "quem está acima de mim na busca", passa a ser **"estes concorrentes
+específicos"**. Os MLBs dos concorrentes diretos são cadastrados à mão — a
+operação já os conhece — e o coletor busca `/items/{id}` de cada um por dia:
+preço, título, foto, vendidos. Esse endpoint **não está bloqueado**.
+
+Entrega o alerta que mais importa ("o concorrente X baixou 12% ontem") e perde
+só a descoberta automática de concorrente novo, que vira manutenção manual de
+meia hora por trimestre para dez anúncios.
+
+### A testar: buy box sem passar pela busca
+
+`GET /products/{catalog_product_id}` pode devolver o vencedor do buy box sem
+tocar no endpoint bloqueado. Se funcionar, vale mais que a posição para anúncios
+de catálogo — quem perde o buy box perde a venda mesmo bem colocado na busca.
+Preencheria o `ganhador_catalogo` que já existe. Verificar também se identifica
+**quem** venceu e a que preço.
