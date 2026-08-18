@@ -4,13 +4,19 @@ Arquivo de contexto para continuar o trabalho em outra sessão (terminal, no Mac
 A spec completa está em `spec-agentes-avaliacao-anuncios-ml.md`, nesta mesma pasta.
 Este arquivo guarda só o que ficou fora dela.
 
-## ATENÇÃO — nada da Fase 0a/0b está em produção
+## Estado: Fases 0a e 0b em produção desde 17/08/2026
 
-O clone local do `ml-seller-api` estava **79 commits atrás de `origin/main`**, e
-o `git log origin/main..HEAD` vazio que parecia indicar "tudo sincronizado" era
-leitura de uma referência desatualizada, antes de um `git fetch`. O push nunca
-aconteceu — teria sido recusado. **A produção roda o código antigo:** sem camada
-de retry, sem coletor.
+Camada de retry e coletor diário estão no ar, rodando às 06:00 BRT. Primeira
+execução limpa — ver "Primeira execução em produção" no fim deste arquivo.
+
+### Histórico: o incidente de divergência (resolvido)
+
+Antes do envio, o clone local do `ml-seller-api` estava **79 commits atrás de
+`origin/main`**, e o `git log origin/main..HEAD` vazio que parecia indicar "tudo
+sincronizado" era leitura de uma referência desatualizada, antes de um
+`git fetch`. O push teria sido recusado. A reconciliação foi feita refazendo o
+trabalho por cima da versão nova, com baseline de testes idêntico ao de
+`origin/main` (18 falhas, mesma lista).
 
 Os 79 commits vieram de **outra sessão do Claude trabalhando no mesmo
 repositório**, sem que as duas soubessem uma da outra. Incluem a extração do
