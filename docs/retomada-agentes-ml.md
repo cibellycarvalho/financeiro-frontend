@@ -365,3 +365,24 @@ E colar:
 
 Vale rodar `/init` uma vez nessa pasta para gerar um `CLAUDE.md` — assim as
 próximas sessões já carregam o contexto do projeto sozinhas.
+
+## Primeira execução em produção — 17/08/2026
+
+O coletor rodou às 06:00 e gravou **133 anúncios, 133 com visitas, zero falhas**.
+Execução limpa. O catálogo tem 133 anúncios ativos somando as quatro contas
+(YUSO, M12, J12, LOCITECH) — número que faltava desde o início para dimensionar
+o limite de detecção.
+
+### Em aberto: semântica da coluna `data`
+
+A execução de 17/08 gravou 133 linhas **com data de 17/08** (as 3 linhas de
+16/08 são de teste anterior). Precisa confirmar:
+
+1. A coluna `data` recebe a data da execução ou a do dia anterior?
+2. O `buscar_visitas_item` é chamado para o dia corrente ou para o dia anterior
+   fechado?
+
+**O correto é coletar o dia anterior completo e gravar com a data dele.** Se
+estiver capturando o dia corrente às 06:00, cada linha é um dia pela metade — e
+uma série inteira de dias incompletos não serve para comparação, sem que nada
+avise.
