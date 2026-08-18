@@ -425,3 +425,57 @@ isso é verdade só depois de dois dias.
 Consequência prática: o alerta "não coletei ontem" (Fase 1) deixa de ser apenas
 um aviso e passa a ter conserto. **Construir a recoleta junto com o alerta** —
 detectou, recoleta dentro da janela, salva o dia.
+
+## Bug confirmado nas visitas — e o que ele revelou
+
+### O bug (corrigido)
+
+`last=1&unit=day` **nunca devolve 1 dia**: devolve sempre `last+1` buckets
+diários, e `total_visits` é a soma de todos. Confirmado empiricamente (17 sem
+`ending` contra 33 com `ending=ontem`; o padrão se repete com `last=5`).
+
+Rodando às 06:00 sem `ending`, o valor gravado sempre misturava "hoje parcial"
+com "ontem completo". **Não era risco futuro — era bug ativo desde a primeira
+execução.** As 136 linhas já coletadas (133 de 17/08 + 3 de 16/08) estão
+contaminadas.
+
+`ending=<data>` inclui essa própria data como último bucket, e ainda assim vem
+acompanhada de um bucket extra. Correção aplicada: `coletar_visitas` recebe
+`data_alvo`, envia `ending` e **lê o bucket exato de `results[]` por data**,
+nunca `total_visits`. Teste novo trava explicitamente contra voltar a somar.
+
+### A premissa que caiu
+
+A API aceita `ending` retroativo — pelo relato, até ~150 dias. Se `last=N`
+devolve `N+1` buckets numa chamada, **uma chamada por anúncio traz o histórico
+inteiro**: 133 chamadas para meses de série.
+
+Isso derruba a premissa que orientou o projeto desde o início — a de que visita
+não coletada nunca volta, e por isso a Fase 0 tinha pressa. **A verificar antes
+de contar com isso:**
+
+1. `last=149&unit=day` num item real: quantos buckets voltam, qual a data mais
+   antiga, existe teto?
+2. Reconciliar as duas leituras da documentação: "disponível por 48 horas"
+   (provavelmente tempo até o dado consolidar) contra "150 dias" (alcance do
+   histórico). São coisas diferentes e importa saber qual é qual.
+
+Se confirmar, o backfill **substitui o descarte**: as linhas contaminadas têm PK
+`(anuncio_id, data)` e são sobrescritas por UPSERT. Uma operação resolve as duas
+coisas — não precisa `DELETE`.
+
+E muda o calendário do projeto: em vez de esperar meses acumulando linha de
+base, haveria histórico suficiente para a fase de avaliação quase imediatamente,
+inclusive para avaliar retroativamente alterações já feitas — desde que estejam
+registradas em `ml_eventos`.
+
+### Buckets em UTC — documentado, não corrigido
+
+Os buckets fecham em dia-calendário UTC, não BRT: desvio sistemático de ~3h que
+o endpoint não permite eliminar por parâmetro.
+
+Não vale corrigir. O limite do bucket é estável, então comparar um dia contra
+outro continua consistente — que é o que a avaliação faz. Onde incomoda é na
+conversão, porque visitas vêm em dia UTC e pedidos em dia BRT; mas numa janela
+de 7 dias isso afeta só as bordas, menos de 2% da janela, contra um limite de
+detecção de 20 a 30%. Some no ruído.
