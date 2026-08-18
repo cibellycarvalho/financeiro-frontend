@@ -529,3 +529,43 @@ Mesmo com 150 dias, avaliar mudança de conversão por anúncio exigiria centena
 de vendas semanais num único anúncio. Confirma o que estava previsto: **visitas
 se mede, conversão não.** A saída é agregar mudanças semelhantes ao longo do
 tempo — Fase 4.
+
+## Fonte de posição nunca funcionou — e falhou em silêncio
+
+`/sites/MLB/search` está **bloqueado pelo ML (403)**. As 39 chamadas de teste
+(13 prioritários × 3 keywords) voltaram todas 403. `ml_posicao_diaria` e
+`ml_concorrentes_diario` têm zero linha desde sempre.
+
+O bloqueio já era conhecido no repositório: `routes/estudio.py:280` migrou para
+`/products/search`. **Essa migração nunca chegou ao coletor de posição.**
+
+### O bug grave é o silêncio, não o 403
+
+A falha **não apareceu em `fontes_falha`**. Uma fonte falhou todos os dias desde
+a primeira execução, duas tabelas ficaram vazias, e nada avisou. Isso viola a
+regra central do coletor — falha vira ausência registrada, nunca sumiço.
+
+**Prioridade 1:** entender por que o 403 escapou e verificar se as outras quatro
+fontes (visitas, detalhe, ADS, concorrentes) têm o mesmo buraco. Se o problema
+for estrutural e não específico da posição, qualquer coluna pode estar vazia sem
+aviso.
+
+**Isso sobe a prioridade da Fase 1.** O alerta de "não coletei ontem" existe
+exatamente para este modo de falha, que agora deixou de ser hipotético.
+
+### Migração para `/products/search` — critério de aceitação
+
+A pergunta não é "consigo extrair um número de posição". É: **esse número é a
+mesma ordenação que o comprador vê ao buscar no app?** `/products/search` é
+busca de produtos de catálogo, que não necessariamente reproduz a ordenação da
+busca de anúncios.
+
+Se não reproduzir, **não migrar**: `ml_posicao_diaria` vazia e honesta é melhor
+que uma coluna com número que parece posição e não é.
+
+### Falta guardar `paging.total`
+
+Hoje "não achei nas 5 páginas varridas" (`max_paginas=5 × 50 = 250 resultados`)
+e "a keyword não retorna nada" são indistinguíveis no banco. Com o total, o
+primeiro caso vira diagnóstico de mau posicionamento e o segundo, de keyword
+errada.
