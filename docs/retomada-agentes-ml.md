@@ -479,3 +479,53 @@ outro continua consistente — que é o que a avaliação faz. Onde incomoda é 
 conversão, porque visitas vêm em dia UTC e pedidos em dia BRT; mas numa janela
 de 7 dias isso afeta só as bordas, menos de 2% da janela, contra um limite de
 detecção de 20 a 30%. Some no ruído.
+
+## Backfill concluído — e o volume real do catálogo
+
+**14.117 linhas** em `ml_metricas_diarias`, cobrindo 150 dias × 133 anúncios
+(menos os dias anteriores à criação de cada anúncio, corretamente não gravados).
+
+Verificação de integridade: `dias_zero = 5.711`, `dias_com_visita = 8.406`,
+`dias_nulos = 0`. **Os dias sem visita foram gravados como zero, não pulados** —
+se tivessem sumido, todas as médias viriam infladas em silêncio.
+
+Nota: quatro lotes duplicados disparados por outro fork bateram em
+`ON CONFLICT` sem efeito. A regra de escrita idempotente definida na Fase 0b
+pagou na primeira vez que foi exercitada de verdade.
+
+### Volume real e limite de detecção
+
+Topo do catálogo (visitas/dia médias em 150 dias): 266, 249, 233, 226, 208,
+198, 197, 182, 180, 144, 144, 119, 114 — depois cai para a faixa de 60 a 100.
+
+| Visitas/dia | Menor variação detectável em 7 dias |
+|---:|---:|
+| 250 | ~14% |
+| 180 | ~17% |
+| 120 | ~21% |
+| 80 | ~25% |
+| 40 | ~36% |
+
+### Decisão: a fase de avaliação estatística entra no projeto
+
+Ela estava marcada como opcional, condicionada a este número. Com 266
+visitas/dia no anúncio campeão e doze anúncios acima de 114, uma troca de foto
+que mexa 15% no CTR é detectável em uma semana — e melhora boa de foto costuma
+mexer entre 10% e 30%.
+
+**Ganho extra do histórico:** não é mais preciso usar janelas simétricas de 7
+contra 7. Com cinco meses de linha de base, o "antes" pode ser de 28 dias e fica
+muito preciso, o que derruba o limite de detecção do campeão para perto de 11%.
+
+### A lista de prioritários deixa de ser palpite
+
+O corte natural fica em torno de 100 visitas/dia — os **doze primeiros** da
+consulta de distribuição. Abaixo disso o dado não sustenta avaliação em janela
+curta, e esses anúncios ficam só na vigilância de desastre, como já combinado.
+
+### Conversão continua fora de alcance
+
+Mesmo com 150 dias, avaliar mudança de conversão por anúncio exigiria centenas
+de vendas semanais num único anúncio. Confirma o que estava previsto: **visitas
+se mede, conversão não.** A saída é agregar mudanças semelhantes ao longo do
+tempo — Fase 4.
