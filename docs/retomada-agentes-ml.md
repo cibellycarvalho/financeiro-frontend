@@ -763,3 +763,45 @@ colidem, porque o timestamp é único por construção.
    explicações de queda fica invisível.
 3. **Fase 2** — concorrentes por lista curada de MLBs, via `/items/{id}`.
 4. **Fase 3** — a calculadora, agora destravada pelo detector de mudanças.
+
+## Caso FV0019 resolvido pela metade — e o que ele provou
+
+Backfill de ADS completo (90/90 dias nas 4 contas, conferido por contagem direta
+em `ml_metricas_diarias`, não pela tabela de estado). O job foi removido do
+scheduler; `ads_backfill.py` fica no repositório, chamável à mão.
+
+### São dois eventos, não um
+
+| Período | Visitas/dia | Cliques ADS | Gasto/dia |
+|---|---:|---:|---:|
+| 20/07 a 05/08 | ~175 | ~120 | R$ 40 |
+| 06 a 09/08 | ~120 | ~57 | R$ 25 |
+| 10 a 13/08 | ~120 | ~12 | R$ 5 |
+| 14 a 17/08 | ~42 | ~5 | R$ 1,75 |
+
+**1. A campanha morreu entre 06 e 12/08** — cliques de ~120/dia para ~8, gasto de
+R$40 para R$2. É o maior pedaço da perda.
+
+**2. O degrau de 14/08 não é ADS.** No dia 13 a campanha já estava em 8 cliques;
+no dia 14, em 3. **Cinco cliques a menos não explicam 43 visitas a menos**
+(95 → 52). Essa conclusão não depende de nenhuma hipótese sobre como cliques e
+visitas se sobrepõem. O que caiu foi orgânico, e segue sem explicação.
+
+Ambos gravados em `ml_eventos` — os primeiros registros da tabela, origem manual.
+
+### O que o caso provou sobre o desenho
+
+Sem separar pago de orgânico, este anúncio seria lido como "despencou 78%" e a
+operação iria caçar problema de foto, título ou preço — quando a maior parte era
+verba de publicidade que parou. Era exatamente o risco que justificou tratar ADS
+como requisito da calculadora, e não como detalhe.
+
+### Correções que saíram daí
+
+- **O alarme passou a disparar sobre a série orgânica** (visitas − cliques
+  pagos), não sobre visitas brutas, com tipo próprio `queda_ads` quando só a
+  verba caiu. Quando a queda orgânica dispara, o texto diz se ADS caiu junto ou
+  está estável.
+- **Dia sem campanha ativa gravava `None`** no coletor, indistinguível de falha
+  de coleta. Passou a gravar `0` — mesma regra do resto: nulo é "não sei", zero
+  é "não houve".
