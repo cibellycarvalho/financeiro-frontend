@@ -805,3 +805,45 @@ como requisito da calculadora, e não como detalhe.
 - **Dia sem campanha ativa gravava `None`** no coletor, indistinguível de falha
   de coleta. Passou a gravar `0` — mesma regra do resto: nulo é "não sei", zero
   é "não houve".
+
+## Ruído de alerta: o primeiro caso veio de dentro
+
+O diagnóstico do dia 18 alertou `posicao: falhou em 22 anúncios` — condição
+**conhecida e aceita** (endpoint bloqueado, decidido não substituir). Alerta
+diário sobre algo que ninguém vai consertar é fadiga de alerta pura, e desta vez
+a fonte do ruído era o próprio sistema.
+
+Corrigido com `COLETOR_POSICAO_ATIVA` (default `false`): nenhuma chamada ao
+endpoint bloqueado, `posicao` não entra em `fontes_falha`, e a limitação vira
+**uma linha fixa no resumo semanal** em vez de alerta diário. Religa só pela
+variável de ambiente quando existir fonte de posição. Além do ruído, eram 22
+chamadas por dia contra um 403 — desperdício e risco extra de bloqueio de IP.
+
+### Defeito herdado, fora de escopo
+
+O resumo diário de vendas (job pré-existente) tem um comentário gerado por LLM
+que chega **truncado no meio da frase** em todas as contas: "O destaque do dia
+foi", "O Kit 10 Pratos", "performando muito bem, com". Frase pela metade é pior
+que frase nenhuma. Arrumar ou remover — não é deste projeto.
+
+## Correção de premissa: conversão talvez seja mensurável
+
+Ficou registrado ao longo do projeto que avaliar conversão por anúncio seria
+inviável. Isso foi baseado em volume **estimado**. O resumo de vendas de 18/08
+mostra a YUSO com **703 pedidos/dia** — bem acima do que foi suposto.
+
+Nesse patamar, os anúncios do topo podem chegar perto de 100 vendas por semana,
+que é onde a conversão começa a sair do ruído. **A medir antes de fechar o
+escopo da Fase 3:** pedidos por anúncio nos últimos 30 dias, ordenado por
+quantidade.
+
+## Roteamento de alerta — princípio adotado
+
+**Alerta vai para quem consegue agir.** Os alertas da Fase 1 passam a ser
+roteados por conta, reusando o `telegram_destinatarios` que já roteia os cards
+de pergunta. Duas exceções ficam com a dona do sistema: o **diagnóstico do
+coletor** (é sobre a infraestrutura, não sobre loja) e o resumo semanal, cujo
+escopo depende de ela acompanhar ou não a operação das outras três lojas.
+
+Bug encontrado no caminho: o lembrete de pergunta pendente ignorava roteamento e
+mandava pendências das **outras lojas** para o chat dela, de hora em hora.
