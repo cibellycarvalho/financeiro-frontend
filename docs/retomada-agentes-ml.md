@@ -847,3 +847,69 @@ escopo depende de ela acompanhar ou não a operação das outras três lojas.
 
 Bug encontrado no caminho: o lembrete de pergunta pendente ignorava roteamento e
 mandava pendências das **outras lojas** para o chat dela, de hora em hora.
+
+## O achado mais valioso do projeto: 16 rupturas de estoque em 90 dias
+
+Descoberto sem coletar nada novo — só olhando o histórico de ADS que já estava
+no banco.
+
+**O sinal:** quando o estoque zera, o Mercado Livre **para de exibir a
+publicidade paga na mesma hora** (não se anuncia o que não existe). `ads_cliques`
+cai a exatamente 0 e volta no dia em que o estoque volta. É um corte seco, muito
+mais limpo que a degradação gradual do tráfego orgânico.
+
+**O valor é retroativo.** Não existe histórico de estoque anterior a 17/08, mas
+existem 90 dias de ADS — então esse sinal reconstrói rupturas passadas que de
+outro modo seriam invisíveis.
+
+### O resultado
+
+**16 episódios, 13 itens, 162 dias-item parados, ~19.755 visitas perdidas.**
+Convertendo pela conversão e ticket da própria operação: da ordem de
+**R$ 100 mil a R$ 150 mil de faturamento** em 90 dias, ~R$ 16 mil a R$ 25 mil de
+lucro. É teto (parte dos clientes voltaria ou compraria o irmão) e ao mesmo tempo
+subestima, porque **não inclui a recuperação de posição depois do restock** — que
+os casos FV0019 e FV0026 mostram ser real e demorada.
+
+Dois padrões acima do total:
+
+- **`MLB6807816618` (J12): 45 dias parado**, ~7.236 visitas — sozinho, 37% do
+  prejuízo de 90 dias. Isso não é atraso de reposição, é anúncio abandonado.
+  Marcado no evento como prioridade de investigação humana.
+- **`MLB6527556396` (J12): três rupturas em cinco semanas.** Reposição reativa,
+  não acidente. Precisa de ponto de pedido, não de reposição mais rápida.
+
+Os dois piores casos são da **J12, que não é a loja da dona do sistema** — o que
+sozinho justifica o roteamento por conta.
+
+### Por que os 16 foram registrados em `ml_eventos`
+
+Não pelo histórico — **pela calculadora.** Sem essas janelas marcadas, a Fase 3
+avaliaria mudanças feitas durante rupturas e concluiria que a foto nova destruiu
+o anúncio. É o veredito "não atribuível" desenhado no início, agora com 16 casos
+reais esperando para estragar avaliação.
+
+### Roteamento: pronto, testado e desligado de propósito
+
+O código de roteamento por conta ia entrar em vigor às 06:20 do dia seguinte e
+mandar alerta automático para donos de loja que **não sabem que este sistema
+existe**. Travado a tempo por `ml_contas.roteamento_alertas_ativo` (default
+`false` nas 4 contas).
+
+**Regra:** ligar conta por conta, e só depois de a operação conversar com cada
+dono. A primeira coisa que essas pessoas recebem não pode ser um robô apontando
+erro na loja delas.
+
+### Conversão: premissa corrigida contra a fonte oficial
+
+O benchmark de "2% a 8% normal" era de e-commerce genérico e não vale aqui.
+Conferido direto no painel do Mercado Livre: **14,5% na conta inteira, 20,2% no
+maior item** — e o banco bate com o painel (9.834 contra 9.920 visitas, ~1% de
+diferença de fronteira de dia).
+
+Consequência para a Fase 3: **a avaliação de conversão entra no escopo**. O
+numerador oficial é **unidades vendidas** (é o que o ML usa e o que a operação vê
+no painel), mas vale gravar as duas — `conversao` (unidades/visitas) e
+`decisao_compra` (pedidos/visitas). São perguntas diferentes: a segunda mede
+quantas pessoas decidiram comprar, a primeira inclui o efeito de levar mais de
+uma unidade.
