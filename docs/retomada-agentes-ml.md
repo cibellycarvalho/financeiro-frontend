@@ -1098,7 +1098,7 @@ O detector de catálogo disparou de verdade: **CASA LX entrou no catálogo do Ki
 mas é o mesmo produto que ficou 45 dias fora do ar, e uma ausência longa convida
 exatamente isso.
 
-## Em aberto: push bloqueado (commit `4e7d0db`)
+## Push bloqueado (commit `4e7d0db`) — resolvido
 
 `git ls-remote origin` e `git push` retornam `Repository not found` (exit 128)
 contra `https://github.com/acessoriosm12compras-droid/ml-seller-api-.git`, depois
@@ -1127,3 +1127,59 @@ autenticação — o que produz exatamente o mesmo 404. **Desfazer o `useHttpPat
 **Regra em vigor enquanto isso:** nenhum commit local novo. `4e7d0db` é correção
 defensiva (`register_uuid()`), a produção roda correta sem ela, e commits
 empilhados sem push foi exatamente o que gerou a divergência de 79 commits.
+
+### O que era, de fato
+
+**Não existia credencial da conta `acessoriosm12compras-droid` na máquina.** O
+que fez o diagnóstico demorar foi o próprio comando de diagnóstico:
+
+```
+printf "protocol=https\nhost=github.com\n\n" | git credential fill
+```
+
+Sem `username=`, o helper devolve **a primeira** linha de `github.com` do
+`~/.git-credentials` — que era da `cibellycarvalho`. O teste respondeu com
+sinceridade sobre a conta errada, e a leitura virou "o token não enxerga o
+repo" quando o correto era "esse não é o token que se queria perguntar".
+
+**Regra:** todo diagnóstico de credencial precisa mandar `username=`. Sem isso a
+resposta é sobre outra conta, e parece uma resposta válida.
+
+E o `Repository not found` do GitHub não distingue *repo inexistente* de *repo
+sem autorização* — os dois dão 404. Foi só depois que a URL passou a carregar a
+conta explícita que o erro virou `403 Write access not granted`, e aí o
+diagnóstico ficou trivial.
+
+### O conserto
+
+1. Usuário explícito no remote: `https://acessoriosm12compras-droid@github.com/...`
+2. PAT fine-grained novo na conta dona, com `Contents: Read and write`
+3. `git config --local credential.helper store` — o helper não estava declarado
+   no config que o repositório enxergava, então o git pulava direto pro prompt
+   de senha em vez de usar a credencial gravada
+
+O nome do repositório **com hífen final** (`ml-seller-api-`) está correto.
+
+### Custos
+
+- **Apagar a entrada do Keychain foi orientação minha, e provavelmente destruiu a
+  única cópia viva da credencial.** A hipótese do conflito de helpers estava
+  certa na direção e errada no autor: não era o Keychain atropelando o store, era
+  o store devolvendo a linha errada por falta de `username`.
+- O token entrou 3× em texto puro no `~/.zsh_history` durante as tentativas.
+  Limpo e verificado (`grep -c` → 0). Sequência de passos parecidos, colados de
+  madrugada em duas abas diferentes, produz exatamente esse tipo de vazamento —
+  o roteiro era ruim, não a execução.
+
+### Dívida registrada
+
+O PAT fine-grained tem validade máxima de 1 ano. **Quando vencer, o push volta a
+falhar sem aviso** — e, se o deploy do EasyPanel usar a mesma credencial, o
+deploy morre junto. Anotar a data de expiração e criar lembrete antes dela.
+
+### Estado final
+
+`4e7d0db` empurrado, deploy automático do EasyPanel verde. `register_uuid()` em
+produção — nenhuma query nova precisa mais de `::uuid[]`, que era a correção de
+classe da terceira falha silenciosa. Regra de não commitar localmente,
+suspensa.
