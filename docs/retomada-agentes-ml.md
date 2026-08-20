@@ -913,3 +913,72 @@ no painel), mas vale gravar as duas — `conversao` (unidades/visitas) e
 `decisao_compra` (pedidos/visitas). São perguntas diferentes: a segunda mede
 quantas pessoas decidiram comprar, a primeira inclui o efeito de levar mais de
 uma unidade.
+
+## Refinamentos que saíram da investigação das rupturas
+
+### ADS zerado não é sinal de ruptura — é sinal de anúncio fora do ar
+
+O que separa as causas é o **tráfego residual**:
+
+- **Ruptura de estoque:** visitas caem muito mas **não zeram** — o anúncio continua
+  na busca mostrando o aviso (FV0019 foi a ~38/dia, FV0026 a ~25/dia).
+- **Anúncio pausado ou encerrado:** visitas vão a **zero absoluto** por dias
+  seguidos (`MLB6807816618`: 22 dias corridos em zero).
+
+Reclassificação dos 16 episódios: **14 rupturas de estoque, 2 anúncios fora do
+ar.** O remédio é diferente — um é compra, o outro é alguém ter desligado e
+esquecido.
+
+### Anúncio irmão em zero é normal, não é abandono
+
+Varredura de "anúncios mortos" achou 41 — mas **36 são o irmão tradicional de um
+par de catálogo saudável**. Quando existe vencedor de catálogo, todo o tráfego
+vai para ele e o tradicional fica em zero **por desenho da plataforma**.
+
+Isso derruba uma leitura anterior deste documento: o irmão do FV0019 tinha sido
+apontado como "anúncio morto ocupando lugar" e não é. Sobram **3 pares
+genuinamente mortos dos dois lados** (M0012, M0013 em M12; FV0013 em YUSO), todos
+de volume baixo — registrados como `sku_sem_trafego_catalogo`, prioridade baixa.
+
+**Lição de método:** cruzar contra o irmão antes de reportar. Zero sozinho não
+significa nada.
+
+### Três contas ficaram sem estoque na mesma semana
+
+Entre 10 e 11/08: `MLB6207973114` e `MLB6292603960` (YUSO) e `MLB4700723079`
+(LOCITECH) — todos entre os mais vendidos de suas lojas. Registrado como
+`investigacao_ruptura_simultanea`.
+
+O cruzamento com `fechamento_compras` **não conclui**, e o motivo é um buraco de
+fonte, não ausência de correlação:
+
+- **LOCITECH não existe nessa tabela** — a compra daquela loja não é registrada.
+- **As compras não têm SKU.** A empresa compra de fornecedores rotativos (FL,
+  LUANA, FLAVIA, MXT, FY) sem vincular ao item, então não há como isolar o
+  fornecedor de cada produto no histórico.
+- O único sinal concreto: **nenhum pedido de compra registrado para FV0019 e
+  FV0026 entre 25/07 e 19/08** — quase duas semanas antes da ruptura. Sugestivo,
+  não conclusivo.
+
+**A correção durável é de processo, não de análise: marcar SKU nas compras.**
+Sem isso não há como ligar ruptura a fornecedor, calcular prazo de reposição por
+produto, nem definir ponto de pedido com base em dado real. É o mesmo padrão do
+resto do projeto — a resposta não estava na análise, estava no que ninguém
+registrava.
+
+E há um atalho humano que dispensa o banco: a operação sabe de quem compra cada
+um dos três itens. Se for o mesmo fornecedor, a pergunta se responde em dois
+minutos.
+
+## Relatórios por loja (artefatos)
+
+Dois relatórios de uma página, um por loja, para a operação enviar a cada dono —
+**não** como alerta automático. Privados por padrão; cada dono vê só a própria
+loja, sem visão consolidada.
+
+- **J12:** cinco paradas, 69 dias, ~9.431 visitas. Caso principal reclassificado
+  como anúncio fora do ar, não ruptura.
+- **LOCITECH:** uma parada de 3 dias, ~741 visitas. Escrito com enquadramento
+  diferente — **começa elogiando**, porque uma interrupção em 90 dias é resultado
+  bom e um relatório que dramatiza R$ 700 perde credibilidade. O valor ali é o
+  padrão da semana de 10/08, não o prejuízo.
