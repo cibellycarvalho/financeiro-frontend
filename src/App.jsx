@@ -6,6 +6,7 @@ import ContasPagar from './pages/ContasPagar'
 import RepasesML from './pages/RepasesML'
 import Fornecedores from './pages/Fornecedores'
 import Fechamento from './pages/Fechamento'
+import LucroReal from './pages/LucroReal'
 import Admin from './pages/Admin'
 import ResetPassword from './pages/ResetPassword'
 
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/repasses" element={<ProtectedRoute><RepasesML /></ProtectedRoute>} />
           <Route path="/fornecedores" element={<ProtectedRoute><Fornecedores /></ProtectedRoute>} />
           <Route path="/fechamento" element={<ProtectedRoute><Fechamento /></ProtectedRoute>} />
+          <Route path="/lucro-real" element={<ProtectedRoute><LucroReal /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute><AdminRoute><Admin /></AdminRoute></ProtectedRoute>} />
           <Route path="/reset-password" element={<ResetPassword />} />
         </Routes>
