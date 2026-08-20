@@ -1097,3 +1097,33 @@ O detector de catálogo disparou de verdade: **CASA LX entrou no catálogo do Ki
 10 Pratos (J12)** a R$ 25,50 contra os R$ 19,00 da casa. Sem ameaça imediata —
 mas é o mesmo produto que ficou 45 dias fora do ar, e uma ausência longa convida
 exatamente isso.
+
+## Em aberto: push bloqueado (commit `4e7d0db`)
+
+`git ls-remote origin` e `git push` retornam `Repository not found` (exit 128)
+contra `https://github.com/acessoriosm12compras-droid/ml-seller-api-.git`, depois
+de pushes terem funcionado no mesmo dia.
+
+Hipótese testada e **descartada**: conflito de credential helper. `credential.
+useHttpPath true` foi aplicado e a entrada do Keychain foi apagada — continua
+falhando.
+
+Duas hipóteses restantes, e uma delas é constrangedora:
+
+1. **O nome do repositório no remote tem um hífen sobrando** — `ml-seller-api-`
+   em vez de `ml-seller-api`. GitHub responde `Repository not found` para repo
+   privado inexistente *e* para repo privado sem autorização: a mensagem não
+   distingue os dois casos.
+2. **O token morreu ou perdeu escopo.** Ontem chegou e-mail de autorização do Git
+   Credential Manager na conta; se ele reemitiu credencial, a anterior pode ter
+   sido invalidada.
+
+E há um risco novo introduzido pela própria tentativa de correção: com
+`useHttpPath true`, a credencial salva em `~/.git-credentials` (gravada sem
+path) deixa de casar com a chave procurada, e o git passa a tentar o push sem
+autenticação — o que produz exatamente o mesmo 404. **Desfazer o `useHttpPath`
+é o primeiro passo**, não o último.
+
+**Regra em vigor enquanto isso:** nenhum commit local novo. `4e7d0db` é correção
+defensiva (`register_uuid()`), a produção roda correta sem ela, e commits
+empilhados sem push foi exatamente o que gerou a divergência de 79 commits.
