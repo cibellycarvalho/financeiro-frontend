@@ -9,6 +9,7 @@ const nav = [
   { path: '/contas', label: 'Contas a Pagar' },
   { path: '/repasses', label: 'Repasses ML' },
   { path: '/fornecedores', label: 'Fornecedores' },
+  { path: '/fechamento', label: 'Fechamento' },
 ]
 
 export default function Layout({ children }) {

@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import ContasPagar from './pages/ContasPagar'
 import RepasesML from './pages/RepasesML'
 import Fornecedores from './pages/Fornecedores'
+import Fechamento from './pages/Fechamento'
 import Admin from './pages/Admin'
 import ResetPassword from './pages/ResetPassword'
 
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/contas" element={<ProtectedRoute><ContasPagar /></ProtectedRoute>} />
           <Route path="/repasses" element={<ProtectedRoute><RepasesML /></ProtectedRoute>} />
           <Route path="/fornecedores" element={<ProtectedRoute><Fornecedores /></ProtectedRoute>} />
+          <Route path="/fechamento" element={<ProtectedRoute><Fechamento /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute><AdminRoute><Admin /></AdminRoute></ProtectedRoute>} />
           <Route path="/reset-password" element={<ResetPassword />} />
         </Routes>
