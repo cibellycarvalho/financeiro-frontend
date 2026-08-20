@@ -982,3 +982,61 @@ loja, sem visão consolidada.
   diferente — **começa elogiando**, porque uma interrupção em 90 dias é resultado
   bom e um relatório que dramatiza R$ 700 perde credibilidade. O valor ali é o
   padrão da semana de 10/08, não o prejuízo.
+
+## O achado que fecha o projeto: não falta capital, falta alocação
+
+Construído o **alerta de estoque acabando** (`checar_estoque_acabando`, dentro do
+job das 06:20). Dias de cobertura = estoque ÷ média de unidades/dia dos últimos
+14 dias **limpos** (excluindo janelas de ruptura e de anúncio fora do ar
+registradas em `ml_eventos`). Limiares de 10 e 5 dias, escopo prioritário +
+acima de 20 visitas/dia, severidade invertida na supressão (menos dias = mais
+grave, então de 9 para 4 reenvia).
+
+**Os limiares saíram do dado, não de palpite.** A hipótese inicial — "os
+campeões rodam com 5 dias de cobertura" — **não se confirmou**: a maioria dos
+itens com venda real está entre 22 e 90 dias. Há um salto natural na
+distribuição de 10,7 para 22,6, e o limiar de 10 cai exatamente nessa lacuna.
+
+### A relação está invertida
+
+| Item | Vende/dia | Cobertura |
+|---|---:|---:|
+| MLB7320219336 | 51,8 | **0,7 dia** |
+| MLB6292603960 | 65,9 | 10,7 dias |
+| MLB4510736543 | 39,1 | 6,8 dias |
+| MLB7145000214 | 31,3 | 8,8 dias |
+| 12 itens de giro baixo | — | 23 a 88 dias |
+
+**Quanto mais o produto vende, menos estoque ele tem.** É o inverso do correto e
+explica as rupturas melhor que qualquer hipótese de fornecedor.
+
+### O número
+
+**R$ 179.120,35 imobilizados em itens com cobertura acima de 30 dias.**
+**R$ 8.408,06 para levar os três críticos a 15 dias de cobertura.**
+Razão de 21 para 1 — menos de 5% do capital já parado resolve o problema inteiro.
+
+Contra o prejuízo medido: R$ 100 a 150 mil de faturamento perdido em 90 dias,
+algo entre R$ 400 e 600 mil anualizados.
+
+**Enquadramento honesto:** os R$ 179 mil não são desperdício. Parte é compra
+mínima de fornecedor, parte é item sazonal, parte é escolha legítima. O ponto
+não é liquidar estoque parado — é que **a próxima compra pode ser 5% diferente**
+e o problema desaparece. Registrado em `ml_eventos` como `estoque_desalocado`.
+
+### Uma ruptura ao vivo
+
+O `MLB7320219336` (YUSO) **rompeu em 19/08** — a primeira que o sistema vê
+acontecendo, em vez de reconstruir depois. Custo de ~52 unidades/dia,
+aproximadamente R$ 2.200 de faturamento e R$ 350 de lucro por dia.
+
+É o pior caso possível: o anúncio tinha **~15 dias de vida e já fazia 144
+visitas/dia** — estava em rampa, ainda construindo posição. Ruptura em anúncio
+novo não derruba de um patamar consolidado, **interrompe a construção**. A curva
+de recuperação dele pode ser bem diferente das outras três, e está sendo
+acompanhada desde o primeiro dia.
+
+**Orientação dada à operação:** com estoque zero, **não pausar o anúncio**.
+Sem estoque ele continua na busca e segura tráfego residual (~38 visitas/dia no
+caso do Cabo HDMI); pausado, vai a zero absoluto e leva mais de um mês para
+voltar. Zero estoque machuca, pausar mata.
