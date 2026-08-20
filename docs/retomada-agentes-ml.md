@@ -1040,3 +1040,60 @@ acompanhada desde o primeiro dia.
 Sem estoque ele continua na busca e segura tráfego residual (~38 visitas/dia no
 caso do Cabo HDMI); pausado, vai a zero absoluto e leva mais de um mês para
 voltar. Zero estoque machuca, pausar mata.
+
+## A terceira falha silenciosa, e o que a encerrou
+
+`checar_estoque_acabando` **nunca disparou desde que foi implantado** — zero linhas
+em `ml_alertas` para esse tipo. A causa não era supressão (a tabela estava vazia
+para o dia inteiro) e não era o envio manual (aquele usou `curl` direto, sem
+passar por `registrar_alerta`).
+
+O job inteiro morria antes de chegar no item 5, e um `except` genérico engolia
+tudo logando só `type(e).__name__`.
+
+### O erro real: `operator does not exist: uuid = text`
+
+`anuncio_ids` chega como lista de `str` (o driver não sabe que são UUID), e **só
+1 das 4 queries** tinha `::uuid[]`. As outras três comparavam `uuid` contra o
+`text[]` que o psycopg2 manda por padrão.
+
+**Nem a hipótese da operação (date/timestamp) nem a da sessão (exceção na etapa
+anterior).** Ninguém adivinharia. O que resolveu foi a blindagem: `try/except`
+por etapa, exceção completa na mensagem, e o job avisando sobre a própria morte.
+
+**Correção de classe, não de instância:** `psycopg2.extras.register_uuid()` na
+inicialização faz o driver mandar UUID nativo e nenhuma query precisa de cast. O
+cast presente em 1 de 4 mostra que esquecer é fácil, e a próxima query nova
+reintroduziria o mesmo erro.
+
+### A regra que ficou
+
+**Nenhum `except` pode engolir e seguir.** Ou relança, ou registra em lugar
+visível no banco, ou avisa. `except Exception: print(...)` foi a causa das três
+falhas silenciosas deste projeto:
+
+1. A coleta de posição, morta por semanas sem registro em `fontes_falha`.
+2. O `fontes_falha` que não registrava a falha da posição, por escrever depois do
+   commit da linha.
+3. O job de alertas inteiro, morrendo no item 5 desde a implantação.
+
+**E há um ponto cego que a blindagem revelou:** o diagnóstico que avisa quando
+algo falha **é o item 1 do mesmo job**. Ele rodava, não achava falha de coleta,
+ficava calado — e não tinha como avisar que o job onde ele mora morria logo
+depois. Auto-diagnóstico não cobre a própria morte, a menos que seja construído
+para isso.
+
+### Alarme falso de contabilidade própria
+
+A captura manual do `MLB7320219336` foi marcada dentro de `fontes_falha`, e o
+diagnóstico lê tudo naquele campo como fonte que falhou — então o sistema passou
+a alertar sobre algo que ele mesmo fez de propósito e deu certo. Corrigido com
+uma coluna `origem` (`coletor` / `manual`) em `ml_metricas_diarias`.
+`fontes_falha` é lista de falhas, não campo de anotação.
+
+### Primeira detecção de concorrente
+
+O detector de catálogo disparou de verdade: **CASA LX entrou no catálogo do Kit
+10 Pratos (J12)** a R$ 25,50 contra os R$ 19,00 da casa. Sem ameaça imediata —
+mas é o mesmo produto que ficou 45 dias fora do ar, e uma ausência longa convida
+exatamente isso.
