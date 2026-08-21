@@ -25,7 +25,20 @@ Arquivo novo. Não editar migração já aplicada. `ativo` fica intocada.
 ALTER TABLE ml_anuncios ADD COLUMN monitorado boolean NOT NULL DEFAULT false;
 ALTER TABLE ml_anuncios ADD COLUMN status_ml text;
 UPDATE ml_anuncios SET monitorado = ativo;
+
+CREATE TABLE ml_sold_quantity_diario (
+  anuncio_id     uuid NOT NULL REFERENCES ml_anuncios(id) ON DELETE CASCADE,
+  data           date NOT NULL,
+  sold_quantity  int  NOT NULL,
+  PRIMARY KEY (anuncio_id, data)
+);
 ```
+
+**Atenção ao `UPDATE monitorado = ativo`:** `ativo` já está errada hoje pelo
+próprio bug — anúncio que esgotou, o ML fechou e sumiu da varredura antiga
+está com `ativo = false`. Esses herdam `monitorado = false`, ou seja, o
+refactor entraria em produção carregando adiante a cegueira que ele existe
+para corrigir. Corrigido por R1, que virou bloqueante da Etapa B.
 
 `DEFAULT false` é proposital: anúncio novo **não** entra em monitoramento
 sozinho. Os irmãos tradicionais de catálogo ficam em zero por design (36 dos 41
@@ -49,7 +62,33 @@ Casos ambíguos: perguntar, não adivinhar.
 
 ### A3. Coletor (`services/coletor_ml.py`)
 
-- filtrar por `monitorado = true`
+**A varredura passa a incluir `paused` e `closed`.** `buscar_anuncios_ativos`
+filtrava `status=("active",)` por default — então "sumiu da varredura" e "saiu
+de active" eram a mesma coisa, e o `UPDATE ativo = false` de L298–299 era
+literalmente o bug desta OS. Alargar o filtro faz o anúncio pausado ou fechado
+voltar a aparecer, com o status real, sem nenhuma chamada extra.
+
+O caminho `/items/{id}` por anúncio ausente continua existindo, mas só para
+quem está no banco e não aparece nem na varredura alargada — caso raro. Como
+fluxo diário permanente ele custaria 1 chamada por anúncio fechado por dia,
+para sempre.
+
+**Risco a verificar:** `/users/{id}/items/search` tem teto de offset (1000;
+além disso exige `search_type=scan`). Com o filtro alargado uma conta grande
+pode passar do teto, e o sintoma é a varredura devolver os primeiros N e parar
+**sem erro**. Registrar o total devolvido no log de cada varredura; total que
+bate em múltiplo redondo é truncamento, não coincidência.
+
+**Guarda contra 404 em massa:** se um token perder escopo de uma conta, é
+plausível que o ML devolva 404 em vez de 403 — e a conta inteira viraria
+`nao_encontrado` de uma vez. Se mais de 30% dos anúncios de uma conta derem
+404 na mesma execução, não gravar `nao_encontrado`: registrar em
+`fontes_falha` e alertar.
+
+- os dois laços ficam separados: `sync_ml_anuncios` varre **todos** os
+  anúncios da conta (active/paused/closed) para upsert e `sold_quantity`;
+  a coleta de métricas roda só sobre `monitorado = true`
+- filtrar a coleta de métricas por `monitorado = true`
 - em `coletar_detalhe`, gravar o status de `/items/{id}` em
   `ml_anuncios.status_ml`, além do `ml_metricas_diarias.status` que já existe
 - **só escrever `status_ml` quando a chamada teve sucesso.** Falha vai para
@@ -84,14 +123,41 @@ do evento.
   `monitorado`.
 - o diagnóstico não alerta "sem coleta" para anúncio com `status_ml = closed`:
   não é falha, é estado.
-- no `resumo_semanal`: seção "anúncios não monitorados com venda ou visita nos
-  últimos 7 dias". É a rede de segurança do `DEFAULT false` — nada fica
-  esquecido em silêncio.
+- no `resumo_semanal`: seção "anúncios não monitorados cujo `sold_quantity`
+  subiu nos últimos 7 dias", lida de `ml_sold_quantity_diario`. É a rede de
+  segurança do `DEFAULT false`.
+
+  A primeira versão deste critério era circular e não funcionaria: dizia
+  "não monitorados com visita nos últimos 7 dias", mas não se coleta visita
+  de anúncio não monitorado. `sold_quantity` vem da varredura, que passa por
+  todos — custo zero de API. Como é valor cumulativo, precisa de série
+  histórica, daí a tabela própria em vez de uma coluna.
+- `status_ml = 'nao_encontrado'` por 7 dias seguidos entra no resumo como
+  "candidato a desmonitorar". A decisão continua humana.
 
 ### A6. Deploy e observação
 
 Deploy do código novo. **Observar um ciclo diário completo** (06:00 coletor,
 06:10 detector, 06:20 alertas) antes de seguir para a Etapa B.
+
+---
+
+### A7. Decisão sobre `ativo` durante a janela
+
+O coletor **para de escrever em `ativo` já no A3**, em vez de manter as duas
+semânticas em paralelo até a Etapa B. Manter `ativo` fresca exigiria uma
+segunda varredura com o filtro antigo, só para alimentar uma coluna que o A2
+confirmou não ter nenhum leitor fora desta OS.
+
+O custo da decisão: entre o A6 e a Etapa B, `ativo` fica **desatualizada em
+silêncio**. Se existir um leitor que o A2 não viu, ele passa a receber dado
+velho em vez de erro — que é pior que quebrar. Duas condições compensam isso:
+
+- **(a)** antes da Etapa B, procurar `SELECT *` sobre `ml_anuncios` nos **dois**
+  repositórios — `ml-seller-api` e `ml-seller-app`. O A2 grepou só o backend.
+  Verificar também se existe VIEW no banco sobre a tabela.
+- **(b)** a Etapa B roda no dia seguinte ao ciclo verde, não "quando der". A
+  janela de dado velho tem que ser curta e conhecida.
 
 ---
 
@@ -109,14 +175,22 @@ sem incidente.
 
 ## Tarefas paralelas (não bloqueiam A nem B)
 
-### R1. Reconciliação — somente leitura
+### R1. Reconciliação — **bloqueante da Etapa B**
 
-Script separado que, para cada anúncio com `monitorado = false`, consulta o ML
-e imprime tabela: `ml_item_id`, título, status no ML, estoque. **Nenhum
-UPDATE.** O objetivo é achar anúncios vivos no ML que ficaram fora do
-monitoramento por causa da coluna antiga. A decisão de religar é humana.
+Com a varredura alargada isso deixou de precisar de API. Depois do primeiro
+ciclo verde:
 
-Usar `/items?ids=` em lotes de 20, não uma chamada por anúncio.
+```sql
+SELECT ml_item_id, titulo, status_ml, conta_ml
+FROM ml_anuncios
+WHERE monitorado = false AND status_ml = 'active'
+ORDER BY conta_ml;
+```
+
+É a lista dos anúncios que estão **vivos no Mercado Livre e que o sistema
+parou de olhar** — provavelmente explica parte dos 16 episódios de ruptura
+encontrados em 90 dias. A decisão de religar cada um é humana. O script com
+`/items?ids=` que estava planejado aqui foi descartado.
 
 ### R2. Preencher o buraco das curvas de recuperação
 
