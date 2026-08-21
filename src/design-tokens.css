@@ -1,6 +1,11 @@
 :root {
   /* Cores base — modo claro */
-  --color-bg: #faf8f3;
+  /* O fundo e um degrau mais escuro que o cartao de proposito: e o degrau
+     que faz o bloco parecer um bloco. Era #faf8f3 contra #fffefb — 2% de
+     diferenca — e os cartoes sumiam no fundo. O Finco usa #F0F0F0 contra
+     branco pelo mesmo motivo. Aprovado por ela em 21/08/2026: unica cor que
+     mudou na reformulacao, e continua na familia marfim. */
+  --color-bg: #f1ece0;
   --color-surface: #fffefb;
   --color-border: #e8e2d5;
   --color-text: #221f19;
@@ -37,8 +42,9 @@
 }
 
 .dark {
-  --color-bg: #18160f;
-  --color-surface: #221f19;
+  /* Mesmo degrau no escuro: o fundo desce, o cartao sobe. */
+  --color-bg: #131109;
+  --color-surface: #24211a;
   --color-border: #332f22;
   --color-text: #ede8db;
   --color-text-muted: #a89f8a;
