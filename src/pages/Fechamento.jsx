@@ -1,10 +1,13 @@
 /**
  * Fechamento mensal — compras, fretes, montagem e despesas.
  *
- * Reconstruída (não copiada) do CRM em 19/08/2026. O CRM usa React Query,
- * Tailwind, recharts e lucide; o Painel não tem nenhum deles. Trazer essas
- * bibliotecas pra cá deixaria dois estilos convivendo num app de seis telas —
- * a usuária escolheu que a tela tivesse a cara do Painel.
+ * Reconstruída (não copiada) do CRM em 19/08/2026, e reformulada em 21/08 no
+ * sistema visual descrito em
+ * docs/superpowers/specs/2026-08-21-painel-sistema-visual-design.md.
+ *
+ * Aqui o cartão de filtros do Finco se justifica — ao contrário da Visão da
+ * Semana, esta tela tem filtro de verdade (mês, ano, período). Onde havia
+ * controle real, o padrão dele entrou inteiro.
  *
  * O que foi preservado por ser comportamento, não aparência:
  *   - o total da compra é calculado AQUI, enquanto se digita (quantidade ×
@@ -12,10 +15,17 @@
  *   - `coleta_sp` é um sim/não, não um valor;
  *   - despesa vinda de importação bancária não é editável (`editavel: false`);
  *   - o filtro de datas afeta os totais, não só a listagem.
+ *
+ * Uma mudança de forma que muda o uso: a linha de "adicionar" saiu de dentro do
+ * corpo da tabela e virou uma faixa própria no rodapé do cartão. Misturada com
+ * os dados, ela parecia um lançamento a meio caminho de existir.
  */
 import { useCallback, useEffect, useState } from 'react'
 
 import Layout from '../components/Layout'
+import PaginaHeader from '../components/PaginaHeader'
+import Indicador from '../components/Indicador'
+import SecaoCard from '../components/SecaoCard'
 import api from '../services/api'
 
 const LOJAS = ['YUSO', 'M12', 'J12', 'LOCITECH']
@@ -31,7 +41,7 @@ const brl = v => (v === null || v === undefined || v === '')
   : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 const entrada = {
-  width: '100%', padding: 6, background: 'var(--color-bg)', color: 'var(--color-text)',
+  width: '100%', padding: '6px 8px', background: 'var(--color-bg)', color: 'var(--color-text)',
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: 13,
 }
 
@@ -56,25 +66,22 @@ function somar(linhas, campo) {
   return linhas.reduce((total, l) => total + (parseFloat(l[campo]) || 0), 0)
 }
 
-function Kpi({ rotulo, valor, cor, filtrado }) {
-  return (
-    <div style={{
-      background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-      borderLeft: `3px solid ${cor}`, borderRadius: 'var(--radius-md)', padding: 14,
-    }}>
-      <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
-        {rotulo}{filtrado && <span style={{ color: 'var(--color-warning)' }}> · filtrado</span>}
-      </p>
-      <p style={{ fontSize: 20, fontWeight: 600, margin: '4px 0 0' }}>{valor}</p>
-    </div>
-  )
+function contarRegistros(n) {
+  return `${n} ${n === 1 ? 'lançamento' : 'lançamentos'}`
+}
+
+/** Anda `passo` meses, virando o ano quando precisa. Dá as setas ‹ › do Finco. */
+function deslocar(mes, ano, passo) {
+  const d = new Date(Number(ano), Number(mes) - 1 + passo, 1)
+  return [String(d.getMonth() + 1).padStart(2, '0'), String(d.getFullYear())]
 }
 
 /**
  * Uma seção do fechamento: tabela com edição na própria linha, adicionar e
  * excluir. Genérica porque as quatro seções só diferem nas colunas.
  */
-function Secao({ titulo, colunas, linhas, carregando, erro, onCriar, onSalvar, onExcluir }) {
+function Secao({ titulo, subtitulo, colunas, linhas, carregando, erro,
+                 onCriar, onSalvar, onExcluir }) {
   const [novo, setNovo] = useState({})
   const [editando, setEditando] = useState(null)   // id da linha em edição
   const [rascunho, setRascunho] = useState({})
@@ -86,46 +93,46 @@ function Secao({ titulo, colunas, linhas, carregando, erro, onCriar, onSalvar, o
 
   const total = somar(linhas, colunas.find(c => c.somar)?.key || '')
 
-  return (
-    <section style={{ marginBottom: 28 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
-        <h2 style={{ fontSize: 15, margin: 0 }}>{titulo}</h2>
-        <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-          {linhas.length} {linhas.length === 1 ? 'registro' : 'registros'} · {brl(total)}
-        </span>
-      </div>
+  const th = c => ({
+    padding: '8px 12px', textAlign: c.direita ? 'right' : 'left',
+    color: 'var(--color-text-muted)', fontWeight: 500, fontSize: 12,
+    whiteSpace: 'nowrap',
+  })
 
+  return (
+    <SecaoCard
+      titulo={titulo}
+      subtitulo={subtitulo}
+      total={linhas.length ? brl(total) : undefined}
+      totalRotulo={`Total · ${contarRegistros(linhas.length)}`}
+    >
       {erro && (
-        <p style={{ color: 'var(--color-danger)', fontSize: 13 }}>
+        <p style={{ color: 'var(--color-danger)', fontSize: 13, margin: 0 }}>
           Não foi possível carregar: {erro}
         </p>
       )}
 
-      <div style={{
-        background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-md)', overflowX: 'auto',
-      }}>
+      <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-              {colunas.map(c => (
-                <th key={c.key} style={{
-                  padding: '10px 12px', textAlign: c.direita ? 'right' : 'left',
-                  color: 'var(--color-text-muted)', fontWeight: 500, whiteSpace: 'nowrap',
-                }}>{c.label}</th>
-              ))}
-              <th style={{ width: 120 }} />
+            <tr>
+              {colunas.map(c => <th key={c.key} style={th(c)}>{c.label}</th>)}
+              <th style={{ width: 130 }} />
             </tr>
           </thead>
           <tbody>
             {carregando && (
-              <tr><td colSpan={colunas.length + 1} style={{ padding: 16, color: 'var(--color-text-muted)' }}>
+              <tr><td colSpan={colunas.length + 1}
+                      style={{ padding: 16, color: 'var(--color-text-muted)' }}>
                 Carregando…
               </td></tr>
             )}
 
             {!carregando && linhas.length === 0 && (
-              <tr><td colSpan={colunas.length + 1} style={{ padding: 16, color: 'var(--color-text-muted)' }}>
+              <tr><td colSpan={colunas.length + 1} style={{
+                padding: '18px 12px', textAlign: 'center',
+                color: 'var(--color-text-muted)',
+              }}>
                 Nada lançado neste mês.
               </td></tr>
             )}
@@ -136,9 +143,13 @@ function Secao({ titulo, colunas, linhas, carregando, erro, onCriar, onSalvar, o
               // lançamento manual. Não se edita nem se apaga pela tela.
               const bloqueada = linha.editavel === false
               return (
-                <tr key={linha.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                <tr key={linha.id} style={{ background: 'var(--color-row)' }}>
                   {colunas.map(c => (
-                    <td key={c.key} style={{ padding: '8px 12px', textAlign: c.direita ? 'right' : 'left' }}>
+                    <td key={c.key} style={{
+                      padding: '8px 12px', textAlign: c.direita ? 'right' : 'left',
+                      fontVariantNumeric: c.direita ? 'tabular-nums' : 'normal',
+                      fontWeight: c.somar ? 600 : 400,
+                    }}>
                       {emEdicao && !c.somenteLeitura ? (
                         c.tipo === 'bool' ? (
                           <input type="checkbox" checked={!!rascunho[c.key]}
@@ -178,11 +189,24 @@ function Secao({ titulo, colunas, linhas, carregando, erro, onCriar, onSalvar, o
                 </tr>
               )
             })}
+          </tbody>
+        </table>
+      </div>
 
-            {/* linha de adicionar */}
+      {/* Adicionar é formulário, não dado. Fica separado do corpo da tabela por
+          uma borda tracejada — dentro dela, parecia um lançamento pela metade. */}
+      <div style={{
+        marginTop: 4, paddingTop: 12,
+        borderTop: '1px dashed var(--color-border)', overflowX: 'auto',
+      }}>
+        <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--color-text-muted)' }}>
+          Novo lançamento
+        </p>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <tbody>
             <tr>
               {colunas.map(c => (
-                <td key={c.key} style={{ padding: '8px 12px' }}>
+                <td key={c.key} style={{ padding: '0 12px 0 0' }}>
                   {c.somenteLeitura ? (
                     <span style={{ color: 'var(--color-text-muted)' }}>{brl(novo[c.key])}</span>
                   ) : c.tipo === 'bool' ? (
@@ -195,7 +219,7 @@ function Secao({ titulo, colunas, linhas, carregando, erro, onCriar, onSalvar, o
                   )}
                 </td>
               ))}
-              <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+              <td style={{ width: 130, textAlign: 'right' }}>
                 <button style={botao(true)} onClick={async () => {
                   await onCriar(novo); setNovo({})
                 }}>Adicionar</button>
@@ -204,7 +228,7 @@ function Secao({ titulo, colunas, linhas, carregando, erro, onCriar, onSalvar, o
           </tbody>
         </table>
       </div>
-    </section>
+    </SecaoCard>
   )
 }
 
@@ -323,68 +347,96 @@ export default function Fechamento() {
   const totalDespesas = somar(despesas, 'valor')
   const totalGeral = totalCompras + totalFretes + totalMontagem + totalDespesas
 
+  const sufixo = temFiltro ? ' · no período filtrado' : ''
+
   return (
     <Layout>
-      <h1 style={{ fontSize: 20, marginBottom: 16 }}>Fechamento</h1>
+      <PaginaHeader
+        titulo="Fechamento"
+        subtitulo="Lançamentos do mês: compras, fretes, montagem e despesas."
+        acao={
+          <label style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Loja{' '}
+            <select value={loja} onChange={e => setLoja(e.target.value)}
+                    style={{ ...entrada, width: 'auto' }}>
+              {LOJAS.map(l => <option key={l}>{l}</option>)}
+            </select>
+          </label>
+        }
+      />
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 20 }}>
-        <label style={{ fontSize: 13 }}>Loja{' '}
-          <select value={loja} onChange={e => setLoja(e.target.value)} style={{ ...entrada, width: 'auto' }}>
-            {LOJAS.map(l => <option key={l}>{l}</option>)}
-          </select>
-        </label>
-        <label style={{ fontSize: 13 }}>Mês{' '}
-          <select value={mes} onChange={e => setMes(e.target.value)} style={{ ...entrada, width: 'auto' }}>
-            {MESES.map((nome, i) => (
-              <option key={nome} value={String(i + 1).padStart(2, '0')}>{nome}</option>
-            ))}
-          </select>
-        </label>
-        <label style={{ fontSize: 13 }}>Ano{' '}
-          <select value={ano} onChange={e => setAno(e.target.value)} style={{ ...entrada, width: 'auto' }}>
-            {ANOS.map(a => <option key={a}>{a}</option>)}
-          </select>
-        </label>
+      {/* Cartão de filtros, no padrão do Finco. Aqui ele se justifica: os
+          controles fazem coisa de verdade e mexem nos totais. */}
+      <div style={{
+        background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)', padding: '14px 16px', marginBottom: 20,
+        display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center',
+      }}>
+        <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Mês</span>
+        <button style={{ ...botao(), padding: '5px 11px' }} title="Mês anterior"
+                onClick={() => { const [m, a] = deslocar(mes, ano, -1); setMes(m); setAno(a) }}>‹</button>
+        <select value={mes} onChange={e => setMes(e.target.value)} style={{ ...entrada, width: 'auto' }}>
+          {MESES.map((nome, i) => (
+            <option key={nome} value={String(i + 1).padStart(2, '0')}>{nome}</option>
+          ))}
+        </select>
+        <select value={ano} onChange={e => setAno(e.target.value)} style={{ ...entrada, width: 'auto' }}>
+          {ANOS.map(a => <option key={a}>{a}</option>)}
+        </select>
+        <button style={{ ...botao(), padding: '5px 11px' }} title="Mês seguinte"
+                onClick={() => { const [m, a] = deslocar(mes, ano, 1); setMes(m); setAno(a) }}>›</button>
 
-        <span style={{ borderLeft: '1px solid var(--color-border)', paddingLeft: 12, fontSize: 13 }}>
-          Filtrar datas{' '}
-          <input type="date" value={de} onChange={e => setDe(e.target.value)} style={{ ...entrada, width: 'auto' }} />
-          {' até '}
-          <input type="date" value={ate} onChange={e => setAte(e.target.value)} style={{ ...entrada, width: 'auto' }} />
+        <span style={{
+          borderLeft: '1px solid var(--color-border)', paddingLeft: 12,
+          fontSize: 13, color: 'var(--color-text-muted)',
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        }}>
+          Período
+          <input type="date" value={de} onChange={e => setDe(e.target.value)}
+                 style={{ ...entrada, width: 'auto' }} />
+          até
+          <input type="date" value={ate} onChange={e => setAte(e.target.value)}
+                 style={{ ...entrada, width: 'auto' }} />
           {temFiltro && (
-            <button style={{ ...botao(), marginLeft: 8 }} onClick={() => { setDe(''); setAte('') }}>
-              Limpar
-            </button>
+            <button style={botao()} onClick={() => { setDe(''); setAte('') }}>Limpar</button>
           )}
         </span>
 
-        <button style={botao()} onClick={carregar}>Atualizar</button>
+        <button style={{ ...botao(), marginLeft: 'auto' }} onClick={carregar}>Atualizar</button>
       </div>
 
       {temFiltro && (
-        <p style={{ fontSize: 12, color: 'var(--color-warning)', marginTop: -8 }}>
+        <p style={{ fontSize: 12.5, color: 'var(--color-warning)', margin: '-8px 0 16px' }}>
           Filtro de data aplicado — os totais abaixo consideram só o período escolhido.
         </p>
       )}
 
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-        gap: 12, marginBottom: 24,
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: 14, marginBottom: 22,
       }}>
-        <Kpi rotulo="Compras" valor={brl(totalCompras)} cor="var(--color-accent-solid)" filtrado={temFiltro} />
-        <Kpi rotulo="Fretes" valor={brl(totalFretes)} cor="var(--color-warning)" filtrado={temFiltro} />
-        <Kpi rotulo="Montagem" valor={brl(totalMontagem)} cor="var(--color-text-muted)" filtrado={temFiltro} />
-        <Kpi rotulo="Despesas" valor={brl(totalDespesas)} cor="var(--color-danger)" filtrado={temFiltro} />
-        <Kpi rotulo="Total Geral" valor={brl(totalGeral)} cor="var(--color-success-solid)" filtrado={temFiltro} />
+        <Indicador rotulo="Compras" valor={totalCompras}
+                   composicao={contarRegistros(compras.length) + sufixo} />
+        <Indicador rotulo="Fretes" valor={totalFretes}
+                   composicao={contarRegistros(fretes.length) + sufixo} />
+        <Indicador rotulo="Montagem" valor={totalMontagem}
+                   composicao={contarRegistros(montagem.length) + sufixo} />
+        <Indicador rotulo="Despesas" valor={totalDespesas}
+                   composicao={contarRegistros(despesas.length) + sufixo} />
+        <Indicador rotulo="Total Geral" valor={totalGeral}
+                   composicao="Compras + fretes + montagem + despesas" />
       </div>
 
-      <Secao titulo="Compras" colunas={colunasCompras} linhas={compras}
+      <Secao titulo="Compras" subtitulo="Mercadoria comprada de fornecedores neste mês."
+             colunas={colunasCompras} linhas={compras}
              carregando={carregando} erro={erro} {...acoes('compras')} />
-      <Secao titulo="Fretes" colunas={colunasFretes} linhas={fretes}
+      <Secao titulo="Fretes" subtitulo="Transporte pago a motoristas e coletas."
+             colunas={colunasFretes} linhas={fretes}
              carregando={carregando} erro={erro} {...acoes('fretes')} />
-      <Secao titulo="Montagem" colunas={colunasMontagem} linhas={montagem}
+      <Secao titulo="Montagem" subtitulo="Mão de obra de montagem paga no mês."
+             colunas={colunasMontagem} linhas={montagem}
              carregando={carregando} erro={erro} {...acoes('montagem')} />
-      <Secao titulo="Despesas" colunas={colunasDespesas} linhas={despesas}
+      <Secao titulo="Despesas" subtitulo="Gastos que não são mercadoria nem frete."
+             colunas={colunasDespesas} linhas={despesas}
              carregando={carregando} erro={erro} {...acoes('despesas')} />
     </Layout>
   )
