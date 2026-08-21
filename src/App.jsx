@@ -9,6 +9,7 @@ import Fechamento from './pages/Fechamento'
 import LucroReal from './pages/LucroReal'
 import Admin from './pages/Admin'
 import ResetPassword from './pages/ResetPassword'
+import AvisoNovaVersao from './components/AvisoNovaVersao'
 
 function ProtectedRoute({ children }) {
   const { user, loading, needsPasswordReset } = useAuth()
@@ -28,6 +29,9 @@ function AdminRoute({ children }) {
 export default function App() {
   return (
     <AuthProvider>
+      {/* Fora do BrowserRouter: o aviso vale em qualquer rota,
+          inclusive na tela de login. */}
+      <AvisoNovaVersao />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
