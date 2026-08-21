@@ -21,6 +21,11 @@
   --color-danger-light: #f6e0db;
   --color-warning: #c08a2e;
 
+  /* Fundo das linhas de valor dentro de um cartao. Precisa se destacar da
+     superficie do cartao sem virar outro cartao — e o que separa "lista de
+     valores" de "blocos empilhados". */
+  --color-row: #f5f1e7;
+
   /* Tipografia */
   --font-sans: 'Manrope', ui-sans-serif, -apple-system, sans-serif;
 
@@ -50,6 +55,8 @@
   --color-danger: #e2786a;
   --color-danger-light: #4a2620;
   --color-warning: #d1a44f;
+
+  --color-row: #2a261d;
 
   color-scheme: dark;
 }
