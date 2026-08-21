@@ -1183,3 +1183,54 @@ deploy morre junto. Anotar a data de expiração e criar lembrete antes dela.
 produção — nenhuma query nova precisa mais de `::uuid[]`, que era a correção de
 classe da terceira falha silenciosa. Regra de não commitar localmente,
 suspensa.
+
+## Etapa A do refactor `monitorado`/`status_ml` — em produção
+
+Executada e validada em 21/08/2026, com o ciclo completo rodado manualmente de
+dia, observado, em vez de estrear às 06:00 sem ninguém acordado.
+
+**Sequência que funcionou, e cuja ordem não é opcional:** commit local →
+backup → migração aditiva (compatível com o código velho, então nada quebra na
+janela) → push (o EasyPanel faz deploy automático) → deploy verde → execução
+manual dos três jobs em ordem.
+
+### O que a varredura alargada revelou
+
+Filtrar `status=("active",)` era o bug: "sumiu da varredura" e "saiu de active"
+eram a mesma coisa, e o `UPDATE ativo = false` fechava o ciclo. Incluindo
+`paused` e `closed`:
+
+| Conta | active | paused | closed | total | coletados |
+|---|---|---|---|---|---|
+| YUSO | 111 | 37 | 6 | 154 | 110 |
+| M12 | 8 | 8 | 0 | 16 | 9 |
+| LOCITECH | 8 | 1 | 0 | 9 | 8 |
+| J12 | 5 | 1 | 0 | 6 | 5 |
+
+**A YUSO tem 37 anúncios pausados e coleta 110 de 154.** Sob o código antigo
+esses 44 eram invisíveis — não apareciam em lugar nenhum do sistema.
+
+Ciclo completo: 89,8s para as quatro contas, contra orçamento de 600s. Nenhuma
+conta perto do teto de offset. Nenhum `fontes_falha` novo. Nenhum 404 em massa.
+
+### Zero eventos de status não é validação
+
+O `ml_eventos` de tipo `status_ml` veio vazio, e isso é esperado — mas **não
+prova que o alerta funciona**. Para nascer um evento, o anúncio precisa de
+linha em `ml_metricas_diarias` nos dois dias, e só anúncio monitorado tem
+linha. Os 37 pausados da YUSO estão com `monitorado = false`, herdado do
+`ativo` que o próprio bug corrompeu. A transição que o refactor existe para
+pegar continua invisível até o R1 religar esses anúncios.
+
+Registrar isso importa: "zero eventos" lido sem contexto vira "está tudo bem".
+
+### Fronteira de segredo, de novo
+
+O job de alertas só roda onde o `TELEGRAM_BOT_TOKEN` existe — dentro do
+container. A sessão local ofereceu ler o token do painel para rodar na máquina;
+recusado, pela mesma regra que valeu para `ML_CLIENT_SECRET`, `DATABASE_URL` e
+o token do GitHub. O comando foi colado por mão humana no Console do EasyPanel.
+
+`roteamento_alertas_ativo` verificado **no banco**, não no código: false nas
+quatro contas. Os donos de J12, LOCITECH e M12 continuam sem saber que o
+sistema existe, que é o combinado.
