@@ -14,5 +14,46 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <!--
+      Rede de seguranca contra tela branca silenciosa.
+
+      Cada deploy publica um bundle com nome novo e APAGA o anterior. Se o
+      navegador reusar um index.html guardado, ele pede um arquivo que nao
+      existe mais, recebe 404, e o modulo simplesmente nao roda: a pagina fica
+      branca, sem mensagem, sem erro visivel. Aconteceu com ela em 21/08/2026 —
+      "a pagina lucro real nao esta funcionando", e do meu lado carregava.
+
+      O cache do index.html ja foi corrigido no nginx.conf, o que impede o caso
+      daqui pra frente. Isto aqui cobre quem ja tem a copia velha guardada, e
+      qualquer outra falha de carregamento: se em 8 segundos nada montou, a
+      pessoa ve o que fazer em vez de uma tela em branco.
+    -->
+    <script>
+      setTimeout(function () {
+        var raiz = document.getElementById('root')
+        if (raiz && raiz.childElementCount > 0) return   // app montou, tudo certo
+
+        raiz.innerHTML =
+          '<div style="max-width:420px;margin:18vh auto;padding:0 24px;' +
+          'font-family:Manrope,system-ui,sans-serif;text-align:center;line-height:1.5">' +
+          '<p style="font-size:16px;font-weight:600;margin:0 0 8px">' +
+          'Nao foi possivel carregar o Painel</p>' +
+          '<p style="font-size:14px;color:#7d7666;margin:0 0 20px">' +
+          'Isso costuma acontecer quando o navegador guardou uma versao antiga. ' +
+          'Recarregar resolve.</p>' +
+          '<button id="recarregar" style="font-size:14px;padding:9px 20px;border:none;' +
+          'border-radius:10px;background:#2f4a3b;color:#fff;cursor:pointer">' +
+          'Recarregar</button></div>'
+
+        document.getElementById('recarregar').onclick = function () {
+          // Cache-buster na URL: um reload comum pode reusar a mesma copia
+          // guardada e cair na mesma tela branca de novo.
+          var u = new URL(window.location.href)
+          u.searchParams.set('recarregado', Date.now())
+          window.location.replace(u.toString())
+        }
+      }, 8000)
+    </script>
   </body>
 </html>
