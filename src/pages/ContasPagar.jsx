@@ -1,21 +1,66 @@
+/**
+ * Contas a Pagar — o que vence, o que já venceu e o que já foi pago.
+ *
+ * Reformulada em 21/08/2026 no sistema visual descrito em
+ * docs/superpowers/specs/2026-08-21-painel-sistema-visual-design.md.
+ *
+ * Ganho que não é de aparência: a tela não mostrava total nenhum. Dava para ver
+ * a lista e não para saber quanto o período custa — a soma ficava na cabeça
+ * dela. Os três indicadores no topo são calculados aqui mesmo, a partir da
+ * lista que já vinha; nenhum campo novo foi pedido ao servidor.
+ *
+ * Preservado por ser comportamento:
+ *   - só `fin_admin` cria conta, marca como paga e mexe no Sicredi;
+ *   - conta importada do banco (origem 'dda') fica marcada, porque é registro
+ *     do banco e não lançamento manual;
+ *   - o filtro de período é do servidor (semana/mes/todos), não da tela.
+ */
 import { useEffect, useState } from 'react'
 import Layout from '../components/Layout'
+import PaginaHeader from '../components/PaginaHeader'
+import Indicador from '../components/Indicador'
+import SecaoCard from '../components/SecaoCard'
 import AlertaBadge from '../components/AlertaBadge'
 import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
+const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const dia = d => new Date(d + 'T00:00:00').toLocaleDateString('pt-BR')
+
+const PERIODOS = [
+  { id: 'semana', label: 'Esta semana' },
+  { id: 'mes', label: 'Este mês' },
+  { id: 'todos', label: 'Todas' },
+]
+
+const entrada = {
+  width: '100%', padding: '7px 9px', background: 'var(--color-bg)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: 13,
+}
+
+const botao = (destaque = false) => ({
+  padding: '7px 16px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 13,
+  border: destaque ? 'none' : '1px solid var(--color-border)',
+  background: destaque ? 'var(--color-accent-solid)' : 'transparent',
+  color: destaque ? 'var(--color-on-accent)' : 'var(--color-text)',
+})
+
+function contar(n, singular, plural) {
+  return `${n} ${n === 1 ? singular : plural}`
+}
+
 export default function ContasPagar() {
   const { finRole } = useAuth()
+  const ehAdmin = finRole === 'fin_admin'
+
   const [contas, setContas] = useState([])
   const [periodo, setPeriodo] = useState('semana')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ descricao:'', categoria:'IMPOSTO_DAS', valor:'', vencimento:'', marca:'GERAL', observacao:'' })
+  const [form, setForm] = useState({ descricao: '', categoria: 'IMPOSTO_DAS', valor: '', vencimento: '', marca: 'GERAL', observacao: '' })
   const [pluggyStatus, setPluggyStatus] = useState(null)
   const [syncLoading, setSyncLoading] = useState(false)
   const [syncMsg, setSyncMsg] = useState(null)
   const [connectLoading, setConnectLoading] = useState(false)
-
-  const inputStyle = { width:'100%', padding:8, background:'var(--color-bg)', color:'var(--color-text)', border:'1px solid var(--color-border)', borderRadius:'var(--radius-sm)' }
 
   async function carregar() {
     const params = periodo === 'todos' ? '' : `?periodo=${periodo}`
@@ -66,123 +111,212 @@ export default function ContasPagar() {
     e.preventDefault()
     await api.post('/api/contas', { ...form, valor: parseFloat(form.valor) })
     setShowForm(false)
-    setForm({ descricao:'', categoria:'IMPOSTO_DAS', valor:'', vencimento:'', marca:'GERAL', observacao:'' })
+    setForm({ descricao: '', categoria: 'IMPOSTO_DAS', valor: '', vencimento: '', marca: 'GERAL', observacao: '' })
     carregar()
   }
 
   async function marcarPago(id) {
     const hoje = new Date().toISOString().split('T')[0]
-    await api.put(`/api/contas/${id}`, { status:'pago', data_pagamento: hoje })
+    await api.put(`/api/contas/${id}`, { status: 'pago', data_pagamento: hoje })
     carregar()
   }
 
+  // Somas da lista que já está na tela. O servidor não devolve totais e não
+  // precisa: o filtro de período já aconteceu lá, então somar aqui dá o mesmo
+  // número com uma chamada a menos.
+  const soma = f => contas.filter(f).reduce((s, c) => s + Number(c.valor || 0), 0)
+  const abertas = contas.filter(c => c.status !== 'pago')
+  const vencidas = contas.filter(c => c.status === 'vencido')
+  const pagas = contas.filter(c => c.status === 'pago')
+
+  const rotuloPeriodo = PERIODOS.find(p => p.id === periodo)?.label.toLowerCase()
+
   return (
     <Layout>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:12 }}>
-        <h1 style={{ margin:0 }}>Contas a Pagar</h1>
-        {finRole === 'fin_admin' && (
-          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+      <PaginaHeader
+        titulo="Contas a Pagar"
+        subtitulo="O que vence, o que já venceu e o que já foi pago."
+        acao={ehAdmin && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {pluggyStatus?.conectado ? (
               <button onClick={sincronizarDDA} disabled={syncLoading}
-                style={{ padding:'8px 20px', background:'var(--color-accent-solid)', color:'var(--color-on-accent)', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', opacity: syncLoading ? 0.6 : 1 }}>
-                {syncLoading ? 'Sincronizando...' : '↻ Sync DDA Sicredi'}
+                      style={{ ...botao(), opacity: syncLoading ? 0.6 : 1 }}>
+                {syncLoading ? 'Sincronizando…' : '↻ Sync DDA Sicredi'}
               </button>
             ) : (
               <button onClick={conectarSicredi} disabled={connectLoading}
-                style={{ padding:'8px 20px', background:'var(--color-accent-solid)', color:'var(--color-on-accent)', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer', opacity: connectLoading ? 0.6 : 1 }}>
-                {connectLoading ? 'Gerando link...' : '🔗 Conectar Sicredi'}
+                      style={{ ...botao(), opacity: connectLoading ? 0.6 : 1 }}>
+                {connectLoading ? 'Gerando link…' : '🔗 Conectar Sicredi'}
               </button>
             )}
-            <button onClick={() => setShowForm(!showForm)}
-              style={{ padding:'8px 20px', background:'var(--color-accent-solid)', color:'var(--color-on-accent)', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer' }}>
+            <button onClick={() => setShowForm(!showForm)} style={botao(true)}>
               + Nova conta
             </button>
           </div>
         )}
-      </div>
+      />
 
       {syncMsg && (
-        <div style={{ marginBottom:16, padding:'10px 16px', borderRadius:'var(--radius-sm)',
-          background: syncMsg.tipo === 'ok' ? 'color-mix(in srgb, var(--color-success) 18%, transparent)' : syncMsg.tipo === 'info' ? 'color-mix(in srgb, var(--color-accent) 18%, transparent)' : 'color-mix(in srgb, var(--color-danger) 18%, transparent)',
-          color: syncMsg.tipo === 'ok' ? 'var(--color-success-dark)' : syncMsg.tipo === 'info' ? 'var(--color-accent-hover)' : 'var(--color-danger)', fontSize:14 }}>
+        <div style={{
+          marginBottom: 16, padding: '10px 16px', borderRadius: 'var(--radius-sm)', fontSize: 14,
+          background: syncMsg.tipo === 'ok'
+            ? 'color-mix(in srgb, var(--color-success) 18%, transparent)'
+            : 'color-mix(in srgb, var(--color-danger) 18%, transparent)',
+          color: syncMsg.tipo === 'ok' ? 'var(--color-success-dark)' : 'var(--color-danger)',
+        }}>
           {syncMsg.texto}
         </div>
       )}
 
-      <div style={{ marginBottom:20, display:'flex', gap:8 }}>
-        {['semana','mes','todos'].map(p => (
-          <button key={p} onClick={() => setPeriodo(p)}
-            style={{ padding:'6px 16px', borderRadius:99, border:'1px solid var(--color-border)',
-              background: periodo === p ? 'var(--color-accent-solid)' : 'var(--color-surface)',
-              color: periodo === p ? 'var(--color-on-accent)' : 'var(--color-text)', cursor:'pointer', fontSize:13 }}>
-            {p === 'semana' ? 'Esta semana' : p === 'mes' ? 'Este mês' : 'Todas'}
+      {/* Filtro de período em pílulas, no padrão do Finco */}
+      <div style={{
+        background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 20,
+        display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
+      }}>
+        <span style={{ fontSize: 13, color: 'var(--color-text-muted)', marginRight: 4 }}>Período</span>
+        {PERIODOS.map(p => (
+          <button key={p.id} onClick={() => setPeriodo(p.id)}
+                  style={{
+                    padding: '6px 16px', borderRadius: 99, cursor: 'pointer', fontSize: 13,
+                    border: '1px solid var(--color-border)',
+                    background: periodo === p.id ? 'var(--color-accent-solid)' : 'transparent',
+                    color: periodo === p.id ? 'var(--color-on-accent)' : 'var(--color-text)',
+                  }}>
+            {p.label}
           </button>
         ))}
       </div>
 
-      {showForm && finRole === 'fin_admin' && (
-        <form onSubmit={handleSubmit} style={{ background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:'var(--radius-md)', padding:24, marginBottom:24, display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
-          <label>Descrição<br /><input required value={form.descricao} onChange={e => setForm({...form, descricao:e.target.value})} style={inputStyle} /></label>
-          <label>Categoria<br />
-            <select value={form.categoria} onChange={e => setForm({...form, categoria:e.target.value})} style={inputStyle}>
-              {['FORNECEDOR','CONTABILIDADE','IMPOSTO_DAS','SISTEMA','OUTRO'].map(c => <option key={c}>{c}</option>)}
+      <div style={{
+        display: 'grid', gap: 14, marginBottom: 22,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+      }}>
+        <Indicador
+          rotulo="Em aberto"
+          valor={soma(c => c.status !== 'pago')}
+          tom="divida"
+          composicao={`${contar(abertas.length, 'conta', 'contas')} · ${rotuloPeriodo}`}
+        />
+        <Indicador
+          rotulo="Vencidas"
+          valor={soma(c => c.status === 'vencido')}
+          tom="divida"
+          composicao={vencidas.length
+            ? `${contar(vencidas.length, 'conta passou', 'contas passaram')} do vencimento`
+            : 'Nenhuma conta atrasada'}
+        />
+        <Indicador
+          rotulo="Já pagas"
+          valor={soma(c => c.status === 'pago')}
+          composicao={`${contar(pagas.length, 'conta quitada', 'contas quitadas')} · ${rotuloPeriodo}`}
+        />
+      </div>
+
+      {showForm && ehAdmin && (
+        <form onSubmit={handleSubmit} style={{
+          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)', padding: 20, marginBottom: 20,
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14,
+        }}>
+          <label style={{ fontSize: 13 }}>Descrição<br />
+            <input required value={form.descricao}
+                   onChange={e => setForm({ ...form, descricao: e.target.value })} style={entrada} />
+          </label>
+          <label style={{ fontSize: 13 }}>Categoria<br />
+            <select value={form.categoria}
+                    onChange={e => setForm({ ...form, categoria: e.target.value })} style={entrada}>
+              {['FORNECEDOR', 'CONTABILIDADE', 'IMPOSTO_DAS', 'SISTEMA', 'OUTRO'].map(c => <option key={c}>{c}</option>)}
             </select>
           </label>
-          <label>Valor (R$)<br /><input required type="number" step="0.01" value={form.valor} onChange={e => setForm({...form, valor:e.target.value})} style={inputStyle} /></label>
-          <label>Vencimento<br /><input required type="date" value={form.vencimento} onChange={e => setForm({...form, vencimento:e.target.value})} style={inputStyle} /></label>
-          <label>Marca<br />
-            <select value={form.marca} onChange={e => setForm({...form, marca:e.target.value})} style={inputStyle}>
-              {['YUSO','M12','GERAL'].map(m => <option key={m}>{m}</option>)}
+          <label style={{ fontSize: 13 }}>Valor (R$)<br />
+            <input required type="number" step="0.01" value={form.valor}
+                   onChange={e => setForm({ ...form, valor: e.target.value })} style={entrada} />
+          </label>
+          <label style={{ fontSize: 13 }}>Vencimento<br />
+            <input required type="date" value={form.vencimento}
+                   onChange={e => setForm({ ...form, vencimento: e.target.value })} style={entrada} />
+          </label>
+          <label style={{ fontSize: 13 }}>Marca<br />
+            <select value={form.marca}
+                    onChange={e => setForm({ ...form, marca: e.target.value })} style={entrada}>
+              {['YUSO', 'M12', 'GERAL'].map(m => <option key={m}>{m}</option>)}
             </select>
           </label>
-          <label>Observação<br /><input value={form.observacao} onChange={e => setForm({...form, observacao:e.target.value})} style={inputStyle} /></label>
-          <div style={{gridColumn:'span 2', display:'flex', gap:8, justifyContent:'flex-end'}}>
-            <button type="button" onClick={() => setShowForm(false)} style={{padding:'8px 20px',borderRadius:'var(--radius-sm)',border:'1px solid var(--color-border)',cursor:'pointer', background:'transparent', color:'var(--color-text)'}}>Cancelar</button>
-            <button type="submit" style={{padding:'8px 20px',background:'var(--color-accent-solid)',color:'var(--color-on-accent)',border:'none',borderRadius:'var(--radius-sm)',cursor:'pointer'}}>Salvar</button>
+          <label style={{ fontSize: 13 }}>Observação<br />
+            <input value={form.observacao}
+                   onChange={e => setForm({ ...form, observacao: e.target.value })} style={entrada} />
+          </label>
+          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={() => setShowForm(false)} style={botao()}>Cancelar</button>
+            <button type="submit" style={botao(true)}>Salvar</button>
           </div>
         </form>
       )}
 
-      <table style={{ width:'100%', borderCollapse:'collapse', background:'var(--color-surface)', border:'1px solid var(--color-border)', borderRadius:'var(--radius-md)', overflow:'hidden' }}>
-        <thead>
-          <tr style={{ background:'var(--color-bg)', textAlign:'left' }}>
-            {['Descrição','Categoria','Vencimento','Valor','Marca','Status',''].map(h => (
-              <th key={h} style={{ padding:'10px 16px', fontSize:13 }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {contas.map(c => (
-            <tr key={c.id} style={{ borderTop:'1px solid var(--color-border)', background: c.origem === 'dda' ? 'color-mix(in srgb, var(--color-accent) 10%, var(--color-surface))' : 'var(--color-surface)' }}>
-              <td style={{ padding:'10px 16px' }}>
-                {c.origem === 'dda' && <span title="Importado do Sicredi via DDA" style={{ marginRight:6, fontSize:11, padding:'1px 6px', borderRadius:99, background:'color-mix(in srgb, var(--color-accent) 15%, transparent)', color:'var(--color-accent)' }}>DDA</span>}
-                {c.descricao}
-              </td>
-              <td style={{ padding:'10px 16px', fontSize:12, color:'var(--color-text-muted)' }}>{c.categoria}</td>
-              <td style={{ padding:'10px 16px' }}>{new Date(c.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-              <td style={{ padding:'10px 16px', fontWeight:600 }}>{Number(c.valor).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</td>
-              <td style={{ padding:'10px 16px' }}>{c.marca}</td>
-              <td style={{ padding:'10px 16px' }}>
-                <AlertaBadge
-                  texto={c.status === 'a_confirmar' ? 'a confirmar' : c.status}
-                  tipo={c.status === 'vencido' ? 'error' : c.status === 'pago' ? 'ok' : c.status === 'a_confirmar' ? 'info' : 'warning'}
-                />
-              </td>
-              <td style={{ padding:'10px 16px' }}>
-                {finRole === 'fin_admin' && c.status !== 'pago' && (
-                  <button onClick={() => marcarPago(c.id)}
-                    style={{ padding:'4px 12px', fontSize:12, background:'var(--color-success-solid)', color:'var(--color-on-success)', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer' }}>
-                    Marcar pago
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-          {contas.length === 0 && (
-            <tr><td colSpan={7} style={{ padding:24, textAlign:'center', color:'var(--color-text-muted)' }}>Nenhuma conta encontrada.</td></tr>
-          )}
-        </tbody>
-      </table>
+      <SecaoCard
+        titulo="Lançamentos"
+        subtitulo="Da mais próxima do vencimento para a mais distante."
+        total={contas.length ? brl(soma(() => true)) : undefined}
+        totalRotulo={`Total · ${contar(contas.length, 'conta', 'contas')}`}
+      >
+        {contas.length === 0 && (
+          <p style={{
+            margin: 0, padding: '18px 4px', textAlign: 'center',
+            fontSize: 13, color: 'var(--color-text-muted)',
+          }}>Nenhuma conta encontrada neste período.</p>
+        )}
+
+        {contas.map(c => (
+          <div key={c.id} style={{
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+            padding: '10px 14px', borderRadius: 'var(--radius-sm)',
+            // Conta importada do banco fica com fundo próprio: é registro do
+            // Sicredi, não lançamento que alguém digitou aqui.
+            background: c.origem === 'dda'
+              ? 'color-mix(in srgb, var(--color-accent) 10%, var(--color-row))'
+              : 'var(--color-row)',
+          }}>
+            <span style={{
+              flexShrink: 0, minWidth: 74, fontSize: 12, fontWeight: 600,
+              color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums',
+            }}>{dia(c.vencimento)}</span>
+
+            <span style={{ flex: 1, minWidth: 200, fontSize: 14 }}>
+              {c.origem === 'dda' && (
+                <span title="Importado do Sicredi via DDA" style={{
+                  marginRight: 6, fontSize: 11, padding: '1px 6px', borderRadius: 99,
+                  background: 'color-mix(in srgb, var(--color-accent) 15%, transparent)',
+                  color: 'var(--color-accent)',
+                }}>DDA</span>
+              )}
+              {c.descricao}
+              <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                {c.categoria} · {c.marca}
+              </span>
+            </span>
+
+            <span style={{
+              fontSize: 15, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+            }}>{brl(c.valor)}</span>
+
+            <AlertaBadge
+              texto={c.status === 'a_confirmar' ? 'a confirmar' : c.status}
+              tipo={c.status === 'vencido' ? 'error'
+                : c.status === 'pago' ? 'ok'
+                : c.status === 'a_confirmar' ? 'info' : 'warning'}
+            />
+
+            {ehAdmin && c.status !== 'pago' && (
+              <button onClick={() => marcarPago(c.id)} style={{
+                ...botao(), padding: '4px 12px', fontSize: 12,
+                background: 'var(--color-success-solid)', color: 'var(--color-on-success)',
+                border: 'none',
+              }}>Marcar pago</button>
+            )}
+          </div>
+        ))}
+      </SecaoCard>
     </Layout>
   )
 }

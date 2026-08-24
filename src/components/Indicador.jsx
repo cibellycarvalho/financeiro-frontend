@@ -4,7 +4,8 @@
  * A linha de baixo é a razão de este componente existir. No Finco, embaixo de
  * "Lucro Líquido" está escrito `Base: R$ 11.881,48 − Ads: R$ 7.917,56 − Fixos:
  * R$ 1.104,87`. É isso que faz a tela parecer simples: o número deixa de ser um
- * oráculo. Sem essa linha, isto aqui vira o CardResumo que já existia.
+ * oráculo. Sem essa linha, isto aqui seria o CardResumo que existia antes —
+ * rótulo e valor, e nada que ajudasse a confiar no número.
  *
  * Sobre a cor: ela segue o SINAL, não um parâmetro fixo. O Dashboard mostrava
  * "Saldo disponível −R$ 50.314,96" em verde porque a cor estava escrita à mão
