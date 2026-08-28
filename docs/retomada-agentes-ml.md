@@ -1306,3 +1306,80 @@ esse. O sistema errou uma vez, e errou onde o acerto valia mais.
 
 **Regra:** nenhuma medição pode tratar ausência de dado como valor. E vocabulário
 compartilhado entre módulos não vive em string literal.
+
+## Sexta falha silenciosa: dois agendadores, e um dedup que era aparência
+
+O alerta "✅ voltou a ficar ativo" do `M0016` saiu **duas vezes**, com 3
+segundos de diferença e texto idêntico. A causa não estava no alerta.
+
+`ml_eventos` tinha **44 pares duplicados**, quase um por dia desde 20/08 — ou
+seja, desde o primeiro dia em que a Etapa A pôs o detector para escrever
+eventos. Estava duplicando desde sempre.
+
+### A cadeia
+
+- o `BackgroundScheduler` é instanciado dentro de `create_app()`, e o Gunicorn
+  roda `--workers 2`: **cada worker sobe o próprio agendador** e os dois
+  disparam o mesmo cron no mesmo segundo (2,2 ms de diferença é assinatura de
+  dois processos, não de retry)
+- coletor (`847300010`) e alertas (`847300030`) tinham advisory lock. **O
+  detector não tinha nenhum** — por isso só ele duplicava
+- `_ja_registrado` era um `SELECT` seguido de `INSERT`, sem lock nem
+  constraint: *check-then-insert*, a corrida clássica. **Parecia proteção e não
+  era**
+- e como o dedup de envio é por `evento_id`, dois eventos para o mesmo episódio
+  real furavam a supressão: cada um disparava seu próprio alerta
+
+### Correção em duas camadas, as duas
+
+1. advisory lock no detector (`847300020`), no padrão dos outros dois
+2. `UNIQUE (anuncio_id, data, tipo)` em `ml_eventos` + `ON CONFLICT DO NOTHING`
+
+O lock evita a corrida; a constraint torna o invariante impossível de violar
+mesmo que alguém rode o job de outro jeito depois. **A lição das falhas
+anteriores é não confiar em duas peças de código concordarem** — e
+check-then-insert é exatamente isso, em forma de corrida.
+
+Limpeza: as linhas de `ml_alertas` dos eventos perdedores foram repontadas
+para o sobrevivente antes do delete, então nenhum alerta ficou órfão.
+
+### A janela que a ordem criou
+
+A constraint entrou no banco antes do `ON CONFLICT` entrar em produção. Nesse
+intervalo, a corrida deixaria de gerar duplicata e passaria a gerar
+`IntegrityError` — trocando um bug barulhento por um possivelmente fatal.
+Deploy no mesmo dia fechou a janela. **Migração antes do código é a ordem certa
+para mudança aditiva; para constraint, ela inverte o risco.**
+
+### Dívida registrada
+
+O scheduler continua subindo em cada worker. Os locks resolvem o sintoma nos
+três jobs do projeto de anúncios; a causa segue lá, e **qualquer job novo
+nasce com o mesmo bug**. A correção estrutural é o scheduler subir uma vez só.
+
+## Etapa B concluída
+
+`ativo` → `ativo_deprecado`. Nenhuma query quebrou, ciclo manual rodou limpo.
+Junto: `motivo_nao_monitorado`, com `'descontinuado'` no Kit de Tigelas Bambu
+(SKU 1367) e nos cabos Cat8 (FV0053, FV0054) — decisão da Cibelly de não
+vender mais esses produtos, registrada para não ser redescoberta como
+"parados precisando de decisão" daqui a um mês.
+
+Os 3 anúncios do R1 foram religados, incluindo o `MLB7320219336`.
+
+**Efeito colateral não previsto:** o ciclo manual disparou 6 alertas reais
+fora de horário. A supressão é por `(unidade_id, tipo)` em 72h e não cobria
+essas condições. Não eram duplicatas — eram alertas legítimos chegando sem
+contexto. Rodar o ciclo à mão nunca é neutro do lado do Telegram, só do lado
+da API do ML.
+
+## Correção de premissa: 07h e 17h são deste mesmo scheduler
+
+Eu afirmei que as mensagens das 07:00 e 17:00 vinham de outro serviço. Vêm de
+`_resumo_vendas_job` e `_catalog_report_tarde_job`, no mesmo `scheduler.py` —
+eu tinha só os três jobs do projeto de anúncios em vista e generalizei para o
+arquivo inteiro.
+
+Consequência aberta: **se esses dois jobs também não têm advisory lock, estão
+duplicando mensagem desde sempre** — e ninguém notaria, porque mensagem
+repetida no Telegram passa por defeito de aplicativo.
