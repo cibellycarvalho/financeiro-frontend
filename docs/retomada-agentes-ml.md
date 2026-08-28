@@ -1234,3 +1234,75 @@ o token do GitHub. O comando foi colado por mão humana no Console do EasyPanel.
 `roteamento_alertas_ativo` verificado **no banco**, não no código: false nas
 quatro contas. Os donos de J12, LOCITECH e M12 continuam sem saber que o
 sistema existe, que é o combinado.
+
+## A quarta e a quinta falha silenciosa — e a primeira que nós causamos
+
+### Quarta: entrega de Telegram que nunca foi verificada
+
+`enviar_mensagem` checava só o `status_code`. A API do Telegram devolve `200`
+com `{"ok": false, "description": ...}` em vários casos de erro — e todos eles
+passavam como sucesso. `ml_alertas` guardava `enviado_em`, o timestamp da
+**gravação**, e nenhuma coluna guardava o resultado do **envio**.
+
+O sistema registrava entregas que não aconteceram, e não havia como distinguir.
+
+Corrigido com `envio_ok` / `envio_detalhe` em `ml_alertas`, verificação do
+campo `ok` do corpo, e resultado por destinatário (antes, 1 falha em 3 sumia
+num `print`).
+
+**Gap fechado junto, e ele importava mais que o resto:** quando *todos* os
+destinatários falhavam, `registrar_alerta` nem era chamado — o único caso em
+que o registro é imprescindível era o único que não registrava. Agora a linha
+é sempre gravada e `deve_enviar` ignora linhas com `envio_ok = false`, para que
+um alerta que nunca saiu possa ser retentado.
+
+### Quinta: o vocabulário de eventos divergiu da própria refatoração
+
+O alerta de estoque dizia, no texto, que "dias de ruptura ou anúncio fora do ar
+não contam". O código que fazia isso existia — e filtrava
+`ml_eventos.tipo IN ('ruptura_estoque', 'anuncio_pausado_ou_encerrado')`.
+
+**A Etapa A trocou o gerador de eventos** por `detector_mudancas.py`, que grava
+`tipo = 'status_ml'`. Ninguém atualizou o consumidor. Os dois tipos antigos
+pararam de ser escritos em 19/08 e 26/06; o filtro seguiu perguntando por eles
+e nunca excluiu nada.
+
+Havia ainda um terceiro nome para o mesmo conceito — `'ruptura de estoque'`,
+com espaço — de um escritor mais antigo. Nenhum dos três era escrito por código
+vivo.
+
+**Esta é a primeira falha silenciosa que este projeto causou em si mesmo.** Duas
+peças concordando por string literal, sem nada que force a concordância.
+
+### O efeito, medido no caso real
+
+`MLB6507025790` (DisplayPort→HDMI, SKU FV0027, **3.899 unidades vendidas**)
+recebeu em 21/08 um alerta dizendo *"vendendo 1.2/dia"*. A média caiu porque o
+anúncio passou quase toda a janela em ruptura — e a exclusão que deveria
+descontar esses dias não descontava nada. `dias_limpos = 14` quando o correto
+era ~0.
+
+**O anúncio que mais precisava de reposição foi o que pareceu menos urgente.**
+
+Dos 5 anúncios alertados naquele dia, 4 se resolveram sozinhos ou foram
+repostos. O único que continuava zerado e pausado 7 dias depois é exatamente
+esse. O sistema errou uma vez, e errou onde o acerto valia mais.
+
+### As correções, e a regra que fica
+
+- a exclusão passa a ler `ml_metricas_diarias` (`estoque = 0 OR status <>
+  'active'`) — a mesma tabela que a query já lê. **Sem acoplamento por nome de
+  evento não há vocabulário para divergir.**
+- `TIPO_STATUS_ML` vira constante única, definida por quem escreve e importada
+  por quem lê
+- modo `sem_base`: quando a janela não sustenta uma estimativa **e** o anúncio
+  está zerado ou fora do ar, o alerta sai assim mesmo, dizendo que não há base
+  e mostrando o histórico total. **Falta de dado é informação, não motivo para
+  calar** — o piso de amostra teria transformado um alerta errado em nenhum
+  alerta.
+- dia **sem linha nenhuma** deixa de contar como limpo. Ausência de dado estava
+  sendo lida como evidência de normalidade — o mesmo defeito numa segunda
+  forma, e sem corrigi-lo o caso do FV0027 daria `dias_limpos ≈ 12`, não 0.
+
+**Regra:** nenhuma medição pode tratar ausência de dado como valor. E vocabulário
+compartilhado entre módulos não vive em string literal.
