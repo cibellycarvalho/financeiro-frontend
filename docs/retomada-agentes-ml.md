@@ -1383,3 +1383,68 @@ arquivo inteiro.
 Consequência aberta: **se esses dois jobs também não têm advisory lock, estão
 duplicando mensagem desde sempre** — e ninguém notaria, porque mensagem
 repetida no Telegram passa por defeito de aplicativo.
+
+## Escopo definido: só a YUSO, por interruptor
+
+Decisão da Cibelly. J12 e LOCITECH são lojas de possíveis sócios que ela
+acompanha — a J12 devagar, a LOCITECH caminhando mas com pouca verba. O fluxo
+novo de agentes de anúncio fica só na YUSO até ela decidir estender.
+
+Implementado como flag, não como exclusão no código:
+
+```sql
+ALTER TABLE ml_contas ADD COLUMN alertas_anuncios_ativo boolean NOT NULL
+  DEFAULT false;
+UPDATE ml_contas SET alertas_anuncios_ativo = true WHERE conta_ml = 'YUSO';
+```
+
+Ligar outra conta depois é **um UPDATE**. Nenhum `'YUSO'` escrito dentro de
+função nenhuma.
+
+**A coleta continua nas 4 contas** — é ela que produz o dado com que a Cibelly
+acompanha as outras lojas, e foi ela que gerou os relatórios de J12 e LOCITECH.
+O escopo é de alerta, não de coleta.
+
+### Correção de premissa: os terceiros já recebiam mensagem desde junho
+
+Eu venho repetindo há semanas que "os donos das lojas não sabem que o sistema
+existe". Estava errado. `telegram_destinatarios` tem chat_id próprio para J12
+(desde 15/06) e LOCITECH (desde 23/06), e `catalog_watch` e `resumo_vendas`
+enviam para eles por um caminho de roteamento próprio, que **nunca passou por
+`roteamento_alertas_ativo`** — esse flag foi criado em 19/08 só para o fluxo de
+alertas de anúncio.
+
+Ou seja: a trava que a gente manteve desligada com tanto cuidado guardava uma
+porta numa parede que tinha outra porta aberta há dois meses.
+
+Confirmado com a Cibelly que isso é intencional e desejado — são lojas que ela
+acompanha. Nada foi quebrado; a premissa é que estava errada. **`catalog_watch`,
+`catalog_report_manha/tarde` e `resumo_vendas` ficam exatamente como estão.**
+
+### O agravante que a correção do scheduler resolve de lambuja
+
+Esses dois jobs estão entre os 11 sem advisory lock. De 14 jobs em
+`scheduler.py`, só 3 têm — e **8 dos 9 que mandam Telegram não têm nenhum**.
+Com dois workers do Gunicorn, é provável que J12 e LOCITECH venham recebendo
+cada mensagem em duplicata, todo dia, desde junho. Ninguém notaria: mensagem
+repetida no Telegram passa por defeito de aplicativo.
+
+## Sétima forma do mesmo defeito: o portão de entrada
+
+`_anuncios_para_estoque` filtrava por `prioritario = true OR AVG(visitas) > 20`.
+Visitas desabam quando o anúncio pausa ou zera — então **a ruptura empurrava o
+anúncio para baixo do piso e o tirava da lista antes de qualquer avaliação**.
+
+O `MLB6507025790` (3.899 unidades vendidas, zerado e pausado há 8 dias) tinha
+média de 10,1 visitas. Excluído no portão, nunca chegava na lógica de alerta.
+
+**É a terceira vez no mesmo dia que encontramos esta forma:** a ruptura destrói
+o sinal que serviria para detectá-la. Média de vendas, contagem de dias limpos,
+e agora o portão.
+
+Corrigido com a **mesma** definição de dia limpo usada em todo o resto, mais
+teto de 3 alertas por episódio — a Cibelly já foi avisada; insistir vira ruído
+sobre algo que ela decidiu não resolver.
+
+**Regra:** todo filtro que decide *o que merece atenção* precisa ser checado
+contra a pergunta "este critério sobrevive à condição que ele deveria detectar?"
