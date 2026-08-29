@@ -1448,3 +1448,70 @@ sobre algo que ela decidiu não resolver.
 
 **Regra:** todo filtro que decide *o que merece atenção* precisa ser checado
 contra a pergunta "este critério sobrevive à condição que ele deveria detectar?"
+
+## A origem real dos 47 pausados — e por que o critério de urgência estava errado
+
+A conta teve **experiência de compra em 30%**. A Cibelly contestou as
+reclamações que dava para contestar, e nos anúncios onde a contestação **não
+saiu**, o jeito de escapar foi pausar o anúncio e subir um novo com outro SKU.
+
+É essa a origem dos "duplicados". Não é rotina de operação — foi controle de
+danos, concentrado no último mês.
+
+### O que eu li errado
+
+Tratei `MLB6507025790` (3.899 unidades vendidas, zerado, pausado) como
+emergência de ruptura por horas. Era um anúncio **aposentado de propósito**,
+substituído pelo `FV0080`, que está ativo com 2.394 unidades. As unidades que
+eu apontei como "estoque no anúncio errado" estavam exatamente onde deviam.
+
+O erro de critério: usei **volume histórico** para medir urgência. Volume
+histórico é justamente o que um anúncio aposentado tem de sobra — acumulou a
+vida inteira e parou ontem. Não distingue nada.
+
+> **Um anúncio aposentado já vendia pouco quando parou. Um anúncio em ruptura
+> vendia bem até o dia em que parou.**
+
+O sinal é a **velocidade nos dias antes da pausa**, não o total acumulado.
+
+### O custo real das rupturas, revisto para cima
+
+Os relatórios de J12 e LOCITECH estimaram o custo de uma ruptura em visitas
+perdidas e faturamento de alguns dias. **A conta era maior.**
+
+A cadeia é direta: ruptura → "não despachou / faltou estoque" → e esse motivo
+está na lista que o próprio ML classifica como **irreversível** → experiência
+de compra ruim que não sai → o anúncio precisa morrer.
+
+Um anúncio com 3.899 vendas acumuladas não vale a soma das vendas de um mês.
+Vale posição, histórico, avaliação e giro — e o substituto começa do zero numa
+vitrine pior. **O custo de uma ruptura não é o dia parado. É o anúncio.**
+
+### Captura antes das exclusões
+
+A Cibelly vai excluir os pausados com reputação ruim. Quando saírem da API, o
+`sold_quantity` acumulado some junto — e com ele a possibilidade de comparar o
+anúncio antigo com o que o substituiu. O histórico diário permanece no nosso
+banco; o total acumulado, não.
+
+Daí `ml_anuncios_encerrados`: congelar sold_quantity total, velocidade
+pré-pausa, data da pausa e janela de métricas, **antes** das exclusões. É
+leitura, não muda nada, e é irrecuperável se ficar para depois.
+
+### O agente de contestação do Lucas
+
+Material bem construído — regra de ouro contra inventar fatos, recusa
+contestação sem fundamento, para depois de duas recusas, não promete
+resultado. E não escreve nada na API: é conversacional, o humano copia e cola.
+
+Eu o classifiquei como "a jusante do problema". É — mas a ferida está aberta
+agora, e prevenção não cura o que já aconteceu.
+
+O que este sistema pode somar a ele: **classificar a reclamação contra as duas
+listas do ML** (irreversível × contestável) antes de a Cibelly gastar esforço,
+**checar a janela de 60 dias** (reclamação fora dela não está impactando, e
+contestar é trabalho perdido), e **avisar no dia** em que uma reclamação nova
+aparece, enquanto a memória do caso está fresca.
+
+A ordem de serviço completa está em
+`docs/ordem-servico-pos-experiencia-compra.md`.
