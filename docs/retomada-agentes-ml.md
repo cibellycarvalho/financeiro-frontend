@@ -1639,3 +1639,46 @@ O resumo semanal da J12 e da LOCITECH chega hoje **na Cibelly, não nos donos
 delas** (`roteamento_alertas_ativo` false nas quatro contas). Ligar significa
 Jaqueline e Fabricio **passarem a receber algo novo** — decisão dela, tomada de
 propósito, nunca efeito colateral de uma limpeza de ruído.
+
+### Correção: o risco de SKU não chega ao alerta de estoque
+
+A hipótese registrada acima está **errada**, e a auditoria desmentiu.
+
+O item 5 (`_anuncios_para_estoque`, `_estoque_e_vendas`,
+`checar_estoque_acabando`) é **por `ml_item_id` do início ao fim** — nenhuma
+projeção, nenhum `GROUP BY` por `sku`. E a decisão já estava tomada e comentada
+no código antes de eu levantar a suspeita:
+
+> *"Unidade é o ANÚNCIO, não o SKU: estoque no ML é por anúncio, e um irmão
+> pode estar zerado enquanto o outro tem produto."*
+
+`sku_grupos.py` também não soma: ele agrupa e **valida**, e manda para
+`invalidos` qualquer composição que não seja "1 de catálogo + no máximo 1
+tradicional". A soma existe, mas só de **visitas**, e só em `checar_desastres` e
+no resumo semanal — nenhum dos dois calcula cobertura.
+
+SKU não ser único continua verdade e continua valendo como cuidado. Mas o
+caminho que eu apontei como risco estava fechado desde antes.
+
+### A lacuna que a auditoria achou de verdade
+
+`_anuncios_para_estoque` filtra por `monitorado = true` e **não olha
+`status_ml`**. Hoje há 4 anúncios pausados com `monitorado = true`, todos com
+estoque zero — então nada está distorcido. **Por coincidência dos dados, não por
+desenho.**
+
+Se um deles pausar com estoque positivo, `dias_cobertura = estoque / media_dia`
+contaria estoque congelado como vendável, e o modo `sem_base` não pegaria (ele
+só entra quando faltam dias limpos, e sobrariam dias limpos do período ativo).
+
+**A correção não é filtrar** — tirar o anúncio da lista o silencia, que é o modo
+de falha que este projeto passou a semana corrigindo. A condição simplesmente
+não é "estoque acabando": é **capital parado em anúncio fora do ar**, e merece
+sinal próprio.
+
+Decidido: não calcular cobertura para anúncio não-`active`, e emitir um alerta
+distinto com o estoque preso e há quantos dias. Tem duas saídas claras —
+religar o anúncio, ou mover o estoque para o anúncio ativo do mesmo produto.
+
+Caso concreto que motiva: `MLB6928099600` (FV0062, fechado) tem **166 unidades
+presas** enquanto `MLB7459073782`, mesmo SKU e título idêntico, vende.
