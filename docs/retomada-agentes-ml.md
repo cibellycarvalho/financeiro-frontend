@@ -1573,3 +1573,69 @@ sobrescrevendo. Verificar `sku_grupos.py` e as consultas de estoque.
 2. `FV0062` foi encerrado de propósito?
 3. A descontinuação do Kit de Tigelas foi escolha comercial, ou o estoque acabou
    e virou permanente? Os dois anúncios estavam vendendo quando pararam.
+
+## Conclusão da triagem: nenhum dos 55 é ruptura desatendida
+
+As quatro exceções que o critério de velocidade pré-pausa levantou tinham
+explicação, e nenhuma era problema:
+
+- **`M001`** (M12, 173 unidades nos 14 dias finais) — a M12 está sendo
+  descontinuada. O volume tem para onde ir: a YUSO tem o mesmo produto com
+  1.113 unidades.
+- **`FV0062`** (YUSO, 89 unidades) — foi **relistado**. `MLB6928099600` está
+  `closed`, mas `MLB7459073782` tem título idêntico, mesmo SKU, e está ativo.
+  A API confirma `closed` no item antigo: **não havia divergência de
+  `status_ml`** — a confusão nasceu de tratar "FV0062" como um produto quando
+  são três listagens.
+- **Kit 10 Tigelas** — descontinuado por decisão comercial.
+
+A Cibelly disse isso na primeira mensagem sobre o assunto: *"pode olhar, que
+todos esses que estão pausados eles não têm volume alto de vendas — ou a gente
+duplicou o anúncio, ou parou de vender o produto."* O dado confirmou item por
+item.
+
+**Eu passei boa parte do dia tratando isso como emergência.** O critério
+funcionou — separou 4 de 51 — mas os 4 tinham explicação. A ferramenta estava
+certa; o alarme era meu.
+
+### O que sobrou, e é o que mais vale
+
+**SKU não é chave única em `ml_anuncios`.** `FV0062` tem 3 `ml_item_id`, dois
+deles ativos. `FV0027`, `1367`, `FV0053`, `FV0054`, `FV0056`, `FV0057`,
+`FV0031`, `M004` e `M0010` estão na mesma situação.
+
+O risco concreto está no alerta que a Cibelly usa todo dia para decidir compra:
+se alguma consulta soma estoque por SKU, ela somaria as três listagens do
+`FV0062` — **inclusive as 166 unidades presas no anúncio fechado, que não
+vendem para ninguém** — e dividiria pela venda de uma só. Dias de cobertura
+inflados, e o alerta de estoque chegando tarde demais.
+
+Auditoria pedida sobre `sku_grupos.py`, `_estoque_e_vendas` e
+`_anuncios_para_estoque`. Questão de desenho em aberto: **estoque em anúncio
+`closed` ou `paused` não deveria entrar no cálculo de cobertura** — estoque em
+anúncio fechado não vende.
+
+### Estado dos deploys
+
+Em produção: correção de entrega do Telegram, modo `sem_base`, escopo YUSO.
+
+Commitado local, aguardando o ciclo 06:20 limpo, nesta ordem:
+1. `notificar_admin_ativo` — comportamental, risco baixo
+2. eleição do scheduler (`6f4af09`) — infraestrutura, e o modo de falha dela é
+   **não rodar nenhuma vez**; merece o deploy mais isolado
+
+### Regra que ficou do mapeamento de notificações
+
+`notificar_admin_ativo` governa **relatório**, não mensagem acionável de
+cliente. O card de pergunta nova continua chegando mesmo para conta silenciada:
+a lista oficial do ML trata *"vendedor não respondeu em até 8 horas úteis"* como
+reclamação **irreversível**. Silenciar isso não produziria menos ruído —
+produziria exatamente o tipo de dano que levou a conta a 30% de experiência de
+compra.
+
+### Pendência de terceiros, registrada e não executada
+
+O resumo semanal da J12 e da LOCITECH chega hoje **na Cibelly, não nos donos
+delas** (`roteamento_alertas_ativo` false nas quatro contas). Ligar significa
+Jaqueline e Fabricio **passarem a receber algo novo** — decisão dela, tomada de
+propósito, nunca efeito colateral de uma limpeza de ruído.
