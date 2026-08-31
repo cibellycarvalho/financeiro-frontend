@@ -1515,3 +1515,61 @@ aparece, enquanto a memória do caso está fresca.
 
 A ordem de serviço completa está em
 `docs/ordem-servico-pos-experiencia-compra.md`.
+
+## Tarefa A concluída — quantos anúncios pausados estavam mesmo vendendo
+
+`ml_anuncios_encerrados`: 55 linhas, PK em `ml_item_id`, `sold_quantity_total`
+buscado ao vivo da API para os 55. A versão anterior da tabela foi preservada
+como `ml_anuncios_encerrados_v1_20260829` — não precisou ser usada, nenhum dos
+55 tinha sido excluído ainda.
+
+**A v1 tinha `vendas_dia_pre_pausa = 0.00` e `data_pausa = NULL` em tudo.** A
+primeira versão da Tarefa A rodou, gravou, e produziu duas colunas inúteis sem
+que nada acusasse: os nomes prometiam um dado que a fonte não tinha
+(`ml_metricas_diarias` não guarda unidades vendidas, e `ml_sold_quantity_diario`
+só existe desde 20/08). A fonte certa era `ml_pedidos` + `ml_pedidos_itens`,
+com 14 meses de profundidade.
+
+### A resposta: quatro, não um ou dois
+
+| Anúncio | Conta | Unid. nos 14 dias finais | Parou | Total |
+|---|---|---|---|---|
+| Conector DVI×HDMI `M001` | M12 | **173** (~12/dia) | 21/08 | 1.976 |
+| Cabo HDMI 30m `FV0062` | YUSO | **89** (~6/dia) | 19/08 | 292 |
+| Kit 10 Tigelas `1367` | YUSO | **73** (~5/dia) | 18/08 | 2.258 |
+| Kit 10 Tigelas (2º anúncio) | YUSO | 22 | 11/08 | 620 |
+
+Depois desses cai para 26, 21, 17 e vai afinando. Dos 33 com histórico, uns 25
+pararam vendendo 4 unidades ou menos em duas semanas — aposentadoria de fato,
+como a Cibelly descreveu.
+
+**O `M001` é o caso mais sério:** vendia 12 unidades por dia e parou há dez
+dias. E a YUSO tem o `FV0028`, mesmo produto, **1.113 unidades em estoque,
+ativo, 6.842 vendidos**. A M12 parou de vender um item que a YUSO tem de sobra.
+
+**O `FV0062` está `closed`, não `paused`** — encerrado é mais definitivo que
+pausado.
+
+### E o FV0027: eu estava errado, o dado fecha a questão
+
+O anúncio que tratei como emergência de ruptura por horas fez **7 unidades nos
+14 dias finais** — meia por dia. Já tinha praticamente parado antes de ser
+pausado. Era exatamente o que a Cibelly descreveu: anúncio substituído, não
+ruptura.
+
+O critério de velocidade pré-pausa provou o próprio valor no primeiro uso: ele
+derrubou a hipótese de quem o propôs.
+
+### Achado de schema com consequência
+
+**`sku` não é único em `ml_anuncios`** — 1367, FV0027, FV0053, FV0054, FV0056,
+FV0057, FV0031, M004 e M0010 aparecem em mais de uma linha. Qualquer lógica que
+agrupe ou junte por `sku` assumindo unicidade pode estar somando ou
+sobrescrevendo. Verificar `sku_grupos.py` e as consultas de estoque.
+
+### Perguntas comerciais em aberto (não dependem de código)
+
+1. `M001` parou por falta de estoque ou por decisão? A YUSO tem 1.113 unidades.
+2. `FV0062` foi encerrado de propósito?
+3. A descontinuação do Kit de Tigelas foi escolha comercial, ou o estoque acabou
+   e virou permanente? Os dois anúncios estavam vendendo quando pararam.
