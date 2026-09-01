@@ -1682,3 +1682,105 @@ religar o anúncio, ou mover o estoque para o anúncio ativo do mesmo produto.
 
 Caso concreto que motiva: `MLB6928099600` (FV0062, fechado) tem **166 unidades
 presas** enquanto `MLB7459073782`, mesmo SKU e título idêntico, vende.
+
+## Inventário compartilhado: confirmado, e não era bug
+
+Os 63 pares de anúncios ativos com estoque idêntico são **todos pares de
+catálogo** — mesmo `catalog_product_id`, um lado vencedor do buy-box, o outro
+tradicional. A chamada ao vivo fechou a questão:
+
+| Par | `user_product_id` | `inventory_id` | Estoque nos dois lados |
+|---|---|---|---|
+| FV0078 | MLBU4588172850 | YERR25866 | 283 |
+| J12009 | MLBU3968491138 | PKJS85921 | 52 |
+| FV0019 | MLBU3766115668 | ZHFK36938 | 2.954 |
+
+Mesmo produto, mesmo inventário, mesmo estoque. **O coletor está correto** — o
+Mercado Livre reporta assim porque é o mesmo estoque.
+
+`user_product_id` e `inventory_id` agora são gravados em `ml_anuncios`, vindos
+do payload que já era buscado — zero chamada extra. **A ligação passa a ser
+lida, não inferida:** par identificado por `inventory_id`, nunca por "mesmo SKU
+e estoque igual". Inferir ligação em vez de ler ligação causou duas das falhas
+deste projeto.
+
+O impacto de cobertura duplicada é pequeno: os pares são muito assimétricos (o
+lado menor costuma consumir menos de 1% do pool). O único que muda de verdade é
+o FV0088 — 5 contra 18.
+
+## O alerta de estoque estava avisando sobre problema já resolvido
+
+Pedido da Cibelly: não avisar "estoque acabando" quando ela já mandou reposição.
+O endpoint `/inventories/{id}/stock/fulfillment` responde isso, e **a chamada já
+existia** em `routes/inventario.py::_fetch_stock` — descartando exatamente os
+campos que interessam.
+
+O exemplo é o próprio anúncio que motivou a conversa. Alerta das 06:20 de hoje:
+
+> *"246 unidades, 45,3/dia, acaba em 5 dias."*
+
+O que existe de verdade: **406 disponíveis + 1.001 em transferência = 1.407.**
+Cobertura real de **31 dias**, não 5.
+
+**E 54 dos 63 inventários têm envio a caminho hoje.** Em 86% dos casos o alerta
+está falando de algo já resolvido — a reclamação dela era mais justa do que eu
+supus.
+
+### Os status, e a armadilha de somar tudo
+
+| Status | Unidades | Conta como "vem chegando"? |
+|---|---|---|
+| `transfer` | 4.513 | **sim** |
+| `internalProcess` | 7 | não (conservadorismo; volume irrelevante) |
+| `lost` | 95 | **não** — não chega nunca |
+| `withdrawal` | 14 | **não** — está saindo |
+| `noFiscalCoverage` | 56 | **não** — está bloqueado |
+
+Somar `not_available_quantity` inteiro teria contado **173 unidades perdidas,
+bloqueadas ou saindo como se fossem reposição a caminho** — inflando a cobertura
+e calando o alerta justamente quando ele deveria disparar.
+
+### Sem data prevista — e o que substitui
+
+`transfer` traz quantidade, **não traz data**. Então não dá para "silenciar até
+o dia X". O substituto: registrar o valor de `transfer` por inventário todo dia
+e alertar se ele ficar parado no mesmo número por 7 dias sem o disponível subir.
+
+Sem isso, a melhoria vira um jeito de ficar cego quando uma reposição empaca —
+a sétima falha silenciosa, plantada de propósito.
+
+Custo medido: 63 chamadas, 2,8 s concorrente, deduplicado por inventário.
+Viável como job diário.
+
+## R$ 5.003 parados no armazém, que ninguém estava olhando
+
+Achado colateral do diagnóstico acima, e o de maior valor imediato:
+
+- **`lost`: 95 unidades em 23 inventários — R$ 2.507** em preço de venda.
+  Perda espalhada por quase um terço dos produtos no Full, não um incidente
+  pontual. Seis produtos concentram R$ 1.768.
+- **`noFiscalCoverage`: 56 unidades em 8 inventários — R$ 2.496.** Mercadoria
+  íntegra, no armazém, impedida de vender por documento. **44 dessas unidades
+  são de um produto só** (FV0018, Cabo USB-C para HDMI): R$ 1.496 destravados
+  por uma pendência.
+
+E o FV0018 aparece uma segunda vez neste projeto: na Tarefa A, um anúncio dessa
+mesma SKU (`MLB6238453334`) estava `closed`, vendendo 89 unidades a cada duas
+semanas antes de encerrar. Produto que vendia bem, anúncio encerrado, quase todo
+o estoque travado. Vale investigar se as três coisas têm a mesma causa.
+
+Relatório entregue: https://claude.ai/code/artifact/2d7b7980-1dca-419b-9400-702b406ff9d1
+
+**Nada disso aparecia em lugar nenhum do sistema.** Foi encontrado procurando
+outra coisa.
+
+## Fila, em ordem
+
+1. **Eleição do scheduler** (`6f4af09`) — commitado, aguardando ciclo verde
+2. **Não avisar quando já tem envio a caminho** — desenho fechado; é o que mais
+   muda o dia dela
+3. Cobertura por inventário — desenho pronto, impacto pequeno
+4. Capital parado em anúncio fora do ar — desenho pronto
+5. Alerta de `lost` / `noFiscalCoverage` — desenho pronto, precisa de tabela
+   diária própria
+6. `_fetch_stock` → `ml_get` — pré-requisito do 5
