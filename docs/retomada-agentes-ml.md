@@ -1784,3 +1784,30 @@ outra coisa.
 5. Alerta de `lost` / `noFiscalCoverage` — desenho pronto, precisa de tabela
    diária própria
 6. `_fetch_stock` → `ml_get` — pré-requisito do 5
+
+### Correção: `noFiscalCoverage` não significa "bloqueado por nota fiscal"
+
+Eu li o nome do campo e construí uma história em cima dele: bloqueio fiscal,
+R$ 2.496 destraváveis, um passo de ação recomendando resolver o documento.
+**Nada disso foi verificado.** A Cibelly olhou o painel do Full: não há bloqueio
+nenhum nesses produtos.
+
+O relatório foi corrigido no mesmo link — os valores em reais saíram daquela
+tabela, porque somar dinheiro sobre um status que ninguém entende sugere um
+prejuízo que não existe.
+
+O que continua sendo fato: o Mercado Livre marca essas 56 unidades dentro de
+`not_available_detail`, ou seja, como indisponíveis para venda. **O que o estado
+significa segue em aberto.**
+
+**É o mesmo erro que este projeto vem caçando no código a semana toda** — tratar
+um nome como se fosse o fato. A quinta falha silenciosa foi um filtro
+perguntando por nomes de evento que ninguém mais escrevia; esta foi eu lendo um
+nome de status e inventando a operação por trás dele.
+
+**Regra:** nome de campo de API é pista, não conclusão. Antes de virar
+recomendação de ação — e principalmente antes de virar número em reais —
+precisa ser confirmado contra o painel, que fala a língua da operação.
+
+Pendente: a mesma verificação para `lost`. Se o painel não mostrar essas 95
+unidades como extraviadas, aquela metade do levantamento também cai.
