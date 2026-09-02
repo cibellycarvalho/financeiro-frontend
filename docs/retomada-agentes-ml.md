@@ -1811,3 +1811,40 @@ precisa ser confirmado contra o painel, que fala a língua da operação.
 
 Pendente: a mesma verificação para `lost`. Se o painel não mostrar essas 95
 unidades como extraviadas, aquela metade do levantamento também cai.
+
+### Os dois status, confirmados no painel
+
+A Cibelly conferiu, e o resultado separa exatamente o que eu não conseguia
+separar a partir dos nomes:
+
+| Status | Painel do Full | É problema dela? |
+|---|---|---|
+| `lost` | unidades **extraviadas** | **sim** — perda real, cabe ressarcimento |
+| `noFiscalCoverage` | **revisão fiscal** conduzida pelo ML | **não** |
+
+As contagens divergem em uma ou poucas unidades (API 14/13/44 contra painel
+13/12/52) porque o painel é mais recente que a coleta — e o fato de os números
+se moverem é argumento a favor de registrá-los diariamente.
+
+A nota do próprio painel sobre a revisão fiscal é explícita: o Mercado Livre
+detectou a perda de cobertura ao emitir a NF-e, **está gerando a cobertura por
+conta própria**, aquilo **não conta nas métricas de qualidade de estoque**, e
+**custos eventuais são isentos**.
+
+**Eu tinha recomendado "resolver o documento" — era exatamente o contrário.**
+Não há ação da parte dela.
+
+O risco que sobra é outro e é real: enquanto a revisão corre, as unidades **não
+vendem**. Dá para esgotar esperando o ML terminar, sem culpa e sem poder
+acelerar. O `FV0018` tem 52 unidades nessa situação.
+
+### O que esta checagem provou
+
+`noFiscalCoverage` **parecia** problema dela e não era. `lost` **parecia**
+problema dela e é. Os nomes dos campos não separavam os dois casos; o painel
+separou em cinco minutos.
+
+**Regra confirmada na prática:** antes de um campo de API virar recomendação de
+ação — e principalmente antes de virar número em reais — ele passa pelo painel,
+que fala a língua da operação. Custa minutos e impede perseguir uma pendência
+que não existe.
