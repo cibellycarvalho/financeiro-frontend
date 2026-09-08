@@ -10,9 +10,10 @@
  * lista que já vinha; nenhum campo novo foi pedido ao servidor.
  *
  * Preservado por ser comportamento:
- *   - só `fin_admin` cria conta, marca como paga e mexe no Sicredi;
+ *   - só `fin_admin` cria conta e marca como paga;
  *   - conta importada do banco (origem 'dda') fica marcada, porque é registro
- *     do banco e não lançamento manual;
+ *     do banco e não lançamento manual. A importação em si saiu junto com o
+ *     Pluggy em 08/09/2026; o selo continua porque as linhas antigas seguem lá;
  *   - o filtro de período é do servidor (semana/mes/todos), não da tela.
  */
 import { useEffect, useState } from 'react'
@@ -57,10 +58,6 @@ export default function ContasPagar() {
   const [periodo, setPeriodo] = useState('semana')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ descricao: '', categoria: 'IMPOSTO_DAS', valor: '', vencimento: '', marca: 'GERAL', observacao: '' })
-  const [pluggyStatus, setPluggyStatus] = useState(null)
-  const [syncLoading, setSyncLoading] = useState(false)
-  const [syncMsg, setSyncMsg] = useState(null)
-  const [connectLoading, setConnectLoading] = useState(false)
 
   async function carregar() {
     const params = periodo === 'todos' ? '' : `?periodo=${periodo}`
@@ -68,44 +65,7 @@ export default function ContasPagar() {
     setContas(r.data)
   }
 
-  async function carregarPluggyStatus() {
-    try {
-      const r = await api.get('/api/pluggy/status')
-      setPluggyStatus(r.data)
-    } catch {
-      setPluggyStatus({ conectado: false, items: [] })
-    }
-  }
-
   useEffect(() => { carregar() }, [periodo])
-  useEffect(() => { carregarPluggyStatus() }, [])
-
-  async function conectarSicredi() {
-    setConnectLoading(true)
-    setSyncMsg(null)
-    try {
-      const r = await api.post('/api/pluggy/connect-token')
-      window.location.href = r.data.url
-    } catch (err) {
-      const msg = err.response?.data?.error || err.response?.data?.message || 'Erro ao gerar link. Verifique as configurações do Pluggy no servidor.'
-      setSyncMsg({ tipo: 'erro', texto: msg })
-      setConnectLoading(false)
-    }
-  }
-
-  async function sincronizarDDA() {
-    setSyncLoading(true)
-    setSyncMsg(null)
-    try {
-      const r = await api.post('/api/pluggy/sync')
-      setSyncMsg({ tipo: 'ok', texto: `${r.data.sincronizados} lançamentos importados do Sicredi (${r.data.periodo}).` })
-      await carregar()
-    } catch (err) {
-      setSyncMsg({ tipo: 'erro', texto: err.response?.data?.error || 'Erro ao sincronizar DDA.' })
-    } finally {
-      setSyncLoading(false)
-    }
-  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -138,35 +98,12 @@ export default function ContasPagar() {
         subtitulo="O que vence, o que já venceu e o que já foi pago."
         acao={ehAdmin && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {pluggyStatus?.conectado ? (
-              <button onClick={sincronizarDDA} disabled={syncLoading}
-                      style={{ ...botao(), opacity: syncLoading ? 0.6 : 1 }}>
-                {syncLoading ? 'Sincronizando…' : '↻ Sync DDA Sicredi'}
-              </button>
-            ) : (
-              <button onClick={conectarSicredi} disabled={connectLoading}
-                      style={{ ...botao(), opacity: connectLoading ? 0.6 : 1 }}>
-                {connectLoading ? 'Gerando link…' : '🔗 Conectar Sicredi'}
-              </button>
-            )}
             <button onClick={() => setShowForm(!showForm)} style={botao(true)}>
               + Nova conta
             </button>
           </div>
         )}
       />
-
-      {syncMsg && (
-        <div style={{
-          marginBottom: 16, padding: '10px 16px', borderRadius: 'var(--radius-sm)', fontSize: 14,
-          background: syncMsg.tipo === 'ok'
-            ? 'color-mix(in srgb, var(--color-success) 18%, transparent)'
-            : 'color-mix(in srgb, var(--color-danger) 18%, transparent)',
-          color: syncMsg.tipo === 'ok' ? 'var(--color-success-dark)' : 'var(--color-danger)',
-        }}>
-          {syncMsg.texto}
-        </div>
-      )}
 
       {/* Filtro de período em pílulas, no padrão do Finco */}
       <div style={{
