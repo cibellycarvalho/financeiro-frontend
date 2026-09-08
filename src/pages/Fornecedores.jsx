@@ -849,10 +849,15 @@ export default function Fornecedores() {
   }
 
   async function abrirAnexo(caminho) {
+    // A aba precisa abrir no clique: depois do await o Safari bloqueia.
+    const janela = window.open('', '_blank')
+    if (janela) janela.opener = null
     try {
       const r = await api.get(caminho)
-      window.open(r.data.url, '_blank', 'noopener')
+      if (janela) janela.location.replace(r.data.url)
+      else window.open(r.data.url, '_blank', 'noopener')
     } catch (err) {
+      janela?.close()
       alert(err.response?.data?.error || 'Não consegui abrir o anexo.')
     }
   }
@@ -964,7 +969,10 @@ export default function Fornecedores() {
               <UploadPedidoCompra
                 fornecedores={fornecedores}
                 fornecedorSel={fornecedorSel}
-                onSalvo={async (idEscolhido) => {
+                onSalvo={async (idEscolhido, dataParaFiltro) => {
+                  // Sem isto, um pedido salvo fora do mês filtrado some da
+                  // tela e ela acaba tentando subir o mesmo pedido de novo.
+                  if (dataParaFiltro) irParaOMesDe(dataParaFiltro)
                   // Lista fresca primeiro: o saldo do fornecedor mudou com o que
                   // acabou de ser salvo, e selecionarFornecedor guarda o objeto.
                   const r = await api.get('/api/fornecedores')

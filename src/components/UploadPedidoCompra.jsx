@@ -61,6 +61,9 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
   const [comprovante, setComprovante] = useState(null) // resposta do /pagamentos/ler
   const [valorPix, setValorPix] = useState('')
   const [dataPix, setDataPix] = useState('')
+  // true quando o pedido já está salvo e não há mais nada a tentar de novo:
+  // o card só mostra "Fechar" (ex.: 409 de comprovante duplicado, 400 de valor recusado).
+  const [somenteFechar, setSomenteFechar] = useState(false)
 
   const totalItens = totalDosItens(itens)
   const somaDifere = leitura?.total_documento != null && Math.abs(totalItens - leitura.total_documento) > 0.05
@@ -75,6 +78,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
     setItens([{ ...ITEM_VAZIO }]); setLeitura(null); setPreviewUrl(null); setPreviewTipo(null)
     setPedidoSalvoId(null)
     setPago(null); setComprovante(null); setValorPix(''); setDataPix('')
+    setSomenteFechar(false)
   }
 
   async function lerPedido(arquivo) {
@@ -127,8 +131,10 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
     if (pago === false && pedidoSalvoId) {
       // o pedido já foi salvo antes (retomando depois de uma falha no pagamento)
       // e agora ela decidiu não pagar: não há mais nada a gravar.
+      const idFornecedor = fornecedorId
+      const dataParaFiltro = dataPedido
       reiniciar()
-      onSalvo(fornecedorId)
+      onSalvo(idFornecedor, dataParaFiltro)
       return
     }
     setEtapa('salvando')
@@ -150,23 +156,53 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
     }
     if (pago) {
       try {
-        await api.post(`/api/fornecedores/${fornecedorId}/pagamentos`, {
+        const r = await api.post(`/api/fornecedores/${fornecedorId}/pagamentos`, {
           valor: parseFloat(valorPix),
           data_pagamento: dataPix,
           id_transacao: comprovante.id_transacao || null,
           arquivo_token: comprovante.arquivo_token || null,
           alias_destinatario: comprovante.destinatario || null,
         })
+        if (r.data?.aviso) {
+          // pagamento salvo, mas algo não saiu perfeito (ex.: anexo não guardado) —
+          // não pode fechar o card em silêncio, ela precisa ver o aviso.
+          setErro(r.data.aviso)
+          setSomenteFechar(true)
+          setEtapa('conferindo')
+          onSalvo(fornecedorId, dataPix)
+          return
+        }
       } catch (err) {
+        const status = err.response?.status
+        if (status === 409) {
+          // o comprovante já estava lançado (ela clicou "Salvar mesmo assim"):
+          // o pedido está salvo e o pagamento não foi duplicado — nada a repetir.
+          setErro('Pedido salvo. Esse comprovante já estava lançado, então o pagamento não foi duplicado.')
+          setSomenteFechar(true)
+          setEtapa('conferindo')
+          onSalvo(fornecedorId, dataPedido)
+          return
+        }
+        if (status === 400) {
+          // valores do pagamento recusados (ex.: maior que o saldo em aberto):
+          // o pedido já está salvo, mas insistir no mesmo valor nunca vai funcionar.
+          setErro(mensagemDe(err, 'Erro ao registrar o pagamento.'))
+          setSomenteFechar(true)
+          setEtapa('conferindo')
+          onSalvo(fornecedorId, dataPedido)
+          return
+        }
         // o pedido já foi salvo: não deixar parecer que tudo falhou
         setErro(`Pedido salvo, mas o pagamento não: ${mensagemDe(err, 'erro ao registrar')} — clique em Salvar pagamento para tentar de novo.`)
         setEtapa('conferindo')
-        onSalvo(fornecedorId)
+        onSalvo(fornecedorId, dataPedido)
         return
       }
     }
+    const idFornecedor = fornecedorId
+    const dataParaFiltro = pago ? dataPix : dataPedido
     reiniciar()
-    onSalvo(fornecedorId)
+    onSalvo(idFornecedor, dataParaFiltro)
   }
 
   if (etapa === 'ocioso' || etapa === 'lendoPedido') {
@@ -174,7 +210,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
       <>
         <input ref={inputPedido} type="file" accept={TIPOS} style={{ display: 'none' }}
           onChange={e => { const f = e.target.files[0]; e.target.value = ''; if (f) lerPedido(f) }} />
-        <button onClick={() => inputPedido.current.click()} disabled={etapa === 'lendoPedido'} style={botaoSecundario}>
+        <button type="button" onClick={() => inputPedido.current.click()} disabled={etapa === 'lendoPedido'} style={botaoSecundario}>
           {etapa === 'lendoPedido' ? 'Lendo o pedido…' : '📎 Subir pedido de compra'}
         </button>
         {erro && <p style={{ color: 'var(--color-danger)', fontSize: 13, margin: '6px 0 0' }}>{erro}</p>}
@@ -204,8 +240,8 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
           </label>
         </div>
 
-        {leitura?.pedido_existente && (
-          <Faixa>Esse pedido (nº {numeroPedido}) já está lançado em {formatData(leitura.pedido_existente.data_pedido)}. Lançar de novo?</Faixa>
+        {leitura?.pedido_existente && fornecedorId === fornecedorSel.id && (
+          <Faixa>Esse pedido (nº {leitura.numero_pedido}) já está lançado em {formatData(leitura.pedido_existente.data_pedido)}. Lançar de novo?</Faixa>
         )}
 
         <ItensPedidoForm itens={itens} onChange={setItens} />
@@ -262,14 +298,18 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
         {erro && <p style={{ color: 'var(--color-danger)', margin: 0, fontSize: 13 }}>{erro}</p>}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button type="button" onClick={reiniciar} style={botaoSecundario}>{pedidoSalvoId ? 'Fechar' : 'Cancelar'}</button>
-          <button type="submit" disabled={etapa === 'salvando'} style={botaoPrimario}>
-            {etapa === 'salvando' ? 'Salvando…'
-              : pedidoSalvoId && pago === false ? 'Concluir'
-              : pedidoSalvoId ? 'Salvar pagamento'
-              : pago && comprovante?.pagamento_existente ? 'Salvar mesmo assim'
-              : pago ? 'Salvar pedido e pagamento' : 'Salvar pedido'}
+          <button type="button" onClick={reiniciar} disabled={etapa === 'salvando'} style={botaoSecundario}>
+            {pedidoSalvoId ? 'Fechar' : 'Cancelar'}
           </button>
+          {!somenteFechar && (
+            <button type="submit" disabled={etapa === 'salvando'} style={botaoPrimario}>
+              {etapa === 'salvando' ? 'Salvando…'
+                : pedidoSalvoId && pago === false ? 'Concluir'
+                : pedidoSalvoId ? 'Salvar pagamento'
+                : pago && comprovante?.pagamento_existente ? 'Salvar mesmo assim'
+                : pago ? 'Salvar pedido e pagamento' : 'Salvar pedido'}
+            </button>
+          )}
         </div>
       </div>
 
