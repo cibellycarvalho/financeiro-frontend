@@ -4,6 +4,7 @@ import Layout from '../components/Layout'
 import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import ItensPedidoForm, { ITEM_VAZIO } from '../components/ItensPedidoForm'
+import UploadPedidoCompra from '../components/UploadPedidoCompra'
 
 const inputStyle = { display: 'block', width: '100%', padding: 8, marginTop: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', boxSizing: 'border-box' }
 
@@ -278,7 +279,7 @@ function ModalFornecedor({ titulo, inicial, onSalvar, onFechar }) {
   )
 }
 
-function LinhaPagamento({ pagamento, onEditar, onExcluir }) {
+function LinhaPagamento({ pagamento, onEditar, onExcluir, onAbrirAnexo }) {
   const [editando, setEditando] = useState(false)
   const [valor, setValor] = useState(pagamento.valor)
   const [data, setData] = useState(paraDataInput(pagamento.data_pagamento))
@@ -337,6 +338,12 @@ function LinhaPagamento({ pagamento, onEditar, onExcluir }) {
       <span>{formatData(pagamento.data_pagamento)}</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontWeight: 600 }}>{formatMoeda(pagamento.valor)}</span>
+        {pagamento.arquivo_path && onAbrirAnexo && (
+          <button onClick={onAbrirAnexo} title="Ver comprovante"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.7, padding: 2 }}>
+            📎
+          </button>
+        )}
         <button onClick={() => setEditando(true)} title="Editar" disabled={loading}
           style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>
           ✏️
@@ -350,7 +357,7 @@ function LinhaPagamento({ pagamento, onEditar, onExcluir }) {
   )
 }
 
-function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto, podeEditar, onRegistrar, onEditar, onExcluir }) {
+function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto, podeEditar, onRegistrar, onEditar, onExcluir, onAbrirAnexo }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [valor, setValor] = useState('')
   const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().split('T')[0])
@@ -387,7 +394,8 @@ function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto
       {pagamentos.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
           {pagamentos.map(pg => (
-            <LinhaPagamento key={pg.id} pagamento={pg} onEditar={onEditar} onExcluir={onExcluir} />
+            <LinhaPagamento key={pg.id} pagamento={pg} onEditar={onEditar} onExcluir={onExcluir}
+              onAbrirAnexo={onAbrirAnexo ? () => onAbrirAnexo(pg) : null} />
           ))}
         </div>
       ) : (
@@ -840,6 +848,15 @@ export default function Fornecedores() {
     if (fornecedorSel?.id === modalEditar.id) setFornecedorSel(r.data)
   }
 
+  async function abrirAnexo(caminho) {
+    try {
+      const r = await api.get(caminho)
+      window.open(r.data.url, '_blank', 'noopener')
+    } catch (err) {
+      alert(err.response?.data?.error || 'Não consegui abrir o anexo.')
+    }
+  }
+
   async function excluirFornecedor(f) {
     if (!confirm(`Excluir fornecedor "${f.apelido || f.nome}"?`)) return
     try {
@@ -942,6 +959,22 @@ export default function Fornecedores() {
             </div>
           </div>
 
+          {finRole === 'fin_admin' && (
+            <div style={{ marginBottom: 16 }}>
+              <UploadPedidoCompra
+                fornecedores={fornecedores}
+                fornecedorSel={fornecedorSel}
+                onSalvo={async (idEscolhido) => {
+                  if (idEscolhido !== fornecedorSel.id) {
+                    const outro = fornecedores.find(f => f.id === idEscolhido)
+                    if (outro) { await selecionarFornecedor(outro); await carregarFornecedores(); return }
+                  }
+                  await recarregarDados()
+                }}
+              />
+            </div>
+          )}
+
           {showForm && finRole === 'fin_admin' && (
             <form onSubmit={handleSubmit} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 24, marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
               <label style={{ maxWidth: 220 }}>Data do pedido<br /><input required type="date" value={form.data_pedido} onChange={e => setForm({ ...form, data_pedido: e.target.value })} style={inputStyle} /></label>
@@ -977,6 +1010,12 @@ export default function Fornecedores() {
                             <button onClick={() => excluirPedido(p.id)} title="Excluir pedido"
                               style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>
                               🗑️
+                            </button>
+                          )}
+                          {p.arquivo_path && (
+                            <button onClick={() => abrirAnexo(`/api/fornecedores/${fornecedorSel.id}/pedidos/${p.id}/anexo`)} title="Ver pedido de compra"
+                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.7, padding: 2 }}>
+                              📎
                             </button>
                           )}
                         </div>
@@ -1045,6 +1084,7 @@ export default function Fornecedores() {
                 onRegistrar={registrarPagamentoFornecedor}
                 onEditar={editarPagamentoFornecedor}
                 onExcluir={excluirPagamentoFornecedor}
+                onAbrirAnexo={pg => abrirAnexo(`/api/fornecedores/${fornecedorSel.id}/pagamentos/${pg.id}/anexo`)}
               />
             </div>
           </div>
