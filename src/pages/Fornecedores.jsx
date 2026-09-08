@@ -965,11 +965,13 @@ export default function Fornecedores() {
                 fornecedores={fornecedores}
                 fornecedorSel={fornecedorSel}
                 onSalvo={async (idEscolhido) => {
-                  if (idEscolhido !== fornecedorSel.id) {
-                    const outro = fornecedores.find(f => f.id === idEscolhido)
-                    if (outro) { await selecionarFornecedor(outro); await carregarFornecedores(); return }
-                  }
-                  await recarregarDados()
+                  // Lista fresca primeiro: o saldo do fornecedor mudou com o que
+                  // acabou de ser salvo, e selecionarFornecedor guarda o objeto.
+                  const r = await api.get('/api/fornecedores')
+                  setFornecedores(r.data)
+                  const alvo = r.data.find(f => f.id === idEscolhido)
+                  if (alvo) await selecionarFornecedor(alvo)
+                  else await recarregarDados()
                 }}
               />
             </div>
