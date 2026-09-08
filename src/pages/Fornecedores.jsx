@@ -206,9 +206,13 @@ function gerarResumoPDF(fornecedor, pedidos, pagamentos, mes) {
     doc.setTextColor(...PDF_COR_TEXTO)
   }
 
-  caixaResumo(marginX, 'TOTAL COMPRADO', totalComprado, PDF_COR_PENDENTE_FUNDO, PDF_COR_PENDENTE)
-  caixaResumo(marginX + boxW + gap, 'TOTAL PAGO', totalPago, PDF_COR_PAGO_FUNDO, PDF_COR_PAGO)
-  caixaResumo(marginX + (boxW + gap) * 2, mes ? 'SALDO DO MÊS' : 'SALDO DEVEDOR', totalComprado - totalPago, PDF_COR_DEVEDOR_FUNDO, PDF_COR_DEVEDOR)
+  const saldoDevedorTotal = fornecedor.saldo_aberto != null
+    ? Number(fornecedor.saldo_aberto)
+    : totalComprado - totalPago
+
+  caixaResumo(marginX, mes ? 'COMPRADO NO MÊS' : 'TOTAL COMPRADO', totalComprado, PDF_COR_PENDENTE_FUNDO, PDF_COR_PENDENTE)
+  caixaResumo(marginX + boxW + gap, mes ? 'PAGO NO MÊS' : 'TOTAL PAGO', totalPago, PDF_COR_PAGO_FUNDO, PDF_COR_PAGO)
+  caixaResumo(marginX + (boxW + gap) * 2, 'AINDA DEVO (TOTAL)', saldoDevedorTotal, PDF_COR_DEVEDOR_FUNDO, PDF_COR_DEVEDOR)
 
   const nomeArquivo = `resumo-${(fornecedor.apelido || fornecedor.nome).toLowerCase().replace(/\s+/g, '-')}${mes ? `-${mes}` : ''}.pdf`
   doc.save(nomeArquivo)
@@ -366,7 +370,7 @@ function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto
         </span>
         <span style={{ fontSize: 13, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           {mes && <span style={{ color: 'var(--color-text-muted)' }}>Pago no mês: <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(totalPeriodo)}</strong></span>}
-          <span>Saldo devedor{mes ? ' (acumulado)' : ''}: <strong>{formatMoeda(saldoAberto)}</strong></span>
+          <span>Ainda devo (total): <strong>{formatMoeda(saldoAberto)}</strong></span>
         </span>
       </div>
 
@@ -944,7 +948,7 @@ export default function Fornecedores() {
               <span>Comprado {mesFiltro ? 'no mês' : 'no total'}: <strong>{formatMoeda(totalCompradoNoMes)}</strong></span>
               <span>Pago {mesFiltro ? 'no mês' : 'no total'}: <strong>{formatMoeda(totalPagoNoMes)}</strong></span>
               <span style={{ color: 'var(--color-text-muted)' }}>
-                Em aberto (acumulado): <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(fornecedorSel.saldo_aberto)}</strong>
+                Ainda devo (total): <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(fornecedorSel.saldo_aberto)}</strong>
               </span>
             </div>
           </div>
