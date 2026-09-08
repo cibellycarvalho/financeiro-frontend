@@ -3,6 +3,7 @@ import { jsPDF } from 'jspdf'
 import Layout from '../components/Layout'
 import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import ItensPedidoForm, { ITEM_VAZIO } from '../components/ItensPedidoForm'
 
 const inputStyle = { display: 'block', width: '100%', padding: 8, marginTop: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', boxSizing: 'border-box' }
 
@@ -685,8 +686,6 @@ function AdicionarItemForm({ onAdicionar }) {
   )
 }
 
-const ITEM_VAZIO = { produto: '', quantidade: '', valor_unitario: '' }
-
 export default function Fornecedores() {
   const { finRole } = useAuth()
   const [fornecedores, setFornecedores] = useState([])
@@ -729,25 +728,6 @@ export default function Fornecedores() {
     setPagamentos(rPagamentos.data)
     setShowForm(false)
   }
-
-  function atualizarItem(index, campo, valor) {
-    const itens = form.itens.map((item, i) => i === index ? { ...item, [campo]: valor } : item)
-    setForm({ ...form, itens })
-  }
-
-  function adicionarItem() {
-    setForm({ ...form, itens: [...form.itens, { ...ITEM_VAZIO }] })
-  }
-
-  function removerItem(index) {
-    setForm({ ...form, itens: form.itens.filter((_, i) => i !== index) })
-  }
-
-  function totalDoItem(item) {
-    return (parseFloat(item.quantidade) || 0) * (parseFloat(item.valor_unitario) || 0)
-  }
-
-  const totalDoPedido = form.itens.reduce((soma, item) => soma + totalDoItem(item), 0)
 
   async function recarregarDados() {
     const [rPedidos, rPagamentos, rFornecedores] = await Promise.all([
@@ -966,40 +946,7 @@ export default function Fornecedores() {
             <form onSubmit={handleSubmit} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 24, marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
               <label style={{ maxWidth: 220 }}>Data do pedido<br /><input required type="date" value={form.data_pedido} onChange={e => setForm({ ...form, data_pedido: e.target.value })} style={inputStyle} /></label>
 
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <span style={{ fontWeight: 600, fontSize: 14 }}>Itens do pedido</span>
-                  <button type="button" onClick={adicionarItem}
-                    style={{ padding: '6px 14px', fontSize: 13, background: 'transparent', color: 'var(--color-accent-solid)', border: '1px solid var(--color-accent-solid)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
-                    + Adicionar produto
-                  </button>
-                </div>
-
-                {form.itens.map((item, i) => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
-                    <label style={{ fontSize: 12 }}>Produto<br />
-                      <input required value={item.produto} onChange={e => atualizarItem(i, 'produto', e.target.value)} style={inputStyle} />
-                    </label>
-                    <label style={{ fontSize: 12 }}>Quantidade<br />
-                      <input required type="number" step="0.01" min="0.01" value={item.quantidade} onChange={e => atualizarItem(i, 'quantidade', e.target.value)} style={inputStyle} />
-                    </label>
-                    <label style={{ fontSize: 12 }}>Valor unit. (R$)<br />
-                      <input required type="number" step="0.01" min="0" value={item.valor_unitario} onChange={e => atualizarItem(i, 'valor_unitario', e.target.value)} style={inputStyle} />
-                    </label>
-                    <div style={{ fontSize: 12 }}>Total<br />
-                      <div style={{ padding: '8px 0', fontWeight: 600 }}>{formatMoeda(totalDoItem(item))}</div>
-                    </div>
-                    <button type="button" onClick={() => removerItem(i)} disabled={form.itens.length === 1}
-                      style={{ padding: 8, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: form.itens.length === 1 ? 'not-allowed' : 'pointer', color: 'var(--color-text-muted)', opacity: form.itens.length === 1 ? 0.4 : 1 }}>
-                      ✕
-                    </button>
-                  </div>
-                ))}
-
-                <div style={{ textAlign: 'right', fontWeight: 700, marginTop: 8, fontSize: 15 }}>
-                  Total do pedido: {formatMoeda(totalDoPedido)}
-                </div>
-              </div>
+              <ItensPedidoForm itens={form.itens} onChange={itens => setForm({ ...form, itens })} />
 
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button type="button" onClick={() => setShowForm(false)} style={{ padding: '8px 20px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', cursor: 'pointer', background: 'transparent', color: 'var(--color-text)' }}>Cancelar</button>
