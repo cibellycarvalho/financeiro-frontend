@@ -27,6 +27,27 @@ function paraDataInput(data) {
   return data ? new Date(data).toISOString().split('T')[0] : ''
 }
 
+// O mês vem sempre em UTC, igual ao formatData acima: o backend manda a data
+// crua (sem hora) e ler em fuso local jogaria o dia 1 para o mês anterior.
+function mesDe(data) {
+  if (!data) return ''
+  const d = new Date(data)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+function mesAtual() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function rotuloMes(mes) {
+  if (!mes) return 'todos os meses'
+  const [ano, m] = mes.split('-')
+  return new Date(Number(ano), Number(m) - 1, 1)
+    .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+}
+
 const PDF_COR_MARCA = [61, 107, 82]
 const PDF_COR_DEVEDOR = [201, 79, 63]
 const PDF_COR_DEVEDOR_FUNDO = [250, 227, 223]
@@ -37,7 +58,7 @@ const PDF_COR_PENDENTE = [161, 110, 26]
 const PDF_COR_TEXTO = [40, 40, 40]
 const PDF_COR_BORDA = [214, 214, 214]
 
-function gerarResumoPDF(fornecedor, pedidos, pagamentos) {
+function gerarResumoPDF(fornecedor, pedidos, pagamentos, mes) {
   const doc = new jsPDF()
   const marginX = 14
   const pageWidth = doc.internal.pageSize.width
@@ -105,6 +126,14 @@ function gerarResumoPDF(fornecedor, pedidos, pagamentos) {
   y += 6
   doc.setFontSize(11)
   doc.text(`Resumo de Pedidos — ${fornecedor.nome}`, marginX, y)
+  if (mes) {
+    y += 5
+    doc.setFontSize(9)
+    doc.setFont(undefined, 'normal')
+    doc.text(rotuloMes(mes), marginX, y)
+    doc.setFontSize(11)
+    doc.setFont(undefined, 'bold')
+  }
   y += 5
   doc.setFontSize(8)
   doc.setFont(undefined, 'normal')
@@ -179,9 +208,9 @@ function gerarResumoPDF(fornecedor, pedidos, pagamentos) {
 
   caixaResumo(marginX, 'TOTAL COMPRADO', totalComprado, PDF_COR_PENDENTE_FUNDO, PDF_COR_PENDENTE)
   caixaResumo(marginX + boxW + gap, 'TOTAL PAGO', totalPago, PDF_COR_PAGO_FUNDO, PDF_COR_PAGO)
-  caixaResumo(marginX + (boxW + gap) * 2, 'SALDO DEVEDOR', totalComprado - totalPago, PDF_COR_DEVEDOR_FUNDO, PDF_COR_DEVEDOR)
+  caixaResumo(marginX + (boxW + gap) * 2, mes ? 'SALDO DO MÊS' : 'SALDO DEVEDOR', totalComprado - totalPago, PDF_COR_DEVEDOR_FUNDO, PDF_COR_DEVEDOR)
 
-  const nomeArquivo = `resumo-${(fornecedor.apelido || fornecedor.nome).toLowerCase().replace(/\s+/g, '-')}.pdf`
+  const nomeArquivo = `resumo-${(fornecedor.apelido || fornecedor.nome).toLowerCase().replace(/\s+/g, '-')}${mes ? `-${mes}` : ''}.pdf`
   doc.save(nomeArquivo)
 }
 
@@ -307,7 +336,7 @@ function LinhaPagamento({ pagamento, onEditar, onExcluir }) {
   )
 }
 
-function PainelPagamentosFornecedor({ pagamentos, saldoAberto, podeEditar, onRegistrar, onEditar, onExcluir }) {
+function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto, podeEditar, onRegistrar, onEditar, onExcluir }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [valor, setValor] = useState('')
   const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().split('T')[0])
@@ -335,8 +364,9 @@ function PainelPagamentosFornecedor({ pagamentos, saldoAberto, podeEditar, onReg
         <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>
           Pagamentos{pagamentos.length ? ` (${pagamentos.length})` : ''}
         </span>
-        <span style={{ fontSize: 13 }}>
-          Saldo devedor: <strong>{formatMoeda(saldoAberto)}</strong>
+        <span style={{ fontSize: 13, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          {mes && <span style={{ color: 'var(--color-text-muted)' }}>Pago no mês: <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(totalPeriodo)}</strong></span>}
+          <span>Saldo devedor{mes ? ' (acumulado)' : ''}: <strong>{formatMoeda(saldoAberto)}</strong></span>
         </span>
       </div>
 
@@ -347,7 +377,9 @@ function PainelPagamentosFornecedor({ pagamentos, saldoAberto, podeEditar, onReg
           ))}
         </div>
       ) : (
-        <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--color-text-muted)' }}>Nenhum pagamento registrado ainda.</p>
+        <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--color-text-muted)' }}>
+          {mes ? `Nenhum pagamento em ${rotuloMes(mes)}.` : 'Nenhum pagamento registrado ainda.'}
+        </p>
       )}
 
       {podeEditar && saldoAberto > 0 && !mostrarForm && (
@@ -653,6 +685,19 @@ export default function Fornecedores() {
   const [erro, setErro] = useState(null)
   const [modalNovo, setModalNovo] = useState(false)
   const [modalEditar, setModalEditar] = useState(null)
+  const [mesFiltro, setMesFiltro] = useState(mesAtual())
+
+  // Filtro só de exibição: pedidos e pagamentos continuam vindo inteiros do
+  // backend, e o saldo em aberto do fornecedor segue acumulado (é dívida, não
+  // fecha no mês).
+  const pedidosDoMes = mesFiltro ? pedidos.filter(p => mesDe(p.data_pedido) === mesFiltro) : pedidos
+  const pagamentosDoMes = mesFiltro ? pagamentos.filter(pg => mesDe(pg.data_pagamento) === mesFiltro) : pagamentos
+  const totalCompradoNoMes = pedidosDoMes.reduce((soma, p) => soma + Number(p.valor_total || 0), 0)
+  const totalPagoNoMes = pagamentosDoMes.reduce((soma, pg) => soma + Number(pg.valor || 0), 0)
+  const mesesComMovimento = [...new Set([
+    ...pedidos.map(p => mesDe(p.data_pedido)),
+    ...pagamentos.map(pg => mesDe(pg.data_pagamento))
+  ].filter(Boolean))].sort().reverse()
 
   async function carregarFornecedores() {
     const r = await api.get('/api/fornecedores')
@@ -714,6 +759,7 @@ export default function Fornecedores() {
         valor_unitario: parseFloat(item.valor_unitario)
       }))
       await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos`, { data_pedido: form.data_pedido, itens })
+      irParaOMesDe(form.data_pedido)
       setShowForm(false)
       setForm({ data_pedido: '', itens: [{ ...ITEM_VAZIO }] })
       await recarregarDados()
@@ -722,10 +768,18 @@ export default function Fornecedores() {
     }
   }
 
+  // Sem isto, lançar em agosto com a tela filtrada em setembro salva certo e
+  // some da vista — parece que não gravou.
+  function irParaOMesDe(data) {
+    const mes = mesDe(data)
+    if (mesFiltro && mes && mes !== mesFiltro) setMesFiltro(mes)
+  }
+
   async function registrarPagamentoFornecedor(valor, dataPagamento) {
     await api.post(`/api/fornecedores/${fornecedorSel.id}/pagamentos`, {
       valor, data_pagamento: dataPagamento
     })
+    irParaOMesDe(dataPagamento)
     await recarregarDados()
   }
 
@@ -733,6 +787,7 @@ export default function Fornecedores() {
     await api.put(`/api/fornecedores/${fornecedorSel.id}/pagamentos/${pagamentoId}`, {
       valor, data_pagamento: dataPagamento
     })
+    irParaOMesDe(dataPagamento)
     await recarregarDados()
   }
 
@@ -777,6 +832,7 @@ export default function Fornecedores() {
 
   async function editarDataPedido(pedidoId, dataPedido) {
     await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}`, { data_pedido: dataPedido })
+    irParaOMesDe(dataPedido)
     await recarregarDados()
   }
 
@@ -859,11 +915,11 @@ export default function Fornecedores() {
         <>
           {erro && <p style={{ color: 'var(--color-danger)', marginBottom: 12 }}>{erro}</p>}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2>Pedidos — {fornecedorSel.nome}</h2>
+            <h2 style={{ margin: 0 }}>Pedidos — {fornecedorSel.nome}<span style={{ fontWeight: 400, fontSize: 15, color: 'var(--color-text-muted)' }}>{mesFiltro ? ` · ${rotuloMes(mesFiltro)}` : ' · todos os meses'}</span></h2>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => gerarResumoPDF(fornecedorSel, pedidos, pagamentos)}
-                disabled={pedidos.length === 0 && pagamentos.length === 0}
-                style={{ padding: '8px 20px', background: 'transparent', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: (pedidos.length === 0 && pagamentos.length === 0) ? 'not-allowed' : 'pointer', opacity: (pedidos.length === 0 && pagamentos.length === 0) ? 0.5 : 1 }}>
+              <button onClick={() => gerarResumoPDF(fornecedorSel, pedidosDoMes, pagamentosDoMes, mesFiltro)}
+                disabled={pedidosDoMes.length === 0 && pagamentosDoMes.length === 0}
+                style={{ padding: '8px 20px', background: 'transparent', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: (pedidosDoMes.length === 0 && pagamentosDoMes.length === 0) ? 'not-allowed' : 'pointer', opacity: (pedidosDoMes.length === 0 && pagamentosDoMes.length === 0) ? 0.5 : 1 }}>
                 📄 Baixar PDF
               </button>
               {finRole === 'fin_admin' && (
@@ -872,6 +928,24 @@ export default function Fornecedores() {
                   + Novo pedido
                 </button>
               )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap', marginBottom: 16, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px' }}>
+            <label style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Mês<br />
+              <input type="month" value={mesFiltro} onChange={e => setMesFiltro(e.target.value)}
+                style={{ ...inputStyle, marginTop: 4, width: 170 }} />
+            </label>
+            <button onClick={() => setMesFiltro(mesFiltro ? '' : mesAtual())}
+              style={{ padding: '8px 16px', fontSize: 13, background: mesFiltro ? 'transparent' : 'var(--color-accent-solid)', color: mesFiltro ? 'var(--color-text)' : 'var(--color-on-accent)', border: mesFiltro ? '1px solid var(--color-border)' : 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+              Todos os meses
+            </button>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 13 }}>
+              <span>Comprado {mesFiltro ? 'no mês' : 'no total'}: <strong>{formatMoeda(totalCompradoNoMes)}</strong></span>
+              <span>Pago {mesFiltro ? 'no mês' : 'no total'}: <strong>{formatMoeda(totalPagoNoMes)}</strong></span>
+              <span style={{ color: 'var(--color-text-muted)' }}>
+                Em aberto (acumulado): <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(fornecedorSel.saldo_aberto)}</strong>
+              </span>
             </div>
           </div>
 
@@ -930,7 +1004,7 @@ export default function Fornecedores() {
               </tr>
             </thead>
             <tbody>
-              {pedidos.map(p => {
+              {pedidosDoMes.map(p => {
                 const itens = p.itens && p.itens.length > 0 ? p.itens : [null]
                 const linhasItens = itens.map((item, i) => (
                   <tr key={item ? item.id : p.id} style={{ borderTop: '1px solid var(--color-border)' }}>
@@ -982,17 +1056,30 @@ export default function Fornecedores() {
                   )
                 ]
               })}
-              {pedidos.length === 0 && (
-                <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-muted)' }}>Nenhum pedido cadastrado.</td></tr>
+              {pedidosDoMes.length === 0 && (
+                <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                  {pedidos.length === 0 ? 'Nenhum pedido cadastrado.' : (
+                    <>
+                      Nenhum pedido em {rotuloMes(mesFiltro)}.{' '}
+                      <button onClick={() => setMesFiltro('')}
+                        style={{ background: 'transparent', border: 'none', padding: 0, color: 'var(--color-accent-solid)', cursor: 'pointer', textDecoration: 'underline', font: 'inherit' }}>
+                        Ver todos os meses
+                      </button>
+                      {mesesComMovimento.length > 0 && ` — tem movimento em ${mesesComMovimento.slice(0, 3).map(rotuloMes).join(', ')}.`}
+                    </>
+                  )}
+                </td></tr>
               )}
             </tbody>
           </table>
 
           <div style={{ marginTop: 32 }}>
-            <h2 style={{ marginBottom: 16 }}>Pagamentos — {fornecedorSel.nome}</h2>
+            <h2 style={{ marginBottom: 16 }}>Pagamentos — {fornecedorSel.nome}<span style={{ fontWeight: 400, fontSize: 15, color: 'var(--color-text-muted)' }}>{mesFiltro ? ` · ${rotuloMes(mesFiltro)}` : ' · todos os meses'}</span></h2>
             <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
               <PainelPagamentosFornecedor
-                pagamentos={pagamentos}
+                pagamentos={pagamentosDoMes}
+                mes={mesFiltro}
+                totalPeriodo={totalPagoNoMes}
                 saldoAberto={fornecedorSel.saldo_aberto}
                 podeEditar={finRole === 'fin_admin'}
                 onRegistrar={registrarPagamentoFornecedor}
