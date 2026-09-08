@@ -53,6 +53,8 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
   const [itens, setItens] = useState([{ ...ITEM_VAZIO }])
   const [leitura, setLeitura] = useState(null)   // resposta crua do /pedidos/ler
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewTipo, setPreviewTipo] = useState(null)
+  const [pedidoSalvoId, setPedidoSalvoId] = useState(null)
 
   // pagamento
   const [pago, setPago] = useState(null)         // null | false | true
@@ -70,7 +72,8 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     setEtapa('ocioso'); setErro(null)
     setFornecedorId(fornecedorSel.id); setNumeroPedido(''); setDataPedido('')
-    setItens([{ ...ITEM_VAZIO }]); setLeitura(null); setPreviewUrl(null)
+    setItens([{ ...ITEM_VAZIO }]); setLeitura(null); setPreviewUrl(null); setPreviewTipo(null)
+    setPedidoSalvoId(null)
     setPago(null); setComprovante(null); setValorPix(''); setDataPix('')
   }
 
@@ -85,6 +88,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
       const lido = r.data
       setLeitura(lido)
       setPreviewUrl(URL.createObjectURL(arquivo))
+      setPreviewTipo(arquivo.type)
       setFornecedorId(lido.fornecedor_sugerido_id || fornecedorSel.id)
       setNumeroPedido(lido.numero_pedido || '')
       setDataPedido(lido.data_pedido || '')
@@ -120,19 +124,29 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
     if (!dataPedido) { setErro('Informe a data do pedido.'); return }
     if (pago === null) { setErro('Diga se o pedido já foi pago.'); return }
     if (pago && !comprovante) { setErro('Suba o comprovante do Pix.'); return }
-    setEtapa('salvando')
-    try {
-      await api.post(`/api/fornecedores/${fornecedorId}/pedidos`, {
-        data_pedido: dataPedido,
-        numero_pedido: numeroPedido || null,
-        itens: itens.map(i => ({ produto: i.produto, quantidade: parseFloat(i.quantidade), valor_unitario: parseFloat(i.valor_unitario) })),
-        arquivo_token: leitura?.arquivo_token || null,
-        alias_vendedor: leitura?.texto_vendedor || null,
-      })
-    } catch (err) {
-      setErro(mensagemDe(err, 'Erro ao salvar o pedido.'))
-      setEtapa('conferindo')
+    if (pago === false && pedidoSalvoId) {
+      // o pedido já foi salvo antes (retomando depois de uma falha no pagamento)
+      // e agora ela decidiu não pagar: não há mais nada a gravar.
+      reiniciar()
+      onSalvo(fornecedorId)
       return
+    }
+    setEtapa('salvando')
+    if (!pedidoSalvoId) {
+      try {
+        const r = await api.post(`/api/fornecedores/${fornecedorId}/pedidos`, {
+          data_pedido: dataPedido,
+          numero_pedido: numeroPedido || null,
+          itens: itens.map(i => ({ produto: i.produto, quantidade: parseFloat(i.quantidade), valor_unitario: parseFloat(i.valor_unitario) })),
+          arquivo_token: leitura?.arquivo_token || null,
+          alias_vendedor: leitura?.texto_vendedor || null,
+        })
+        setPedidoSalvoId(r.data.id)
+      } catch (err) {
+        setErro(mensagemDe(err, 'Erro ao salvar o pedido.'))
+        setEtapa('conferindo')
+        return
+      }
     }
     if (pago) {
       try {
@@ -145,7 +159,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
         })
       } catch (err) {
         // o pedido já foi salvo: não deixar parecer que tudo falhou
-        setErro(`Pedido salvo, mas o pagamento não: ${mensagemDe(err, 'erro ao registrar')}. Registre o pagamento à mão no pé da página.`)
+        setErro(`Pedido salvo, mas o pagamento não: ${mensagemDe(err, 'erro ao registrar')} — clique em Salvar pagamento para tentar de novo.`)
         setEtapa('conferindo')
         onSalvo(fornecedorId)
         return
@@ -248,9 +262,11 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
         {erro && <p style={{ color: 'var(--color-danger)', margin: 0, fontSize: 13 }}>{erro}</p>}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button type="button" onClick={reiniciar} style={botaoSecundario}>Cancelar</button>
+          <button type="button" onClick={reiniciar} style={botaoSecundario}>{pedidoSalvoId ? 'Fechar' : 'Cancelar'}</button>
           <button type="submit" disabled={etapa === 'salvando'} style={botaoPrimario}>
             {etapa === 'salvando' ? 'Salvando…'
+              : pedidoSalvoId && pago === false ? 'Concluir'
+              : pedidoSalvoId ? 'Salvar pagamento'
               : pago && comprovante?.pagamento_existente ? 'Salvar mesmo assim'
               : pago ? 'Salvar pedido e pagamento' : 'Salvar pedido'}
           </button>
@@ -259,11 +275,11 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
 
       {previewUrl && (
         <div style={{ position: 'sticky', top: 16, alignSelf: 'start' }}>
-          {leitura && previewUrl.startsWith('blob:') && (
-            <object data={previewUrl} type="application/pdf" style={{ width: '100%', height: 420, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
-              <img src={previewUrl} alt="Pedido enviado" style={{ maxWidth: '100%', borderRadius: 'var(--radius-sm)' }} />
-            </object>
-          )}
+          {previewTipo === 'application/pdf'
+            ? <object data={previewUrl} type="application/pdf" style={{ width: '100%', height: 420, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+                <a href={previewUrl} target="_blank" rel="noopener">Abrir o PDF</a>
+              </object>
+            : <img src={previewUrl} alt="Pedido enviado" style={{ maxWidth: '100%', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }} />}
         </div>
       )}
     </form>
