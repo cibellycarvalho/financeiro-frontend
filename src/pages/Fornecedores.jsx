@@ -144,46 +144,55 @@ function gerarResumoPDF(fornecedor, pedidos, pagamentos, mes) {
 
   desenharCabecalhoTabela()
 
-  const linhas = []
+  // A compra é a unidade: os itens de um mesmo pedido saem juntos e fecham num
+  // subtotal, em vez de virarem linhas soltas ordenadas por data.
+  const eventos = []
   pedidos.forEach(p => {
-    if (p.itens && p.itens.length > 0) {
-      p.itens.forEach(item => {
-        linhas.push({
-          tipo: 'item', data: p.data_pedido, produto: item.produto,
-          quantidade: item.quantidade, valorUnitario: item.valor_unitario, valorTotal: item.valor_total
-        })
-      })
-    } else {
-      linhas.push({
-        tipo: 'item', data: p.data_pedido, produto: p.descricao_produtos || 'Saldo devedor',
+    const itens = p.itens && p.itens.length > 0
+      ? p.itens.map(item => ({
+        produto: item.produto, quantidade: item.quantidade,
+        valorUnitario: item.valor_unitario, valorTotal: item.valor_total
+      }))
+      : [{
+        produto: p.descricao_produtos || 'Saldo devedor',
         quantidade: null, valorUnitario: null, valorTotal: p.valor_total
-      })
-    }
+      }]
+    eventos.push({ tipo: 'compra', data: p.data_pedido, itens, valorTotal: p.valor_total })
   })
   pagamentos.forEach(pg => {
-    linhas.push({ tipo: 'pagamento', data: pg.data_pagamento, valor: pg.valor })
+    eventos.push({ tipo: 'pagamento', data: pg.data_pagamento, valor: pg.valor })
   })
-  linhas.sort((a, b) => new Date(a.data) - new Date(b.data))
+  eventos.sort((a, b) => new Date(a.data) - new Date(b.data))
 
   let totalComprado = 0
   let totalPago = 0
 
-  linhas.forEach(linha => {
-    if (linha.tipo === 'item') {
-      desenharLinha(
-        [formatData(linha.data), linha.produto,
-          linha.quantidade != null ? Number(linha.quantidade).toLocaleString('pt-BR') : '',
-          linha.valorUnitario != null ? formatMoeda(linha.valorUnitario) : '',
-          formatMoeda(linha.valorTotal), ''],
-        { cores: { 4: PDF_COR_DEVEDOR } }
-      )
-      totalComprado += Number(linha.valorTotal)
+  eventos.forEach(evento => {
+    if (evento.tipo === 'compra') {
+      evento.itens.forEach(item => {
+        desenharLinha(
+          [formatData(evento.data), item.produto,
+            item.quantidade != null ? Number(item.quantidade).toLocaleString('pt-BR') : '',
+            item.valorUnitario != null ? formatMoeda(item.valorUnitario) : '',
+            formatMoeda(item.valorTotal), ''],
+          { cores: { 4: PDF_COR_DEVEDOR } }
+        )
+        totalComprado += Number(item.valorTotal)
+      })
+      // Item sozinho já se explica: repetir o valor logo abaixo só polui.
+      if (evento.itens.length > 1) {
+        desenharLinha(
+          ['', `Subtotal da compra de ${formatData(evento.data)}`, '', '',
+            formatMoeda(evento.valorTotal), ''],
+          { fundo: PDF_COR_PENDENTE_FUNDO, negrito: true, cores: { 1: PDF_COR_PENDENTE, 4: PDF_COR_PENDENTE } }
+        )
+      }
     } else {
       desenharLinha(
-        [formatData(linha.data), 'PAGAMENTO REALIZADO', '', '', '', formatMoeda(linha.valor)],
+        [formatData(evento.data), 'PAGAMENTO REALIZADO', '', '', '', formatMoeda(evento.valor)],
         { fundo: PDF_COR_PAGO_FUNDO, negrito: true, cores: { 1: PDF_COR_PAGO, 5: PDF_COR_PAGO } }
       )
-      totalPago += Number(linha.valor)
+      totalPago += Number(evento.valor)
     }
   })
 
