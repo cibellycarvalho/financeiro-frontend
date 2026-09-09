@@ -1848,3 +1848,77 @@ separou em cinco minutos.
 ação — e principalmente antes de virar número em reais — ele passa pelo painel,
 que fala a língua da operação. Custa minutos e impede perseguir uma pendência
 que não existe.
+
+## 09/09 — o apagão de 25 horas, e duas leituras erradas minhas
+
+Primeira semana com a tabela de heartbeat no ar. Ela pagou o custo dela na
+primeira consulta: **sem ela, ninguém saberia que o sistema ficou fora.**
+
+### O que realmente aconteceu
+
+Um evento só. Entre **07/09 07:18 UTC e 08/09 21:02 UTC** o container ficou
+fora do ar — cerca de 25 horas. Evidência nos logs do Supabase: zero conexão
+ao banco no intervalo, enquanto o Postgres seguia fazendo checkpoint
+normalmente. **O banco estava saudável; o app não estava lá.** O porquê está
+nos logs do EasyPanel, fora do alcance da sessão.
+
+Consequência: os ciclos das manhãs de 07 e 08/09 nunca dispararam, e com eles
+sumiram os dados de 06 e 07/09.
+
+### As duas leituras erradas
+
+**Minha:** anunciei à Cibelly que o sistema teve "falha silenciosa com o
+processo vivo" e que "hoje a coleta está 8 horas atrasada". As duas eram o
+mesmo engano — `run_coletor_diario` sempre coleta o **dia anterior**, então a
+linha datada de 06/09 é produzida pelo ciclo da manhã de 07/09. Comparei data
+de métrica com data de heartbeat como se fossem o mesmo dia.
+
+**Da sessão:** a mesma coisa, um passo antes, e ela corrigiu sozinha depois de
+rodar o coletor à mão e não encontrar exceção nenhuma.
+
+Não havia segunda falha. **Havia um apagão e um desalinhamento de data na
+nossa leitura.**
+
+O endurecimento que a sessão implementou (aviso no Telegram quando uma conta
+falha) é correto e útil — mas não teria pego este incidente: não houve exceção,
+o processo inteiro estava fora.
+
+### Recuperação
+
+402 linhas de visitas recuperadas para 06 e 07/09 via
+`/items/{id}/visits/time_window`, com `origem = 'manual'`. Estoque, preço e
+status ficaram **NULL de propósito** — são foto do momento e o momento passou.
+Não fabricar dado que não existe mais é a diferença entre um buraco conhecido e
+um número errado.
+
+### A eleição do scheduler está aberta, e agora com sintoma visível
+
+Os **dois PIDs gravam heartbeat intercalados desde 02/09** — não é um assumindo
+depois que o outro caiu, é concorrência contínua. A correção que deployamos não
+pegou.
+
+E deixou de ser problema interno: a Cibelly recebeu hoje **duas mensagens
+idênticas** de `perguntas_lembrete`, um dos 11 jobs sem trava própria. Dois
+workers se achando líder, cada um disparando o mesmo lembrete.
+
+Hipótese principal: **`DATABASE_URL` apontando para o pooler do Supabase**
+(porta 6543, modo transaction). Nesse modo `pg_try_advisory_lock` não sobrevive
+entre transações, e os dois workers ganham. A conexão do lock precisa ser
+direta (5432, modo session).
+
+Se for isso, a mesma dúvida cai sobre os locks dos três jobs de negócio:
+`pg_advisory_lock` (sessão) não funciona no pooler; `pg_try_advisory_xact_lock`
+(transação) funciona. Se eles escaparam, foi por serem de transação — ou por
+sorte.
+
+### O monitor externo deixou de ser precaução
+
+Vinte e cinco horas fora, dois dias de dado perdido, e **a única razão de
+sabermos é que fomos procurar hoje.** A Cibelly percebeu a falta de mensagem no
+dia 07 — o monitor humano funcionou, mas perceber não é agir, e ela não tem como
+levantar um servidor.
+
+O que fecha: endpoint público lendo `ml_scheduler_heartbeat`, devolvendo erro se
+o último registro passou de 60 minutos, e um monitor externo gratuito batendo
+nele. É a única coisa que sobrevive à aplicação inteira cair — que é exatamente
+o que aconteceu.
