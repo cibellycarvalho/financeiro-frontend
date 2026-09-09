@@ -222,8 +222,10 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
     <form onSubmit={salvar} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 24, marginBottom: 24, display: 'grid', gridTemplateColumns: previewUrl ? '1fr 320px' : '1fr', gap: 24 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {leitura?.leitura_falhou && (
-          <Faixa>Não consegui ler esse arquivo. Preencha à mão — o arquivo fica anexado mesmo assim.</Faixa>
+          <Faixa>Não consegui ler esse arquivo. Preencha à mão.</Faixa>
         )}
+
+        {leitura?.aviso && <Faixa>{leitura.aviso}</Faixa>}
 
         <label style={{ fontSize: 13 }}>Esse pedido é de<br />
           <select value={fornecedorId} onChange={e => setFornecedorId(e.target.value)} style={{ ...inputStyle, width: 260 }}>
@@ -269,6 +271,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
 
           {pago && comprovante && (
             <div style={{ marginTop: 12, background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', padding: 12 }}>
+              {comprovante.aviso && <Faixa>{comprovante.aviso}</Faixa>}
               {comprovante.leitura_falhou
                 ? <Faixa>Não consegui ler o comprovante. Preencha valor e data.</Faixa>
                 : <p style={{ margin: '0 0 8px', fontSize: 14 }}>
