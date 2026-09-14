@@ -50,7 +50,32 @@ const CHAVE = 'caixa-semana:planejamento'
 const NOMES_DIA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
 
 const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-const valorBR = t => Number(String(t).replace(/\./g, '').replace(',', '.'))
+/**
+ * Le valor em dinheiro do jeito que a pessoa escreve, nao do jeito que o
+ * Javascript gosta.
+ *
+ * Os campos eram type="number": digitar "5.922,92" — que e como o valor
+ * aparece no Mercado Pago e como qualquer pessoa daqui escreve — dava campo
+ * invalido, que o navegador entrega como string vazia. O saldo virava zero sem
+ * uma mensagem, e a "Sobra para comprar" saia errada parecendo certa.
+ *
+ * Aceita "5.922,92", "5922,92", "5922.92", "R$ 5.922,92" e "5.922" (mil
+ * novecentos e vinte e dois). O unico caso ambiguo e o ponto sozinho com tres
+ * casas: "5.922" e milhar aqui, porque valor em real tem duas casas decimais,
+ * nao tres.
+ */
+export function numeroBR(t) {
+  if (t === null || t === undefined) return 0
+  let s = String(t).trim().replace(/R\$/gi, '').replace(/\s/g, '')
+  if (s === '') return 0
+  if (s.includes(',')) {
+    s = s.replace(/\./g, '').replace(',', '.')     // 5.922,92 -> 5922.92
+  } else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) {
+    s = s.replace(/\./g, '')                       // 5.922 -> 5922
+  }
+  const n = Number(s)
+  return Number.isFinite(n) ? n : 0
+}
 
 /**
  * Data do backend para Date (meia-noite local), ou null quando não dá para ler.
@@ -125,7 +150,7 @@ export function lerLiberacoes(texto) {
   const porDia = {}
   let m
   while ((m = re.exec(texto)) !== null) {
-    const v = valorBR(m[4])
+    const v = numeroBR(m[4])
     porDia[Number(m[2])] = (m[3] === '-' || m[3] === '−') ? -v : v
   }
   return porDia
@@ -208,6 +233,26 @@ function Linha({ esquerda, direita, apoio, tom }) {
         color: tom === 'divida' ? 'var(--color-warning)' : 'var(--color-text)',
       }}>{direita}</span>
     </div>
+  )
+}
+
+/**
+ * Devolve em voz alta o valor que a tela entendeu do que foi digitado.
+ *
+ * Sem isto, "5.922,92" lido como 5,92 seria indistinguivel de 5.922,92 lido
+ * certo: os dois parecem iguais no campo. O eco custa uma linha e transforma
+ * um erro silencioso em erro obvio.
+ */
+function Lido({ valor }) {
+  const cru = String(valor ?? '').trim()
+  if (cru === '') return null
+  return (
+    <span style={{
+      display: 'block', marginTop: 5, fontSize: 11.5,
+      color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums',
+    }}>
+      = {brl(numeroBR(cru))}
+    </span>
   )
 }
 
@@ -322,8 +367,8 @@ export default function CaixaSemana() {
   const totalRepasse = colou ? totalColado : totalGravado
 
   // ---- a conta ------------------------------------------------------------
-  const saldo = Number(daSemana.saldo || 0)
-  const reserva = Number(daSemana.reserva || 0)
+  const saldo = numeroBR(daSemana.saldo)
+  const reserva = numeroBR(daSemana.reserva)
   const sobra = saldo + totalRepasse - totalFlavia - totalBoletos
 
   // Depois de alguns dias a data do saldo aparece junto do numero, discreta.
@@ -432,17 +477,19 @@ export default function CaixaSemana() {
             }}>
               <label>
                 <span style={rotulo}>Saldo em conta hoje</span>
-                <input type="number" step="0.01" style={entrada}
+                <input type="text" inputMode="decimal" style={entrada}
                        value={daSemana.saldo ?? ''}
                        onChange={e => salvar({ saldo: e.target.value })}
-                       placeholder="0,00" />
+                       placeholder="5.922,92" />
+                <Lido valor={daSemana.saldo} />
               </label>
               <label>
                 <span style={rotulo}>Reserva aplicada</span>
-                <input type="number" step="0.01" style={entrada}
+                <input type="text" inputMode="decimal" style={entrada}
                        value={daSemana.reserva ?? ''}
                        onChange={e => salvar({ reserva: e.target.value })}
-                       placeholder="0,00" />
+                       placeholder="59.256,58" />
+                <Lido valor={daSemana.reserva} />
               </label>
             </div>
 

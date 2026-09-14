@@ -11,7 +11,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
-import CaixaSemana, { lerLiberacoes, dividaPorPedido } from './CaixaSemana'
+import CaixaSemana, { lerLiberacoes, dividaPorPedido, numeroBR } from './CaixaSemana'
 
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn() },
@@ -124,6 +124,19 @@ Terça-feira, 15+R$16.407,92`)
     // As linhas de dentro do dia não entram: o total do dia já vem líquido, e
     // somar os dois contaria o mesmo dinheiro duas vezes.
     expect(porDia).toEqual({ 14: 5809.88, 15: 16407.92 })
+  })
+
+  it('lê valor em dinheiro do jeito que se escreve aqui', () => {
+    // O campo era type="number": "5.922,92" virava campo inválido, que o
+    // navegador entrega como string vazia, e o saldo virava zero calado.
+    expect(numeroBR('5.922,92')).toBe(5922.92)
+    expect(numeroBR('R$ 59.256,58')).toBe(59256.58)
+    expect(numeroBR('5922,92')).toBe(5922.92)
+    expect(numeroBR('5922.92')).toBe(5922.92)   // quem digita com ponto também acerta
+    expect(numeroBR('5.922')).toBe(5922)        // ponto com 3 casas é milhar, não decimal
+    expect(numeroBR('')).toBe(0)
+    expect(numeroBR(null)).toBe(0)
+    expect(numeroBR('abc')).toBe(0)
   })
 
   it('o saldo de abertura conta como vencido no cálculo da dívida', () => {
