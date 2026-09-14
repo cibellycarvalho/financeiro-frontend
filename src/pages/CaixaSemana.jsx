@@ -211,15 +211,15 @@ function Linha({ esquerda, direita, apoio, tom }) {
   )
 }
 
-function Aviso({ tom = 'atencao', children }) {
-  const cor = { ok: 'var(--color-success)', atencao: 'var(--color-warning)', nao: 'var(--color-danger)' }[tom]
+/** Aviso sobre os dados em si — não sobre o que fazer com o dinheiro. */
+function Aviso({ children }) {
   return (
     <div style={{
       display: 'flex', gap: 9, alignItems: 'baseline', fontSize: 13.5,
       padding: '10px 12px', borderRadius: 'var(--radius-sm)',
-      background: 'var(--color-row)', borderLeft: `3px solid ${cor}`,
+      background: 'var(--color-row)', borderLeft: '3px solid var(--color-warning)',
     }}>
-      <span aria-hidden="true">{tom === 'ok' ? '✓' : tom === 'nao' ? '✕' : '⚠'}</span>
+      <span aria-hidden="true">⚠</span>
       <span>{children}</span>
     </div>
   )
@@ -379,7 +379,7 @@ export default function CaixaSemana() {
     <Layout>
       <PaginaHeader
         titulo="Caixa da Semana"
-        subtitulo={`Segunda a domingo · ${periodo}. O que entra, o que precisa sair, e o que sobra para comprar produto.`}
+        subtitulo={`Segunda a domingo · ${periodo}. O que entra, o que sai, e o que sobra para comprar produto.`}
         acao={
           <div style={{ display: 'flex', gap: 8 }}>
             <button style={botao} onClick={() => setRefSemana(somaDias(segunda, -7))}>← Anterior</button>
@@ -429,9 +429,9 @@ export default function CaixaSemana() {
 
           {envelheceu && (
             <div style={{ marginBottom: 16 }}>
-              <Aviso tom="atencao">
-                O saldo e a reserva foram informados em <b>{diaMes(informadoEm)}</b>, há {diasDesde} dias.
-                Os números abaixo podem estar velhos — confira no Mercado Pago e atualize.
+              <Aviso>
+                O saldo e a reserva abaixo são os que você informou em <b>{diaMes(informadoEm)}</b>,
+                há {diasDesde} dias. As contas usam esses valores.
               </Aviso>
             </div>
           )}
@@ -460,7 +460,7 @@ export default function CaixaSemana() {
                         borderRadius: 'var(--radius-sm)',
                         background: 'var(--color-row)',
                         boxShadow: ehHoje ? 'inset 0 0 0 1.5px var(--color-accent-solid)' : 'none',
-                        borderLeft: ehMarco ? '3px solid var(--color-success)' : '3px solid transparent',
+                        borderLeft: ehMarco ? '3px solid var(--color-text-muted)' : '3px solid transparent',
                       }}>
                         <span style={{ fontSize: 13.5, fontWeight: 600 }}>
                           {d.nome} {diaMes(d.data)}{ehHoje ? ' ·' : ''}
@@ -477,28 +477,31 @@ export default function CaixaSemana() {
                   })}
                 </div>
 
-                <div style={{ display: 'grid', gap: 7, marginTop: 14 }}>
-                  {totalFlavia > 0 && (diaFlavia ? (
-                    <>
-                      <Aviso tom="ok">
-                        <b>Flávia ({brl(totalFlavia)}) cabe a partir de {diaFlavia.nome.toLowerCase()} {diaMes(diaFlavia.data)}.</b>{' '}
-                        Pagando nesse dia sobram {brl(diaFlavia.acumulado - totalFlavia)} na hora,
-                        e {brl(dias[6].acumulado - totalFlavia)} até domingo.
-                      </Aviso>
-                      {indiceFlavia > 0 && (
-                        <Aviso tom="atencao">
-                          Antes disso não fecha — na véspera o acumulado é {brl(dias[indiceFlavia - 1].acumulado)},
-                          faltam {brl(totalFlavia - dias[indiceFlavia - 1].acumulado)}.
-                        </Aviso>
-                      )}
-                    </>
-                  ) : (
-                    <Aviso tom="nao">
-                      <b>Flávia ({brl(totalFlavia)}) não cabe nesta semana.</b>{' '}
-                      No domingo o acumulado chega a {brl(dias[6].acumulado)}.
-                    </Aviso>
-                  ))}
-                </div>
+                {/* Fato, não conselho: onde o acumulado passa do valor da
+                    Flávia. Quando pagar, e se vai mexer na reserva, é decisão
+                    da Cibelly — a tela informa e para aí. */}
+                {totalFlavia > 0 && (
+                  <p style={{
+                    margin: '13px 0 0', fontSize: 12.5, lineHeight: 1.6,
+                    color: 'var(--color-text-muted)',
+                  }}>
+                    {diaFlavia ? (
+                      <>
+                        Flávia vencido: {brl(totalFlavia)}. O acumulado passa desse valor
+                        em <b>{diaFlavia.nome.toLowerCase()} {diaMes(diaFlavia.data)}</b> ({brl(diaFlavia.acumulado)}).
+                        {indiceFlavia > 0 && (
+                          <> No dia anterior está em {brl(dias[indiceFlavia - 1].acumulado)},
+                          diferença de {brl(totalFlavia - dias[indiceFlavia - 1].acumulado)}.</>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        Flávia vencido: {brl(totalFlavia)}. O acumulado não passa desse valor
+                        nesta semana — no domingo está em {brl(dias[6].acumulado)}.
+                      </>
+                    )}
+                  </p>
+                )}
               </>
             )}
           </SecaoCard>
@@ -523,7 +526,7 @@ export default function CaixaSemana() {
                       : `Pedido de ${dia(iso(d.data))}`}
                     apoio={d.estado === 'anterior'
                       ? (d.descricao || 'O que já era devido antes deste histórico')
-                      : (d.descricao || 'Vencido — pagar nesta semana')}
+                      : (d.descricao || `Venceu em ${dia(iso(somaDias(d.data, DIAS_DE_PRAZO)))}`)}
                     direita={brl(d.restante)}
                     tom="divida"
                   />
@@ -576,11 +579,14 @@ export default function CaixaSemana() {
             total={brl(reserva)}
             totalRotulo="Aplicado"
           >
-            <Aviso tom="atencao">
-              A reserva é <b>só para reposição que não pode esperar</b> — fornecedor com produto
-              para repor o estoque, e a oportunidade não pode ser perdida. Compra semanal de
-              rotina não usa reserva.
-            </Aviso>
+            {/* Sem recomendacao aqui. A regra de quando a reserva pode ser usada
+                e da Cibelly e esta escrita em docs/regras-caixa-semana.md; na
+                tela ela viraria a tela mandando nela. Pedido dela em 14/09/2026:
+                "quero que o painel apenas me mostre as informacoes e eu vou
+                decidir o que fazer, se vou tirar dinheiro da reserva ou nao". */}
+            <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-text-muted)' }}>
+              Não está no saldo em conta acima, e não entra na sobra para comprar.
+            </p>
           </SecaoCard>
 
           <SecaoCard

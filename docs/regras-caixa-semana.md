@@ -37,10 +37,29 @@ E ela não é para uso geral. Regra da Cibelly, nas palavras dela:
 
 Ou seja: **reposição que não pode esperar**, não compra de rotina.
 
-Por isso a tela mostra a reserva como um número **à parte**, com a regra escrita
-do lado — e nunca somada à sobra. O momento em que a reserva vira compra comum é
-justamente o momento em que ninguém está lembrando para que ela existe; deixar a
-regra na tela é mais confiável que deixar na cabeça.
+Por isso a tela mostra a reserva como um número **à parte**, e nunca somada à
+sobra. A regra de quando usá-la fica aqui, **não na tela** — ver a seção
+seguinte.
+
+## A tela informa; quem decide é a Cibelly
+
+Pedido dela, em 14/09/2026:
+
+> Quero que o painel financeiro apenas me mostre as informações e eu vou decidir
+> o que fazer. Se vou tirar dinheiro da reserva ou não, e etc.
+
+Então a tela **não recomenda, não aprova e não reprova**. Ela diz o que entrou,
+o que sai, quanto tem em cada lugar e em que dia o acumulado passa de tal valor.
+Nenhuma frase do tipo "pagar nesta semana", "cabe", "não fecha" ou "a reserva é
+só para emergência".
+
+Isto não é preciosismo de texto: um painel que opina vira um painel que se
+discute em vez de se consultar, e quando ele erra a premissa — como já errou com
+data e com boleto — o conselho errado tem mais força que o número errado.
+
+A regra da reserva **continua valendo** e continua escrita acima. A diferença é
+que ela é um acordo dela com ela mesma, guardado aqui, e não um aviso que a tela
+repete toda semana.
 
 ## A regra dos 30 dias é só da Flávia
 
