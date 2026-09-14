@@ -182,7 +182,6 @@ export function dividaPorPedido(pedidos, totalPago, hoje) {
     const abatido = Math.min(credito, valor)
     credito -= abatido
     const restante = Number((valor - abatido).toFixed(2))
-    if (restante <= 0) continue
 
     const data = comoData(p.data_pedido)
     linhas.push({
@@ -190,7 +189,12 @@ export function dividaPorPedido(pedidos, totalPago, hoje) {
       data,
       descricao: p.descricao_produtos,
       valor,
+      abatido: Number(abatido.toFixed(2)),
       restante,
+      // Pedido quitado continua na lista em vez de sumir: e ele que explica
+      // para onde foi o dinheiro ja pago. Quem some da conta nao pode ser
+      // conferido.
+      quitado: restante <= 0,
       // Pedido sem data é o saldo de abertura — o que já se devia antes deste
       // histórico, rolando de mês em mês. É a dívida mais antiga que existe.
       estado: !data ? 'anterior' : data <= limite ? 'vencido' : 'a_vencer',
@@ -385,8 +389,14 @@ export default function CaixaSemana() {
   const dividas = flavia && !flavia.ausente
     ? dividaPorPedido(flavia.pedidos, flavia.totalPago, hoje)
     : []
-  const devidos = dividas.filter(d => d.estado === 'vencido' || d.estado === 'anterior')
-  const aVencer = dividas.filter(d => d.estado === 'a_vencer')
+  const pendentes = dividas.filter(d => !d.quitado)
+  const devidos = pendentes.filter(d => d.estado === 'vencido' || d.estado === 'anterior')
+  const aVencer = pendentes.filter(d => d.estado === 'a_vencer')
+  const quitados = dividas.filter(d => d.quitado)
+  // O pedido que o pagamento cobriu so pela metade: e nele que mora a
+  // diferenca entre o que a tela calcula e o que ela tem na cabeca.
+  const partido = pendentes.find(d => d.abatido > 0)
+  const totalPagoFL = flavia && !flavia.ausente ? Number(flavia.totalPago || 0) : 0
   const totalFlavia = devidos.reduce((s, d) => s + d.restante, 0)
   const totalFlaviaAVencer = aVencer.reduce((s, d) => s + d.restante, 0)
 
@@ -704,7 +714,7 @@ export default function CaixaSemana() {
           >
             {flavia.ausente ? (
               <Vazio>Não achei fornecedor com apelido “{APELIDO_FORNECEDOR_COM_PRAZO}”. Cadastre em Fornecedores.</Vazio>
-            ) : dividas.length === 0 ? (
+            ) : pendentes.length === 0 ? (
               <Vazio>Nada em aberto — os pagamentos cobrem todos os pedidos.</Vazio>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -714,9 +724,19 @@ export default function CaixaSemana() {
                     esquerda={d.estado === 'anterior'
                       ? 'Saldo de meses anteriores'
                       : `Pedido de ${dia(iso(d.data))}`}
-                    apoio={d.estado === 'anterior'
-                      ? (d.descricao || 'O que já era devido antes deste histórico')
-                      : (d.descricao || `Venceu em ${dia(iso(somaDias(d.data, DIAS_DE_PRAZO)))}`)}
+                    apoio={[
+                      d.estado === 'anterior'
+                        ? (d.descricao || 'O que já era devido antes deste histórico')
+                        : (d.descricao || `Venceu em ${dia(iso(somaDias(d.data, DIAS_DE_PRAZO)))}`),
+                      // Um pedido pode estar parcialmente coberto porque os
+                      // pagamentos nao sao amarrados a pedido: sobra do
+                      // anterior desce para o seguinte. Sem dizer isso aqui, o
+                      // pedido aparece com valor menor que o real e ninguem
+                      // sabe por que.
+                      d.abatido > 0
+                        ? `${brl(d.valor)} − ${brl(d.abatido)} já abatidos por pagamentos`
+                        : null,
+                    ].filter(Boolean).join(' · ')}
                     direita={brl(d.restante)}
                     tom="divida"
                   />
@@ -735,6 +755,46 @@ export default function CaixaSemana() {
                       />
                     ))}
                   </>
+                )}
+
+                {/* Para onde foi o que ja foi pago.
+                    Pagamento aqui nao e amarrado a pedido (migracao 005): e um
+                    registro corrido de valores e datas. A tela entao consome os
+                    pedidos do mais antigo para o mais novo. Essa alocacao ficava
+                    invisivel, e foi o que deixou uma diferenca de R$ 400,00
+                    inexplicavel em 14/09/2026: nao dava para ver em qual pedido
+                    o dinheiro tinha entrado. */}
+                {totalPagoFL > 0 && (
+                  <details style={{ marginTop: 12 }}>
+                    <summary style={{
+                      fontSize: 12.5, color: 'var(--color-text-muted)', cursor: 'pointer',
+                    }}>
+                      {brl(totalPagoFL)} já pagos — ver em que pedidos entraram
+                    </summary>
+                    <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+                      {quitados.map(d => (
+                        <Linha
+                          key={d.id}
+                          esquerda={d.data ? `Pedido de ${dia(iso(d.data))}` : 'Saldo de meses anteriores'}
+                          apoio="Coberto por inteiro"
+                          direita={brl(d.valor)}
+                        />
+                      ))}
+                      {partido && (
+                        <Linha
+                          esquerda={partido.data ? `Pedido de ${dia(iso(partido.data))}` : 'Saldo de meses anteriores'}
+                          apoio={`Coberto em parte — sobra ${brl(partido.restante)} em aberto`}
+                          direita={brl(partido.abatido)}
+                        />
+                      )}
+                      <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                        Os pagamentos não são amarrados a pedido: entram do mais
+                        antigo para o mais novo, e o que sobra de um desce para o
+                        seguinte. Se algum pedido aqui não deveria estar coberto,
+                        é sinal de pagamento lançado a mais ou de pedido faltando.
+                      </p>
+                    </div>
+                  </details>
                 )}
               </div>
             )}

@@ -81,7 +81,7 @@ describe('Caixa da Semana', () => {
     await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
   })
 
-  it('consome os pedidos do mais antigo para o mais novo com o total já pago', async () => {
+  it('consome os pedidos do mais antigo para o mais novo, e mostra onde o dinheiro entrou', async () => {
     // Pagou 150: cobre o pedido de 01/08 (100) e metade do de 10/08 (50 de 200).
     // Sobram 150 do de 10/08, que já passou dos 30 dias — é o vencido.
     respostas({
@@ -92,8 +92,16 @@ describe('Caixa da Semana', () => {
       pagamentos: [{ id: 'g1', valor: 150, data_pagamento: '2026-08-05' }],
     })
     montar()
-    await waitFor(() => expect(screen.getByText(/Pedido de 10\/08/)).toBeInTheDocument())
-    expect(screen.queryByText(/Pedido de 01\/08/)).not.toBeInTheDocument()
+    // O de 10/08 aparece duas vezes de propósito: na dívida, pelo que falta, e
+    // no detalhamento, pelos R$ 50,00 que o pagamento já cobriu dele.
+    await waitFor(() => expect(screen.getAllByText(/Pedido de 10\/08/).length).toBe(2))
+
+    // O pedido coberto sai da lista de dívida, mas não some da tela: é ele que
+    // explica para onde foi o que já foi pago. Sem isso, uma diferença de
+    // R$ 400,00 fica sem explicação possível — foi o que aconteceu em 14/09.
+    expect(screen.getByText('Coberto por inteiro')).toBeInTheDocument()
+    expect(screen.getByText(/R\$ 150,00 já pagos/)).toBeInTheDocument()
+    expect(screen.getByText(/Coberto em parte/)).toBeInTheDocument()
   })
 
   it('soma boletos atrasados junto com os da semana', async () => {
