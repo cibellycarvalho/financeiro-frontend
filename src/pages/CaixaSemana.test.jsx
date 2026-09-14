@@ -11,7 +11,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
-import CaixaSemana from './CaixaSemana'
+import CaixaSemana, { lerLiberacoes, dividaPorPedido } from './CaixaSemana'
 
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn() },
@@ -42,7 +42,11 @@ function montar() {
   return render(<MemoryRouter><CaixaSemana /></MemoryRouter>)
 }
 
-beforeEach(() => { api.get.mockReset(); api.post.mockReset() })
+beforeEach(() => {
+  api.get.mockReset()
+  api.post.mockReset()
+  localStorage.clear()   // o planejamento da semana mora aqui
+})
 
 describe('Caixa da Semana', () => {
   it('monta sem dado nenhum, em vez de deixar a tela em branco', async () => {
@@ -104,5 +108,37 @@ describe('Caixa da Semana', () => {
     montar()
     await waitFor(() => expect(screen.getByText('DAS atrasado')).toBeInTheDocument())
     expect(screen.queryByText('Já pago')).not.toBeInTheDocument()
+  })
+
+  it('lê os totais de dia da agenda do Mercado Pago e ignora o detalhe', () => {
+    const porDia = lerLiberacoes(`setembro
+Segunda-feira, 14+R$5.809,88
+
+* Liberação de dinheiro
++R$785,58
+13h00
+* Meli+
+-R$98,90
+
+Terça-feira, 15+R$16.407,92`)
+    // As linhas de dentro do dia não entram: o total do dia já vem líquido, e
+    // somar os dois contaria o mesmo dinheiro duas vezes.
+    expect(porDia).toEqual({ 14: 5809.88, 15: 16407.92 })
+  })
+
+  it('o saldo de abertura conta como vencido no cálculo da dívida', () => {
+    const hoje = new Date(2026, 8, 14)
+    const linhas = dividaPorPedido(
+      [
+        { id: 'p0', data_pedido: null, valor_total: 400 },
+        { id: 'p1', data_pedido: '2026-09-13', valor_total: 100 },
+      ],
+      0,
+      hoje,
+    )
+    const semData = linhas.find(l => l.id === 'p0')
+    const recente = linhas.find(l => l.id === 'p1')
+    expect(semData.estado).toBe('anterior')
+    expect(recente.estado).toBe('a_vencer')
   })
 })

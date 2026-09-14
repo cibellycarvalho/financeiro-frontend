@@ -8,30 +8,34 @@
  *   − contas pendentes do MÊS − saldo TOTAL de fornecedores (de sempre)
  *
  * Três horizontes somados — mês, mês e sempre — e ainda subtraindo o que já
- * foi pago, dinheiro que já saiu. O resultado é um número que não serve para
- * decidir nada. Aqui a conta tem um horizonte só: a semana.
+ * foi pago, dinheiro que já saiu. Aqui a conta tem um horizonte só: a semana,
+ * de segunda a domingo.
  *
  * A REGRA DA FLÁVIA. Pagamento a fornecedor neste sistema não é amarrado a
- * pedido (ver migração 005) — é um registro corrido de valores e datas. Então
- * "o que devo à Flávia" se descobre consumindo os pedidos do mais antigo para
- * o mais novo com o total já pago, e vendo onde o dinheiro acabou. O que
- * sobra descoberto e tem mais de 30 dias é o que está vencido. É assim que a
- * Cibelly já faz de cabeça: "até o dia 5 eu paguei, devo os dias 10 e 11".
+ * pedido (migração 005) — é um registro corrido de valores e datas. Então "o
+ * que devo à Flávia" se descobre consumindo os pedidos do mais antigo para o
+ * mais novo com o total já pago, e vendo onde o dinheiro acabou. O que sobra
+ * descoberto e passou de 30 dias é o vencido. É a conta que ela já fazia de
+ * cabeça: "até o dia 5 eu paguei, devo os dias 10 e 11".
  *
- * A regra dos 30 dias vale SÓ para a Flávia — os outros fornecedores não têm
- * prazo combinado assim. Por isso o apelido aparece numa constante aqui e não
- * numa configuração: uma exceção escrita como exceção é mais honesta que uma
- * generalidade que só tem um caso.
+ * A regra dos 30 dias vale SÓ para a Flávia. Por isso o apelido está numa
+ * constante aqui e não numa configuração: exceção escrita como exceção é mais
+ * honesta que generalidade com um caso só.
  *
- * O REPASSE PREVISTO. Não há conciliação bancária neste sistema (o Pluggy foi
- * removido em 08/09/2026), então o que vai entrar na semana é informação que
- * só a Cibelly tem — ela olha os lançamentos futuros do Mercado Pago. O campo
- * embaixo grava isso como um repasse manual. Quando o sync do Mercado Pago
- * traz o valor real (origem 'pluggy'), a tela passa a usar o real e ignora o
- * previsto, para não contar duas vezes — o previsto fica visível, riscado, em
- * vez de desaparecer sem explicação.
+ * PLANEJAMENTO GUARDADO NO NAVEGADOR, NÃO NO BANCO. Saldo em conta, reserva e
+ * os lançamentos futuros do Mercado Pago são informação de PLANEJAMENTO, não
+ * lançamento contábil: ela relê no Mercado Pago toda semana e o número muda.
+ * Gravar isso em fin_repasses_ml criaria registro que ninguém consegue apagar
+ * — `routes/repasses.py` não tem DELETE nem PUT (ver
+ * docs/endpoints-editar-apagar-repasse.md). Um botão que soma e não desfaz é
+ * pior que um campo de digitar.
+ *
+ * Aqui fica no navegador, por semana, livre para reescrever. A troco disso:
+ * some se ela trocar de computador. Daí o "informado em" ao lado de cada valor
+ * e o aviso quando envelhece — dado velho apresentado como atual é o defeito
+ * que este painel mais combate.
  */
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import Layout from '../components/Layout'
 import PaginaHeader from '../components/PaginaHeader'
 import Indicador from '../components/Indicador'
@@ -40,17 +44,21 @@ import api from '../services/api'
 
 const APELIDO_FORNECEDOR_COM_PRAZO = 'FL'
 const DIAS_DE_PRAZO = 30
+const DIAS_ATE_ENVELHECER = 3
+const CHAVE = 'caixa-semana:planejamento'
+
+const NOMES_DIA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
 
 const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const valorBR = t => Number(String(t).replace(/\./g, '').replace(',', '.'))
 
 /**
  * Data do banco para Date, ou null quando não dá para ler.
  *
- * Existe porque `data_pedido` chegou nulo em pedido de produção — a coluna é
- * NOT NULL no schema, e mesmo assim chegou. `new Date('nullT00:00:00')` é
- * Invalid Date, e `toISOString()` num Invalid Date lança RangeError: a tela
- * inteira caía em branco por causa de uma linha. Aqui a data ruim vira `null`,
- * que é um valor que o resto do código sabe tratar.
+ * `data_pedido` chegou nulo em pedido de produção — a coluna é NOT NULL no
+ * schema e mesmo assim chegou. `new Date('nullT00:00:00')` é Invalid Date, e
+ * `toISOString()` num Invalid Date lança RangeError: a tela inteira caía em
+ * branco por causa de uma linha.
  */
 function comoData(v) {
   if (!v) return null
@@ -67,20 +75,19 @@ const iso = d => {
   const mes = String(d.getMonth() + 1).padStart(2, '0')
   return `${d.getFullYear()}-${mes}-${String(d.getDate()).padStart(2, '0')}`
 }
+const diaMes = d => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
 
 function contar(n, singular, plural) {
   if (!n) return `nenhum${singular.endsWith('a') ? 'a' : ''} ${singular}`
   return `${n} ${n === 1 ? singular : plural}`
 }
 
-/** Segunda-feira da semana de `ref`. A Cibelly conta a semana de segunda a
-    domingo — `hoje + 7 dias`, que era o critério antigo, atravessa duas
-    semanas e muda de resposta todo dia. */
+/** Segunda-feira da semana de `ref`. `hoje + 7 dias`, o critério antigo,
+    atravessa duas semanas e muda de resposta todo dia. */
 function segundaDaSemana(ref) {
   const d = new Date(ref)
   d.setHours(0, 0, 0, 0)
-  const diasDesdeSegunda = (d.getDay() + 6) % 7
-  d.setDate(d.getDate() - diasDesdeSegunda)
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
   return d
 }
 
@@ -91,10 +98,29 @@ function somaDias(data, n) {
 }
 
 /**
- * Consome os pedidos do mais antigo para o mais novo com o total já pago.
- * Devolve, para cada pedido, quanto ainda falta — e se já passou do prazo.
+ * Lê os totais de dia da agenda de lançamentos futuros do Mercado Pago.
+ *
+ * Só as linhas de TOTAL DO DIA — "Segunda-feira, 14+R$5.809,88". O detalhe de
+ * cada liberação dentro do dia é ignorado de propósito: o total que o Mercado
+ * Pago mostra já vem líquido das cobranças daquele dia, e somar os dois
+ * contaria o mesmo dinheiro duas vezes.
  */
-function dividaPorPedido(pedidos, totalPago, hoje) {
+export function lerLiberacoes(texto) {
+  const re = /(segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)[a-zç-]*\s*,\s*(\d{1,2})\s*([+\-−]?)\s*R\$\s*([\d.]*\d(?:,\d{2})?)/gi
+  const porDia = {}
+  let m
+  while ((m = re.exec(texto)) !== null) {
+    const v = valorBR(m[4])
+    porDia[Number(m[2])] = (m[3] === '-' || m[3] === '−') ? -v : v
+  }
+  return porDia
+}
+
+/**
+ * Consome os pedidos do mais antigo para o mais novo com o total já pago.
+ * Devolve, por pedido, quanto falta e em que estado está.
+ */
+export function dividaPorPedido(pedidos, totalPago, hoje) {
   const limite = somaDias(hoje, -DIAS_DE_PRAZO)
   let credito = totalPago
   const linhas = []
@@ -121,14 +147,20 @@ function dividaPorPedido(pedidos, totalPago, hoje) {
       descricao: p.descricao_produtos,
       valor,
       restante,
-      // Pedido sem data é o saldo de abertura — o que já se devia quando o
-      // painel começou a ser usado. Não é um pedido de um dia; é tudo o que
-      // veio antes, rolando de mês em mês. Em qualquer leitura é a dívida mais
-      // antiga que existe, então conta como devida.
+      // Pedido sem data é o saldo de abertura — o que já se devia antes deste
+      // histórico, rolando de mês em mês. É a dívida mais antiga que existe.
       estado: !data ? 'anterior' : data <= limite ? 'vencido' : 'a_vencer',
     })
   }
   return linhas
+}
+
+function lerPlanejamento() {
+  try {
+    return JSON.parse(localStorage.getItem(CHAVE) || '{}') || {}
+  } catch {
+    return {}
+  }
 }
 
 function Vazio({ children }) {
@@ -164,66 +196,99 @@ function Linha({ esquerda, direita, apoio, tom }) {
   )
 }
 
+function Aviso({ tom = 'atencao', children }) {
+  const cor = { ok: 'var(--color-success)', atencao: 'var(--color-warning)', nao: 'var(--color-danger)' }[tom]
+  return (
+    <div style={{
+      display: 'flex', gap: 9, alignItems: 'baseline', fontSize: 13.5,
+      padding: '10px 12px', borderRadius: 'var(--radius-sm)',
+      background: 'var(--color-row)', borderLeft: `3px solid ${cor}`,
+    }}>
+      <span aria-hidden="true">{tom === 'ok' ? '✓' : tom === 'nao' ? '✕' : '⚠'}</span>
+      <span>{children}</span>
+    </div>
+  )
+}
+
 export default function CaixaSemana() {
   const [refSemana, setRefSemana] = useState(() => segundaDaSemana(new Date()))
   const [contas, setContas] = useState(null)
   const [repasses, setRepasses] = useState(null)
-  const [flavia, setFlavia] = useState(null)  // { nome, pedidos, totalPago }
+  const [flavia, setFlavia] = useState(null)
   const [erro, setErro] = useState(null)
-  const [salvando, setSalvando] = useState(false)
-  const [form, setForm] = useState({ valor: '', data: '' })
+  const [plano, setPlano] = useState(lerPlanejamento)
 
   const segunda = refSemana
   const domingo = somaDias(segunda, 6)
+  const chaveSemana = iso(segunda)
   const hoje = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
 
-  async function carregar() {
-    setErro(null)
-    try {
-      const [rContas, rFornecedores] = await Promise.all([
-        api.get('/api/contas'),
-        api.get('/api/fornecedores'),
-      ])
-      setContas(rContas.data)
+  const daSemana = plano[chaveSemana] || {}
 
-      // A semana pode atravessar a virada do mês, e o endpoint de repasses
-      // filtra por mês. Busca os dois e junta.
-      const meses = [...new Set([segunda, domingo].map(d => iso(d).slice(0, 7)))]
-      const listas = await Promise.all(meses.map(m => api.get(`/api/repasses?mes=${m}`)))
-      setRepasses(listas.flatMap(r => r.data))
+  const salvar = useCallback((campos) => {
+    setPlano(anterior => {
+      const proximo = {
+        ...anterior,
+        [chaveSemana]: {
+          ...(anterior[chaveSemana] || {}),
+          ...campos,
+          informadoEm: iso(new Date()),
+        },
+      }
+      try { localStorage.setItem(CHAVE, JSON.stringify(proximo)) } catch { /* modo privado */ }
+      return proximo
+    })
+  }, [chaveSemana])
 
-      const f = rFornecedores.data.find(
-        x => (x.apelido || '').toUpperCase() === APELIDO_FORNECEDOR_COM_PRAZO
-      )
-      if (!f) {
-        setFlavia({ ausente: true })
-      } else {
+  useEffect(() => {
+    let vivo = true
+    async function carregar() {
+      setErro(null)
+      try {
+        const [rContas, rFornecedores] = await Promise.all([
+          api.get('/api/contas'),
+          api.get('/api/fornecedores'),
+        ])
+        if (!vivo) return
+        setContas(rContas.data)
+
+        // A semana pode atravessar a virada do mês, e o endpoint filtra por mês.
+        const meses = [...new Set([segunda, domingo].map(d => iso(d).slice(0, 7)))]
+        const listas = await Promise.all(meses.map(m => api.get(`/api/repasses?mes=${m}`)))
+        if (!vivo) return
+        setRepasses(listas.flatMap(r => r.data))
+
+        const f = rFornecedores.data.find(
+          x => (x.apelido || '').toUpperCase() === APELIDO_FORNECEDOR_COM_PRAZO
+        )
+        if (!f) { setFlavia({ ausente: true }); return }
+
         const [rPedidos, rPagamentos] = await Promise.all([
           api.get(`/api/fornecedores/${f.id}/pedidos`),
           api.get(`/api/fornecedores/${f.id}/pagamentos`),
         ])
+        if (!vivo) return
         setFlavia({
           nome: f.apelido ? `${f.nome} (${f.apelido})` : f.nome,
           pedidos: rPedidos.data,
           totalPago: rPagamentos.data.reduce((s, p) => s + Number(p.valor || 0), 0),
         })
+      } catch {
+        if (vivo) setErro('Não consegui carregar os dados. Tente recarregar a página.')
       }
-    } catch {
-      setErro('Não consegui carregar os dados. Tente recarregar a página.')
     }
-  }
-
-  useEffect(() => { carregar() }, [iso(segunda)])  // eslint-disable-line react-hooks/exhaustive-deps
+    carregar()
+    return () => { vivo = false }
+  }, [chaveSemana])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const carregando = !contas || !repasses || !flavia
 
   // ---- boletos ------------------------------------------------------------
-  const naSemana = c => {
+  const abertas = (contas || []).filter(c => c.status !== 'pago')
+  const boletosSemana = abertas.filter(c => {
     const v = String(c.vencimento).slice(0, 10)
     return v >= iso(segunda) && v <= iso(domingo)
-  }
-  const abertas = (contas || []).filter(c => c.status !== 'pago')
-  const boletosSemana = abertas.filter(naSemana)
+  })
   const boletosAtrasados = abertas.filter(c => String(c.vencimento).slice(0, 10) < iso(segunda))
   const totalBoletosSemana = boletosSemana.reduce((s, c) => s + Number(c.valor || 0), 0)
   const totalBoletosAtrasados = boletosAtrasados.reduce((s, c) => s + Number(c.valor || 0), 0)
@@ -233,49 +298,50 @@ export default function CaixaSemana() {
   const dividas = flavia && !flavia.ausente
     ? dividaPorPedido(flavia.pedidos, flavia.totalPago, hoje)
     : []
-  // Saldo de abertura e pedidos passados dos 30 dias formam a mesma coisa para
-  // quem vai pagar: dívida vencida. Ficam juntos no total e separados apenas no
-  // rótulo, para ela reconhecer de onde cada linha vem.
   const devidos = dividas.filter(d => d.estado === 'vencido' || d.estado === 'anterior')
   const aVencer = dividas.filter(d => d.estado === 'a_vencer')
   const totalFlavia = devidos.reduce((s, d) => s + d.restante, 0)
   const totalFlaviaAVencer = aVencer.reduce((s, d) => s + d.restante, 0)
 
   // ---- repasse ------------------------------------------------------------
-  const repassesDaSemana = (repasses || []).filter(r => {
+  const liberacoes = useMemo(() => lerLiberacoes(daSemana.textoMP || ''), [daSemana.textoMP])
+  const totalColado = Object.values(liberacoes).reduce((s, v) => s + v, 0)
+  const repassesGravados = (repasses || []).filter(r => {
     const d = String(r.data_referencia).slice(0, 10)
     return r.tipo === 'repasse' && d >= iso(segunda) && d <= iso(domingo)
   })
-  const realizado = repassesDaSemana.filter(r => r.origem === 'pluggy')
-  const previsto = repassesDaSemana.filter(r => r.origem !== 'pluggy')
-  const totalRealizado = realizado.reduce((s, r) => s + Number(r.valor || 0), 0)
-  const totalPrevisto = previsto.reduce((s, r) => s + Number(r.valor || 0), 0)
-  const usandoRealizado = realizado.length > 0
-  const totalRepasse = usandoRealizado ? totalRealizado : totalPrevisto
+  const totalGravado = repassesGravados.reduce((s, r) => s + Number(r.valor || 0), 0)
+  const colou = Object.keys(liberacoes).length > 0
+  const totalRepasse = colou ? totalColado : totalGravado
 
-  const sobra = totalRepasse - totalFlavia - totalBoletos
+  // ---- a conta ------------------------------------------------------------
+  const saldo = Number(daSemana.saldo || 0)
+  const reserva = Number(daSemana.reserva || 0)
+  const sobra = saldo + totalRepasse - totalFlavia - totalBoletos
 
-  async function lancarPrevisto(e) {
-    e.preventDefault()
-    setSalvando(true)
-    try {
-      await api.post('/api/repasses', {
-        tipo: 'repasse',
-        valor: parseFloat(form.valor),
-        data_referencia: form.data || iso(segunda),
-        conta_ml: 'YUSO',
-        descricao: 'Repasse previsto da semana',
-      })
-      setForm({ valor: '', data: '' })
-      await carregar()
-    } catch {
-      setErro('Não consegui lançar o repasse previsto.')
-    } finally {
-      setSalvando(false)
-    }
-  }
+  const informadoEm = comoData(daSemana.informadoEm)
+  const diasDesde = informadoEm ? Math.round((hoje - informadoEm) / 86400000) : null
+  const envelheceu = diasDesde !== null && diasDesde > DIAS_ATE_ENVELHECER
 
-  const periodo = `${dia(iso(segunda))} a ${dia(iso(domingo))}`
+  // ---- dia a dia ----------------------------------------------------------
+  const dias = useMemo(() => {
+    let acumulado = saldo
+    return Array.from({ length: 7 }, (_, i) => {
+      const data = somaDias(segunda, i)
+      const entra = liberacoes[data.getDate()] || 0
+      const saiBoletos = boletosSemana.filter(
+        c => String(c.vencimento).slice(0, 10) === iso(data)
+      )
+      const sai = saiBoletos.reduce((s, c) => s + Number(c.valor || 0), 0)
+      acumulado += entra - sai
+      return { data, nome: NOMES_DIA[i], entra, saiBoletos, acumulado }
+    })
+  }, [saldo, liberacoes, contas, chaveSemana])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const diaFlavia = dias.find(d => d.acumulado >= totalFlavia)
+  const indiceFlavia = diaFlavia ? dias.indexOf(diaFlavia) : -1
+
+  const periodo = `${diaMes(segunda)} a ${diaMes(domingo)}`
   const botao = {
     background: 'var(--color-surface)', color: 'var(--color-text)',
     border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
@@ -284,8 +350,9 @@ export default function CaixaSemana() {
   const entrada = {
     background: 'var(--color-row)', color: 'var(--color-text)',
     border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
-    padding: '8px 10px', fontSize: 14, width: '100%',
+    padding: '9px 11px', fontSize: 14, width: '100%',
   }
+  const rotulo = { display: 'block', fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 5 }
 
   return (
     <Layout>
@@ -294,15 +361,9 @@ export default function CaixaSemana() {
         subtitulo={`Segunda a domingo · ${periodo}. O que entra, o que precisa sair, e o que sobra para comprar produto.`}
         acao={
           <div style={{ display: 'flex', gap: 8 }}>
-            <button style={botao} onClick={() => setRefSemana(somaDias(segunda, -7))}>
-              ← Semana anterior
-            </button>
-            <button style={botao} onClick={() => setRefSemana(segundaDaSemana(new Date()))}>
-              Esta semana
-            </button>
-            <button style={botao} onClick={() => setRefSemana(somaDias(segunda, 7))}>
-              Próxima →
-            </button>
+            <button style={botao} onClick={() => setRefSemana(somaDias(segunda, -7))}>← Anterior</button>
+            <button style={botao} onClick={() => setRefSemana(segundaDaSemana(new Date()))}>Esta semana</button>
+            <button style={botao} onClick={() => setRefSemana(somaDias(segunda, 7))}>Próxima →</button>
           </div>
         }
       />
@@ -314,17 +375,13 @@ export default function CaixaSemana() {
         <>
           <div style={{
             display: 'grid', gap: 12, marginBottom: 20,
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
           }}>
             <Indicador
-              rotulo={usandoRealizado ? 'Repasse recebido' : 'Repasse previsto'}
-              valor={totalRepasse}
+              rotulo="Entra na semana"
+              valor={saldo + totalRepasse}
               tom="neutro"
-              composicao={usandoRealizado
-                ? `${contar(realizado.length, 'lançamento', 'lançamentos')} do Mercado Pago`
-                : previsto.length
-                  ? `Informado por você · ${contar(previsto.length, 'lançamento', 'lançamentos')}`
-                  : 'Nada informado para esta semana'}
+              composicao={`${brl(saldo)} em conta + ${brl(totalRepasse)} de repasse`}
             />
             <Indicador
               rotulo="Flávia (FL) — vencido"
@@ -338,18 +395,92 @@ export default function CaixaSemana() {
               rotulo="Boletos a pagar"
               valor={totalBoletos}
               tom="divida"
-              composicao={
-                `${brl(totalBoletosSemana)} vencem na semana` +
-                (totalBoletosAtrasados > 0 ? ` + ${brl(totalBoletosAtrasados)} atrasados` : '')
-              }
+              composicao={`${brl(totalBoletosSemana)} vencem na semana` +
+                (totalBoletosAtrasados > 0 ? ` + ${brl(totalBoletosAtrasados)} atrasados` : '')}
             />
             <Indicador
               rotulo="Sobra para comprar"
               valor={sobra}
               tom="auto"
-              composicao={`${brl(totalRepasse)} − ${brl(totalFlavia)} − ${brl(totalBoletos)}`}
+              composicao={`${brl(saldo + totalRepasse)} − ${brl(totalFlavia)} − ${brl(totalBoletos)}`}
             />
           </div>
+
+          {envelheceu && (
+            <div style={{ marginBottom: 16 }}>
+              <Aviso tom="atencao">
+                O saldo e a reserva foram informados em <b>{diaMes(informadoEm)}</b>, há {diasDesde} dias.
+                Os números abaixo podem estar velhos — confira no Mercado Pago e atualize.
+              </Aviso>
+            </div>
+          )}
+
+          <SecaoCard
+            titulo="Quando o dinheiro chega"
+            subtitulo="Acumulado disponível dia a dia, já descontando os boletos conforme vencem."
+          >
+            {!colou ? (
+              <Vazio>
+                Cole os lançamentos futuros do Mercado Pago lá embaixo — é deles que sai o dia a dia.
+              </Vazio>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gap: 3 }}>
+                  {dias.map((d, i) => {
+                    const ehHoje = iso(d.data) === iso(hoje)
+                    const ehMarco = i === indiceFlavia && totalFlavia > 0
+                    const notas = []
+                    if (d.entra) notas.push(`entra ${brl(d.entra)}`)
+                    d.saiBoletos.forEach(c => notas.push(`− ${c.descricao} ${brl(c.valor)}`))
+                    return (
+                      <div key={iso(d.data)} style={{
+                        display: 'grid', gridTemplateColumns: '6.2rem 1fr auto',
+                        alignItems: 'baseline', gap: 10, padding: '9px 12px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'var(--color-row)',
+                        boxShadow: ehHoje ? 'inset 0 0 0 1.5px var(--color-accent-solid)' : 'none',
+                        borderLeft: ehMarco ? '3px solid var(--color-success)' : '3px solid transparent',
+                      }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 600 }}>
+                          {d.nome} {diaMes(d.data)}{ehHoje ? ' ·' : ''}
+                        </span>
+                        <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                          {notas.join(' · ') || '—'}
+                        </span>
+                        <span style={{
+                          fontSize: 14.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                          whiteSpace: 'nowrap',
+                        }}>{brl(d.acumulado)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div style={{ display: 'grid', gap: 7, marginTop: 14 }}>
+                  {totalFlavia > 0 && (diaFlavia ? (
+                    <>
+                      <Aviso tom="ok">
+                        <b>Flávia ({brl(totalFlavia)}) cabe a partir de {diaFlavia.nome.toLowerCase()} {diaMes(diaFlavia.data)}.</b>{' '}
+                        Pagando nesse dia sobram {brl(diaFlavia.acumulado - totalFlavia)} na hora,
+                        e {brl(dias[6].acumulado - totalFlavia)} até domingo.
+                      </Aviso>
+                      {indiceFlavia > 0 && (
+                        <Aviso tom="atencao">
+                          Antes disso não fecha — na véspera o acumulado é {brl(dias[indiceFlavia - 1].acumulado)},
+                          faltam {brl(totalFlavia - dias[indiceFlavia - 1].acumulado)}.
+                        </Aviso>
+                      )}
+                    </>
+                  ) : (
+                    <Aviso tom="nao">
+                      <b>Flávia ({brl(totalFlavia)}) não cabe nesta semana.</b>{' '}
+                      No domingo o acumulado chega a {brl(dias[6].acumulado)}.
+                    </Aviso>
+                  ))}
+                </div>
+              </>
+            )}
+          </SecaoCard>
 
           <SecaoCard
             titulo={flavia.ausente ? 'Flávia (FL)' : flavia.nome}
@@ -378,10 +509,8 @@ export default function CaixaSemana() {
                 ))}
                 {aVencer.length > 0 && (
                   <>
-                    <p style={{
-                      margin: '8px 0 0', fontSize: 12, color: 'var(--color-text-muted)',
-                    }}>
-                      Ainda dentro do prazo — {brl(totalFlaviaAVencer)} em {contar(aVencer.length, 'dia', 'dias')}:
+                    <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                      Ainda dentro do prazo — {brl(totalFlaviaAVencer)} em {contar(aVencer.length, 'pedido', 'pedidos')}:
                     </p>
                     {aVencer.map(d => (
                       <Linha
@@ -407,77 +536,73 @@ export default function CaixaSemana() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {boletosAtrasados.map(c => (
-                  <Linha
-                    key={c.id}
-                    esquerda={c.descricao}
-                    apoio={`Atrasado desde ${dia(c.vencimento)} · ${c.categoria}`}
-                    direita={brl(c.valor)}
-                    tom="divida"
-                  />
+                  <Linha key={c.id} esquerda={c.descricao}
+                         apoio={`Atrasado desde ${dia(c.vencimento)} · ${c.categoria}`}
+                         direita={brl(c.valor)} tom="divida" />
                 ))}
                 {boletosSemana.map(c => (
-                  <Linha
-                    key={c.id}
-                    esquerda={c.descricao}
-                    apoio={`Vence ${dia(c.vencimento)} · ${c.categoria}`}
-                    direita={brl(c.valor)}
-                  />
+                  <Linha key={c.id} esquerda={c.descricao}
+                         apoio={`Vence ${dia(c.vencimento)} · ${c.categoria}`}
+                         direita={brl(c.valor)} />
                 ))}
               </div>
             )}
           </SecaoCard>
 
           <SecaoCard
-            titulo="Repasse da semana"
-            subtitulo="Enquanto não há conciliação bancária, o previsto vem de você — dos lançamentos futuros do Mercado Pago."
-            total={brl(totalRepasse)}
+            titulo="Reserva"
+            subtitulo="Aplicada, fora da conta corrente. Não entra na sobra para comprar."
+            total={brl(reserva)}
+            totalRotulo="Aplicado"
           >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {realizado.map(r => (
-                <Linha key={r.id} esquerda={r.descricao || 'Repasse'}
-                       apoio={`Recebido ${dia(r.data_referencia)} · ${r.conta_ml}`}
-                       direita={brl(r.valor)} />
-              ))}
-              {previsto.map(r => (
-                <Linha
-                  key={r.id}
-                  esquerda={usandoRealizado
-                    ? <s style={{ opacity: 0.6 }}>{r.descricao || 'Previsto'}</s>
-                    : (r.descricao || 'Previsto')}
-                  apoio={usandoRealizado
-                    ? 'Ignorado — o valor real já chegou do Mercado Pago'
-                    : `Previsto para ${dia(r.data_referencia)} · ${r.conta_ml}`}
-                  direita={brl(r.valor)}
-                />
-              ))}
-              {repassesDaSemana.length === 0 && (
-                <Vazio>Nada informado. Lance abaixo o que você espera receber nesta semana.</Vazio>
-              )}
+            <Aviso tom="atencao">
+              A reserva é <b>só para reposição que não pode esperar</b> — fornecedor com produto
+              para repor o estoque, e a oportunidade não pode ser perdida. Compra semanal de
+              rotina não usa reserva.
+            </Aviso>
+          </SecaoCard>
 
-              <form onSubmit={lancarPrevisto} style={{
-                display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end',
-                marginTop: 10, paddingTop: 12, borderTop: '1px solid var(--color-border)',
-              }}>
-                <label style={{ fontSize: 12, color: 'var(--color-text-muted)', flex: '1 1 140px' }}>
-                  Valor previsto
-                  <input required type="number" step="0.01" min="0.01" value={form.valor}
-                         onChange={e => setForm({ ...form, valor: e.target.value })}
-                         style={entrada} placeholder="0,00" />
-                </label>
-                <label style={{ fontSize: 12, color: 'var(--color-text-muted)', flex: '1 1 140px' }}>
-                  Data prevista
-                  <input type="date" value={form.data} min={iso(segunda)} max={iso(domingo)}
-                         onChange={e => setForm({ ...form, data: e.target.value })}
-                         style={entrada} />
-                </label>
-                <button type="submit" disabled={salvando} style={{
-                  ...botao, cursor: salvando ? 'default' : 'pointer',
-                  opacity: salvando ? 0.6 : 1,
-                }}>
-                  {salvando ? 'Lançando…' : 'Lançar previsto'}
-                </button>
-              </form>
+          <SecaoCard
+            titulo="Planejamento da semana"
+            subtitulo="Informado por você, guardado neste navegador. Não vai para o banco — é planejamento, não lançamento."
+          >
+            <div style={{
+              display: 'grid', gap: 14,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+            }}>
+              <label>
+                <span style={rotulo}>Saldo em conta hoje</span>
+                <input type="number" step="0.01" style={entrada}
+                       value={daSemana.saldo ?? ''}
+                       onChange={e => salvar({ saldo: e.target.value })}
+                       placeholder="0,00" />
+              </label>
+              <label>
+                <span style={rotulo}>Reserva aplicada</span>
+                <input type="number" step="0.01" style={entrada}
+                       value={daSemana.reserva ?? ''}
+                       onChange={e => salvar({ reserva: e.target.value })}
+                       placeholder="0,00" />
+              </label>
             </div>
+
+            <label style={{ display: 'block', marginTop: 14 }}>
+              <span style={rotulo}>Lançamentos futuros do Mercado Pago</span>
+              <textarea
+                style={{ ...entrada, minHeight: 130, resize: 'vertical', fontSize: 12.5, lineHeight: 1.5 }}
+                value={daSemana.textoMP ?? ''}
+                onChange={e => salvar({ textoMP: e.target.value })}
+                spellCheck={false}
+                placeholder={'Cole aqui, do jeito que o Mercado Pago mostra:\n\nSegunda-feira, 14+R$5.809,88\nTerça-feira, 15+R$16.407,92'} />
+            </label>
+
+            <p style={{ margin: '10px 0 0', fontSize: 12.5, color: 'var(--color-text-muted)' }}>
+              {colou
+                ? `${contar(Object.keys(liberacoes).length, 'dia lido', 'dias lidos')} · ${brl(totalColado)} na semana` +
+                  (informadoEm ? ` · informado em ${diaMes(informadoEm)}` : '')
+                : 'Nada colado para esta semana.'}
+              {!colou && totalGravado > 0 && ` Usando ${brl(totalGravado)} dos repasses já lançados.`}
+            </p>
           </SecaoCard>
         </>
       )}
