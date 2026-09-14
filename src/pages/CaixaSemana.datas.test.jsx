@@ -63,6 +63,6 @@ describe('Caixa da Semana — datas no formato que o backend manda', () => {
   it('pedido com mais de 30 dias conta como vencido', async () => {
     render(<MemoryRouter><CaixaSemana /></MemoryRouter>)
     await screen.findByText('Sobra para comprar')
-    expect(screen.getByText('1 dia com mais de 30 dias')).toBeInTheDocument()
+    expect(screen.getByText('1 lançamento passados dos 30 dias')).toBeInTheDocument()
   })
 })
