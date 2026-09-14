@@ -42,9 +42,31 @@ const APELIDO_FORNECEDOR_COM_PRAZO = 'FL'
 const DIAS_DE_PRAZO = 30
 
 const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-const dia = d => new Date(String(d).slice(0, 10) + 'T00:00:00')
-  .toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-const iso = d => d.toISOString().slice(0, 10)
+
+/**
+ * Data do banco para Date, ou null quando não dá para ler.
+ *
+ * Existe porque `data_pedido` chegou nulo em pedido de produção — a coluna é
+ * NOT NULL no schema, e mesmo assim chegou. `new Date('nullT00:00:00')` é
+ * Invalid Date, e `toISOString()` num Invalid Date lança RangeError: a tela
+ * inteira caía em branco por causa de uma linha. Aqui a data ruim vira `null`,
+ * que é um valor que o resto do código sabe tratar.
+ */
+function comoData(v) {
+  if (!v) return null
+  const d = new Date(String(v).slice(0, 10) + 'T00:00:00')
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+const dia = v => {
+  const d = comoData(v)
+  return d ? d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'sem data'
+}
+const iso = d => {
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return null
+  const mes = String(d.getMonth() + 1).padStart(2, '0')
+  return `${d.getFullYear()}-${mes}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 function contar(n, singular, plural) {
   if (!n) return `nenhum${singular.endsWith('a') ? 'a' : ''} ${singular}`
@@ -77,9 +99,13 @@ function dividaPorPedido(pedidos, totalPago, hoje) {
   let credito = totalPago
   const linhas = []
 
-  const ordenados = [...pedidos].sort(
-    (a, b) => String(a.data_pedido).localeCompare(String(b.data_pedido))
-  )
+  // Pedido sem data vai para o fim da fila: não se sabe onde ele entra na
+  // ordem, e os pagamentos consomem primeiro o que tem data conhecida.
+  const ordenados = [...pedidos].sort((a, b) => {
+    const da = iso(comoData(a.data_pedido)) || '9999-12-31'
+    const db = iso(comoData(b.data_pedido)) || '9999-12-31'
+    return da.localeCompare(db)
+  })
 
   for (const p of ordenados) {
     const valor = Number(p.valor_total || 0)
@@ -87,13 +113,17 @@ function dividaPorPedido(pedidos, totalPago, hoje) {
     credito -= abatido
     const restante = Number((valor - abatido).toFixed(2))
     if (restante <= 0) continue
+
+    const data = comoData(p.data_pedido)
     linhas.push({
       id: p.id,
-      data: String(p.data_pedido).slice(0, 10),
+      data,
       descricao: p.descricao_produtos,
       valor,
       restante,
-      vencido: new Date(String(p.data_pedido).slice(0, 10) + 'T00:00:00') <= limite,
+      // Sem data não se afirma nem que venceu nem que está no prazo. Chamar de
+      // "no prazo" subestimaria o que ela deve; de "vencido", superestimaria.
+      estado: !data ? 'sem_data' : data <= limite ? 'vencido' : 'a_vencer',
     })
   }
   return linhas
@@ -201,10 +231,12 @@ export default function CaixaSemana() {
   const dividas = flavia && !flavia.ausente
     ? dividaPorPedido(flavia.pedidos, flavia.totalPago, hoje)
     : []
-  const vencidos = dividas.filter(d => d.vencido)
-  const aVencer = dividas.filter(d => !d.vencido)
+  const vencidos = dividas.filter(d => d.estado === 'vencido')
+  const aVencer = dividas.filter(d => d.estado === 'a_vencer')
+  const semData = dividas.filter(d => d.estado === 'sem_data')
   const totalFlavia = vencidos.reduce((s, d) => s + d.restante, 0)
   const totalFlaviaAVencer = aVencer.reduce((s, d) => s + d.restante, 0)
+  const totalFlaviaSemData = semData.reduce((s, d) => s + d.restante, 0)
 
   // ---- repasse ------------------------------------------------------------
   const repassesDaSemana = (repasses || []).filter(r => {
@@ -319,7 +351,7 @@ export default function CaixaSemana() {
           <SecaoCard
             titulo={flavia.ausente ? 'Flávia (FL)' : flavia.nome}
             subtitulo={`Pedidos ainda não cobertos pelos pagamentos, do mais antigo para o mais novo. Vencido = mais de ${DIAS_DE_PRAZO} dias.`}
-            total={totalFlavia}
+            total={brl(totalFlavia)}
             totalRotulo="Vencido"
           >
             {flavia.ausente ? (
@@ -331,12 +363,27 @@ export default function CaixaSemana() {
                 {vencidos.map(d => (
                   <Linha
                     key={d.id}
-                    esquerda={`Pedido de ${dia(d.data)}`}
+                    esquerda={`Pedido de ${dia(iso(d.data))}`}
                     apoio={d.descricao || 'Vencido — pagar nesta semana'}
                     direita={brl(d.restante)}
                     tom="divida"
                   />
                 ))}
+                {semData.length > 0 && (
+                  <>
+                    <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-warning)' }}>
+                      {brl(totalFlaviaSemData)} em {contar(semData.length, 'pedido sem data', 'pedidos sem data')} — não dá para saber se venceu. Corrija em Fornecedores.
+                    </p>
+                    {semData.map(d => (
+                      <Linha
+                        key={d.id}
+                        esquerda="Pedido sem data"
+                        apoio={d.descricao || 'Sem data de pedido no cadastro'}
+                        direita={brl(d.restante)}
+                      />
+                    ))}
+                  </>
+                )}
                 {aVencer.length > 0 && (
                   <>
                     <p style={{
@@ -347,8 +394,8 @@ export default function CaixaSemana() {
                     {aVencer.map(d => (
                       <Linha
                         key={d.id}
-                        esquerda={`Pedido de ${dia(d.data)}`}
-                        apoio={`Vence em ${dia(iso(somaDias(new Date(d.data + 'T00:00:00'), DIAS_DE_PRAZO)))}`}
+                        esquerda={`Pedido de ${dia(iso(d.data))}`}
+                        apoio={`Vence em ${dia(iso(somaDias(d.data, DIAS_DE_PRAZO)))}`}
                         direita={brl(d.restante)}
                       />
                     ))}
@@ -361,7 +408,7 @@ export default function CaixaSemana() {
           <SecaoCard
             titulo="Boletos"
             subtitulo="Vencendo nesta semana, mais o que já passou do vencimento e continua aberto."
-            total={totalBoletos}
+            total={brl(totalBoletos)}
           >
             {boletosSemana.length === 0 && boletosAtrasados.length === 0 ? (
               <Vazio>Nenhuma conta aberta para esta semana.</Vazio>
@@ -391,7 +438,7 @@ export default function CaixaSemana() {
           <SecaoCard
             titulo="Repasse da semana"
             subtitulo="Enquanto não há conciliação bancária, o previsto vem de você — dos lançamentos futuros do Mercado Pago."
-            total={totalRepasse}
+            total={brl(totalRepasse)}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {realizado.map(r => (
