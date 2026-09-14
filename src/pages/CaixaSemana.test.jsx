@@ -51,6 +51,20 @@ describe('Caixa da Semana', () => {
     await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
   })
 
+  it('conta o saldo sem data como dívida vencida, não como dúvida', async () => {
+    // A linha sem data é o saldo de abertura — o que já se devia quando o
+    // painel começou. É a dívida mais antiga que existe, não uma incógnita.
+    respostas({
+      pedidos: [{ id: 'p0', data_pedido: null, valor_total: 400 }],
+      pagamentos: [],
+    })
+    montar()
+    await waitFor(() => expect(screen.getByText('Saldo de meses anteriores')).toBeInTheDocument())
+    // O valor aparece três vezes de propósito — no indicador, na linha e no
+    // total da seção. É a mesma conta dita nos três lugares.
+    expect(screen.getAllByText('R$ 400,00').length).toBeGreaterThanOrEqual(2)
+  })
+
   it('não quebra quando um pedido vem sem data', async () => {
     respostas({
       pedidos: [

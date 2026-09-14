@@ -121,9 +121,11 @@ function dividaPorPedido(pedidos, totalPago, hoje) {
       descricao: p.descricao_produtos,
       valor,
       restante,
-      // Sem data não se afirma nem que venceu nem que está no prazo. Chamar de
-      // "no prazo" subestimaria o que ela deve; de "vencido", superestimaria.
-      estado: !data ? 'sem_data' : data <= limite ? 'vencido' : 'a_vencer',
+      // Pedido sem data é o saldo de abertura — o que já se devia quando o
+      // painel começou a ser usado. Não é um pedido de um dia; é tudo o que
+      // veio antes, rolando de mês em mês. Em qualquer leitura é a dívida mais
+      // antiga que existe, então conta como devida.
+      estado: !data ? 'anterior' : data <= limite ? 'vencido' : 'a_vencer',
     })
   }
   return linhas
@@ -231,12 +233,13 @@ export default function CaixaSemana() {
   const dividas = flavia && !flavia.ausente
     ? dividaPorPedido(flavia.pedidos, flavia.totalPago, hoje)
     : []
-  const vencidos = dividas.filter(d => d.estado === 'vencido')
+  // Saldo de abertura e pedidos passados dos 30 dias formam a mesma coisa para
+  // quem vai pagar: dívida vencida. Ficam juntos no total e separados apenas no
+  // rótulo, para ela reconhecer de onde cada linha vem.
+  const devidos = dividas.filter(d => d.estado === 'vencido' || d.estado === 'anterior')
   const aVencer = dividas.filter(d => d.estado === 'a_vencer')
-  const semData = dividas.filter(d => d.estado === 'sem_data')
-  const totalFlavia = vencidos.reduce((s, d) => s + d.restante, 0)
+  const totalFlavia = devidos.reduce((s, d) => s + d.restante, 0)
   const totalFlaviaAVencer = aVencer.reduce((s, d) => s + d.restante, 0)
-  const totalFlaviaSemData = semData.reduce((s, d) => s + d.restante, 0)
 
   // ---- repasse ------------------------------------------------------------
   const repassesDaSemana = (repasses || []).filter(r => {
@@ -327,9 +330,9 @@ export default function CaixaSemana() {
               rotulo="Flávia (FL) — vencido"
               valor={totalFlavia}
               tom="divida"
-              composicao={vencidos.length
-                ? `${contar(vencidos.length, 'dia', 'dias')} com mais de ${DIAS_DE_PRAZO} dias`
-                : `Nenhum dia passou dos ${DIAS_DE_PRAZO} dias`}
+              composicao={devidos.length
+                ? `${contar(devidos.length, 'lançamento', 'lançamentos')} passados dos ${DIAS_DE_PRAZO} dias`
+                : `Nada passou dos ${DIAS_DE_PRAZO} dias`}
             />
             <Indicador
               rotulo="Boletos a pagar"
@@ -350,7 +353,7 @@ export default function CaixaSemana() {
 
           <SecaoCard
             titulo={flavia.ausente ? 'Flávia (FL)' : flavia.nome}
-            subtitulo={`Pedidos ainda não cobertos pelos pagamentos, do mais antigo para o mais novo. Vencido = mais de ${DIAS_DE_PRAZO} dias.`}
+            subtitulo={`O que os pagamentos ainda não cobriram, do mais antigo para o mais novo. Vencido = passou de ${DIAS_DE_PRAZO} dias.`}
             total={brl(totalFlavia)}
             totalRotulo="Vencido"
           >
@@ -360,30 +363,19 @@ export default function CaixaSemana() {
               <Vazio>Nada em aberto — os pagamentos cobrem todos os pedidos.</Vazio>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {vencidos.map(d => (
+                {devidos.map(d => (
                   <Linha
                     key={d.id}
-                    esquerda={`Pedido de ${dia(iso(d.data))}`}
-                    apoio={d.descricao || 'Vencido — pagar nesta semana'}
+                    esquerda={d.estado === 'anterior'
+                      ? 'Saldo de meses anteriores'
+                      : `Pedido de ${dia(iso(d.data))}`}
+                    apoio={d.estado === 'anterior'
+                      ? (d.descricao || 'O que já era devido antes deste histórico')
+                      : (d.descricao || 'Vencido — pagar nesta semana')}
                     direita={brl(d.restante)}
                     tom="divida"
                   />
                 ))}
-                {semData.length > 0 && (
-                  <>
-                    <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--color-warning)' }}>
-                      {brl(totalFlaviaSemData)} em {contar(semData.length, 'pedido sem data', 'pedidos sem data')} — não dá para saber se venceu. Corrija em Fornecedores.
-                    </p>
-                    {semData.map(d => (
-                      <Linha
-                        key={d.id}
-                        esquerda="Pedido sem data"
-                        apoio={d.descricao || 'Sem data de pedido no cadastro'}
-                        direita={brl(d.restante)}
-                      />
-                    ))}
-                  </>
-                )}
                 {aVencer.length > 0 && (
                   <>
                     <p style={{
