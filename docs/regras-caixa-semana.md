@@ -7,14 +7,15 @@ mudá-las sem falar com ela.
 ## A conta
 
 ```
-   Saldo em conta hoje          (inclui a reserva, porque ela está no caixa)
+   Saldo em conta hoje          (só a conta corrente — a reserva está aplicada)
  + Repasse previsto da semana
  − Flávia (FL) vencido
  − Boletos da semana e atrasados
- − Reserva                      (intocável — ver abaixo)
  ─────────────────────────────
  = Sobra para comprar produto
 ```
+
+A reserva **não** entra nessa conta, nem somando nem subtraindo — ver abaixo.
 
 Horizonte único: **segunda a domingo**. O número que estava no lugar disto
 somava três horizontes diferentes (mês, mês e sempre) e por isso não servia para
@@ -22,8 +23,9 @@ decidir nada.
 
 ## A reserva não é dinheiro disponível
 
-A reserva **está** no saldo da conta, então precisa ser subtraída — senão a
-"sobra para comprar" mostra dinheiro que não pode ser gasto.
+A reserva está **aplicada**, fora da conta corrente. Então ela não é subtraída:
+não há o que subtrair, porque o saldo em conta que a Cibelly informa já não a
+contém. Subtrair de novo diminuiria duas vezes o mesmo dinheiro.
 
 E ela não é para uso geral. Regra da Cibelly, nas palavras dela:
 

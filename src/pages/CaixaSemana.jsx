@@ -53,16 +53,31 @@ const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', cur
 const valorBR = t => Number(String(t).replace(/\./g, '').replace(',', '.'))
 
 /**
- * Data do banco para Date, ou null quando não dá para ler.
+ * Data do backend para Date (meia-noite local), ou null quando não dá para ler.
  *
- * `data_pedido` chegou nulo em pedido de produção — a coluna é NOT NULL no
- * schema e mesmo assim chegou. `new Date('nullT00:00:00')` é Invalid Date, e
- * `toISOString()` num Invalid Date lança RangeError: a tela inteira caía em
- * branco por causa de uma linha.
+ * O backend serializa datas pelo jsonify do Flask: "Thu, 20 Aug 2026 00:00:00
+ * GMT", não ISO. A primeira versão cortava os 10 primeiros caracteres achando
+ * que era "2026-08-20" — "Thu, 20 Au" é data inválida, o toISOString()
+ * estourava no render e o Painel inteiro abria no aviso de 8s do index.html
+ * (14/09/2026). Tratar data ilegível como null tirou o crash, mas a data
+ * continuava ilegível: todo pedido virava "sem data", nada vencia, e boleto
+ * da semana sumia da conta.
+ *
+ * Meia-noite GMT é o próprio dia do calendário, então vale a parte UTC. ISO
+ * continua aceito, e null/lixo continuam virando null.
  */
 function comoData(v) {
   if (!v) return null
-  const d = new Date(String(v).slice(0, 10) + 'T00:00:00')
+  const s = String(v)
+  let ymd = null
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    ymd = s.slice(0, 10)
+  } else {
+    const g = new Date(s)
+    if (!Number.isNaN(g.getTime())) ymd = g.toISOString().slice(0, 10)
+  }
+  if (!ymd) return null
+  const d = new Date(ymd + 'T00:00:00')
   return Number.isNaN(d.getTime()) ? null : d
 }
 
@@ -284,12 +299,17 @@ export default function CaixaSemana() {
   const carregando = !contas || !repasses || !flavia
 
   // ---- boletos ------------------------------------------------------------
-  const abertas = (contas || []).filter(c => c.status !== 'pago')
-  const boletosSemana = abertas.filter(c => {
-    const v = String(c.vencimento).slice(0, 10)
+  const naSemana = c => {
+    const v = iso(comoData(c.vencimento))
+    if (!v) return false
     return v >= iso(segunda) && v <= iso(domingo)
+  }
+  const abertas = (contas || []).filter(c => c.status !== 'pago')
+  const boletosSemana = abertas.filter(naSemana)
+  const boletosAtrasados = abertas.filter(c => {
+    const v = iso(comoData(c.vencimento))
+    return v !== null && v < iso(segunda)
   })
-  const boletosAtrasados = abertas.filter(c => String(c.vencimento).slice(0, 10) < iso(segunda))
   const totalBoletosSemana = boletosSemana.reduce((s, c) => s + Number(c.valor || 0), 0)
   const totalBoletosAtrasados = boletosAtrasados.reduce((s, c) => s + Number(c.valor || 0), 0)
   const totalBoletos = totalBoletosSemana + totalBoletosAtrasados
@@ -307,7 +327,8 @@ export default function CaixaSemana() {
   const liberacoes = useMemo(() => lerLiberacoes(daSemana.textoMP || ''), [daSemana.textoMP])
   const totalColado = Object.values(liberacoes).reduce((s, v) => s + v, 0)
   const repassesGravados = (repasses || []).filter(r => {
-    const d = String(r.data_referencia).slice(0, 10)
+    const d = iso(comoData(r.data_referencia))
+    if (!d) return false
     return r.tipo === 'repasse' && d >= iso(segunda) && d <= iso(domingo)
   })
   const totalGravado = repassesGravados.reduce((s, r) => s + Number(r.valor || 0), 0)
@@ -330,7 +351,7 @@ export default function CaixaSemana() {
       const data = somaDias(segunda, i)
       const entra = liberacoes[data.getDate()] || 0
       const saiBoletos = boletosSemana.filter(
-        c => String(c.vencimento).slice(0, 10) === iso(data)
+        c => iso(comoData(c.vencimento)) === iso(data)
       )
       const sai = saiBoletos.reduce((s, c) => s + Number(c.valor || 0), 0)
       acumulado += entra - sai
