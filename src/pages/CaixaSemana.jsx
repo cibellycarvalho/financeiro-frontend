@@ -211,20 +211,6 @@ function Linha({ esquerda, direita, apoio, tom }) {
   )
 }
 
-/** Aviso sobre os dados em si — não sobre o que fazer com o dinheiro. */
-function Aviso({ children }) {
-  return (
-    <div style={{
-      display: 'flex', gap: 9, alignItems: 'baseline', fontSize: 13.5,
-      padding: '10px 12px', borderRadius: 'var(--radius-sm)',
-      background: 'var(--color-row)', borderLeft: '3px solid var(--color-warning)',
-    }}>
-      <span aria-hidden="true">⚠</span>
-      <span>{children}</span>
-    </div>
-  )
-}
-
 export default function CaixaSemana() {
   const [refSemana, setRefSemana] = useState(() => segundaDaSemana(new Date()))
   const [contas, setContas] = useState(null)
@@ -340,9 +326,12 @@ export default function CaixaSemana() {
   const reserva = Number(daSemana.reserva || 0)
   const sobra = saldo + totalRepasse - totalFlavia - totalBoletos
 
+  // Depois de alguns dias a data do saldo aparece junto do numero, discreta.
+  // Nao vira quadro de aviso: repetir de volta o que ela digitou, toda semana,
+  // e a tela falando com ela sem ter nada novo a dizer.
   const informadoEm = comoData(daSemana.informadoEm)
-  const diasDesde = informadoEm ? Math.round((hoje - informadoEm) / 86400000) : null
-  const envelheceu = diasDesde !== null && diasDesde > DIAS_ATE_ENVELHECER
+  const envelheceu = informadoEm !== null &&
+    Math.round((hoje - informadoEm) / 86400000) > DIAS_ATE_ENVELHECER
 
   // ---- dia a dia ----------------------------------------------------------
   const dias = useMemo(() => {
@@ -402,7 +391,8 @@ export default function CaixaSemana() {
               rotulo="Entra na semana"
               valor={saldo + totalRepasse}
               tom="neutro"
-              composicao={`${brl(saldo)} em conta + ${brl(totalRepasse)} de repasse`}
+              composicao={`${brl(saldo)} em conta + ${brl(totalRepasse)} de repasse` +
+                (envelheceu ? ` · saldo de ${diaMes(informadoEm)}` : '')}
             />
             <Indicador
               rotulo="Flávia (FL) — vencido"
@@ -426,15 +416,6 @@ export default function CaixaSemana() {
               composicao={`${brl(saldo + totalRepasse)} − ${brl(totalFlavia)} − ${brl(totalBoletos)}`}
             />
           </div>
-
-          {envelheceu && (
-            <div style={{ marginBottom: 16 }}>
-              <Aviso>
-                O saldo e a reserva abaixo são os que você informou em <b>{diaMes(informadoEm)}</b>,
-                há {diasDesde} dias. As contas usam esses valores.
-              </Aviso>
-            </div>
-          )}
 
           <SecaoCard
             titulo="Quando o dinheiro chega"
