@@ -163,8 +163,10 @@ ALTER TABLE fin_planejamento_semana ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "fin_select" ON fin_planejamento_semana FOR SELECT
   USING (auth.uid() IN (SELECT user_id FROM fin_user_roles));
 
+-- Sem o filtro de fin_admin que as outras tabelas usam: planejamento da semana
+-- e preenchido pelos dois donos do negocio, nao so pela administradora.
 CREATE POLICY "fin_write" ON fin_planejamento_semana FOR ALL
-  USING (auth.uid() IN (SELECT user_id FROM fin_user_roles WHERE role = 'fin_admin'));
+  USING (auth.uid() IN (SELECT user_id FROM fin_user_roles));
 ```
 
 Três decisões que valem explicação:
@@ -186,7 +188,7 @@ atravessa o mês (29/09 a 05/10) fica sem ambiguidade.
 from flask import Blueprint, request, jsonify, g
 from datetime import date, datetime, timedelta
 import db
-from auth import require_auth, require_admin
+from auth import require_auth
 
 bp = Blueprint("planejamento", __name__)
 
@@ -248,8 +250,7 @@ def ler(semana):
 
 
 @bp.put("/<semana>")
-@require_auth
-@require_admin
+@require_auth                 # de proposito sem @require_admin — ver abaixo
 def gravar(semana):
     d, erro = _segunda(semana)
     if erro:
@@ -325,18 +326,28 @@ negativa não existe.
 5. `PUT` com `agenda` que não é objeto (lista, string, número) devolve 400.
 6. `PUT` com `saldo_conta` negativo é **aceito**; `reserva_aplicada` negativa
    devolve 400.
-7. `PUT` sem `require_admin` (usuário comum) devolve 403 — mesmo padrão das
-   outras rotas.
+7. `PUT` de usuário **não admin** (mas com papel em `fin_user_roles`)
+   **funciona** — os dois donos preenchem. É o teste que trava a diferença
+   proposital em relação a Repasses e Fornecedores; sem ele, alguém "padroniza"
+   a rota mais tarde e o marido dela perde o acesso sem ninguém notar.
+8. `PUT` de quem não tem papel nenhum continua barrado pelo `require_auth`.
 
 O teste 2 é o que importa mais: é ele que garante que a semana não se
 duplica.
 
-### Uma decisão que é da Cibelly, não do código
+### Por que esta rota não exige admin
 
-Escrevi `PUT` com `@require_admin`, seguindo Repasses e Fornecedores. **Se o
-marido dela não for `fin_admin`, ele vai ver os números mas não vai conseguir
-preencher.** Se a ideia é os dois preencherem, é só trocar por `@require_auth`
-sozinho — ou dar o papel de admin a ele. Vale perguntar antes de decidir.
+Decisão da Cibelly em 14/09/2026: **"os dois vão poder mexer"**. Ela e o marido
+tocam o negócio juntos e usam o mesmo painel; quem estiver com o número do banco
+na mão na segunda-feira preenche.
+
+Por isso `gravar` leva só `@require_auth`, e a policy da tabela não filtra por
+`fin_admin` — diferente de Repasses e Fornecedores, onde escrever mexe em
+lançamento contábil. Aqui é planejamento: informar saldo errado se conserta
+digitando de novo, e `informado_por` registra quem foi.
+
+Isso é exceção consciente, não descuido. Está no teste 7 para não ser
+"padronizado" de volta por engano.
 
 ---
 
