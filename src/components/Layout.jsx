@@ -6,13 +6,20 @@ import { useTelaEstreita } from '../hooks/useTelaEstreita'
 import ThemeToggle from './ThemeToggle'
 import Logo from './Logo'
 
+/**
+ * Fechamento, Lucro Real e a Visão da Semana antiga saíram do menu em
+ * 14/09/2026, a pedido da Cibelly: as três dependiam de conciliação bancária
+ * para dizer algo confiável, e o Pluggy foi removido em 08/09. Sem ele, eram
+ * telas cheias de número que ninguém usava para decidir.
+ *
+ * As ROTAS continuam de pé (/visao-semana, /fechamento, /lucro-real) — os dados
+ * estão lá e um link direto ainda abre. Esconder é reversível; apagar não.
+ */
 const nav = [
-  { path: '/', label: 'Visão da Semana' },
+  { path: '/', label: 'Caixa da Semana' },
   { path: '/contas', label: 'Contas a Pagar' },
-  { path: '/repasses', label: 'Repasses ML' },
   { path: '/fornecedores', label: 'Fornecedores' },
-  { path: '/fechamento', label: 'Fechamento' },
-  { path: '/lucro-real', label: 'Lucro Real' },
+  { path: '/repasses', label: 'Repasses ML' },
 ]
 
 /**

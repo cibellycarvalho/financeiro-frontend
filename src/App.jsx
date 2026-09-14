@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Login from './pages/Login'
+import CaixaSemana from './pages/CaixaSemana'
 import Dashboard from './pages/Dashboard'
 import ContasPagar from './pages/ContasPagar'
 import RepasesML from './pages/RepasesML'
@@ -74,7 +75,10 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/" element={<ProtectedRoute><CaixaSemana /></ProtectedRoute>} />
+          {/* Fora do menu desde 14/09/2026, rota mantida: esconder é reversível,
+              apagar não. Ver comentário do nav em components/Layout.jsx. */}
+          <Route path="/visao-semana" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/contas" element={<ProtectedRoute><ContasPagar /></ProtectedRoute>} />
           <Route path="/repasses" element={<ProtectedRoute><RepasesML /></ProtectedRoute>} />
           <Route path="/fornecedores" element={<ProtectedRoute><Fornecedores /></ProtectedRoute>} />

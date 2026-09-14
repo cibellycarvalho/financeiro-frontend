@@ -45,7 +45,11 @@ function montar() {
 }
 
 const botaoDoMenu = () => screen.queryByRole('button', { name: /abrir o menu/i })
-const linkFechamento = () => screen.queryByRole('link', { name: 'Fechamento' })
+/* Era 'Fechamento'. Esse item saiu do menu em 14/09/2026 e o teste passou a
+   falhar por um motivo que não tinha nada a ver com a gaveta — o que ele
+   verifica é a gaveta abrir e fechar, não qual item existe. Agora aponta para
+   'Fornecedores', que é item permanente do menu. */
+const linkFechamento = () => screen.queryByRole('link', { name: 'Fornecedores' })
 
 beforeEach(() => telaDe(1440))
 
