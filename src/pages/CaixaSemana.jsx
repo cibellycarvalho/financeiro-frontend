@@ -146,7 +146,11 @@ function somaDias(data, n) {
  * contaria o mesmo dinheiro duas vezes.
  */
 export function lerLiberacoes(texto) {
-  const re = /(segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)[a-zç-]*\s*,\s*(\d{1,2})\s*([+\-−]?)\s*R\$\s*([\d.]*\d(?:,\d{2})?)/gi
+  // Os \s* dentro do valor nao sao enfeite: copiando do Mercado Pago o numero
+  // vem quebrado em varias linhas ("R$\n2.280\n,\n51"). Sem eles a leitura
+  // parava no 2.280 e os centavos de TODO dia sumiam calados — foi o que
+  // aconteceu em 14/09/2026, e o total da semana saiu redondo demais.
+  const re = /(segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)[a-zç-]*\s*,\s*(\d{1,2})\s*([+\-−]?)\s*R\$\s*([\d.]*\d(?:\s*,\s*\d{2})?)/gi
   const porDia = {}
   let m
   while ((m = re.exec(texto)) !== null) {
@@ -263,6 +267,9 @@ export default function CaixaSemana() {
   const [flavia, setFlavia] = useState(null)
   const [erro, setErro] = useState(null)
   const [plano, setPlano] = useState(lerPlanejamento)
+  const [colando, setColando] = useState(false)
+  const [rascunho, setRascunho] = useState('')
+  const [avisoColagem, setAvisoColagem] = useState(null)
 
   const segunda = refSemana
   const domingo = somaDias(segunda, 6)
@@ -285,6 +292,35 @@ export default function CaixaSemana() {
       return proximo
     })
   }, [chaveSemana])
+
+  const diasDaSemana = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => somaDias(segunda, i)),
+    [chaveSemana],  // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  /** Le o texto colado e guarda como lista de dias. Devolve quantos entraram. */
+  const guardarColagem = useCallback((texto) => {
+    const lidos = lerLiberacoes(texto)
+    const numeros = diasDaSemana.map(d => d.getDate())
+    const nova = { ...(plano[chaveSemana]?.agenda || {}) }
+    let n = 0
+    Object.entries(lidos).forEach(([d, v]) => {
+      // Dia que nao cai nesta semana e descartado: guardado, ficaria orfao —
+      // sem linha na tela, e portanto sem como apagar.
+      if (!numeros.includes(Number(d))) return
+      nova[d] = v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      n += 1
+    })
+    if (n > 0) salvar({ agenda: nova, textoMP: undefined })
+    return n
+  }, [chaveSemana, diasDaSemana, plano, salvar])
+
+  // Quem ja tinha colado antes desta mudanca nao perde a semana: o texto
+  // guardado vira lista de dias uma vez, e some.
+  useEffect(() => {
+    const d = plano[chaveSemana] || {}
+    if (d.textoMP && !d.agenda) guardarColagem(d.textoMP)
+  }, [chaveSemana, plano, guardarColagem])
 
   useEffect(() => {
     let vivo = true
@@ -355,7 +391,16 @@ export default function CaixaSemana() {
   const totalFlaviaAVencer = aVencer.reduce((s, d) => s + d.restante, 0)
 
   // ---- repasse ------------------------------------------------------------
-  const liberacoes = useMemo(() => lerLiberacoes(daSemana.textoMP || ''), [daSemana.textoMP])
+  // A agenda fica guardada como lista de dias, nao como o texto colado. O
+  // texto era a unica copia do dado: apagar a caixa sem querer levava a semana
+  // inteira junto. Pedido dela em 14/09/2026 — "se eu apagar algo, apaga de
+  // todo meu controle".
+  const agenda = daSemana.agenda || {}
+  const liberacoes = useMemo(() => {
+    const o = {}
+    Object.entries(agenda).forEach(([d, v]) => { o[Number(d)] = numeroBR(v) })
+    return o
+  }, [agenda])
   const totalColado = Object.values(liberacoes).reduce((s, v) => s + v, 0)
   const repassesGravados = (repasses || []).filter(r => {
     const d = iso(comoData(r.data_referencia))
@@ -493,23 +538,92 @@ export default function CaixaSemana() {
               </label>
             </div>
 
-            <label style={{ display: 'block', marginTop: 14 }}>
+            <div style={{ marginTop: 16 }}>
               <span style={rotulo}>Lançamentos futuros do Mercado Pago</span>
-              <textarea
-                style={{ ...entrada, minHeight: 130, resize: 'vertical', fontSize: 12.5, lineHeight: 1.5 }}
-                value={daSemana.textoMP ?? ''}
-                onChange={e => salvar({ textoMP: e.target.value })}
-                spellCheck={false}
-                placeholder={'Cole aqui, do jeito que o Mercado Pago mostra:\n\nSegunda-feira, 14+R$5.809,88\nTerça-feira, 15+R$16.407,92'} />
-            </label>
 
-            <p style={{ margin: '10px 0 0', fontSize: 12.5, color: 'var(--color-text-muted)' }}>
-              {colou
-                ? `${contar(Object.keys(liberacoes).length, 'dia lido', 'dias lidos')} · ${brl(totalColado)} na semana` +
-                  (informadoEm ? ` · informado em ${diaMes(informadoEm)}` : '')
-                : 'Nada colado para esta semana.'}
-              {!colou && totalGravado > 0 && ` Usando ${brl(totalGravado)} dos repasses já lançados.`}
-            </p>
+              {colou ? (
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {diasDaSemana.map(data => {
+                    const n = data.getDate()
+                    if (agenda[n] === undefined) return null
+                    return (
+                      <div key={n} style={{
+                        display: 'grid', gridTemplateColumns: '7.5rem 1fr auto',
+                        gap: 8, alignItems: 'center',
+                      }}>
+                        <span style={{ fontSize: 13 }}>
+                          {NOMES_DIA[(data.getDay() + 6) % 7]} {diaMes(data)}
+                        </span>
+                        <input type="text" inputMode="decimal" style={entrada}
+                               value={agenda[n]}
+                               onChange={e => salvar({ agenda: { ...agenda, [n]: e.target.value } })} />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nova = { ...agenda }
+                            delete nova[n]
+                            salvar({ agenda: nova })
+                          }}
+                          aria-label={`Apagar ${diaMes(data)}`}
+                          title="Apagar este dia"
+                          style={{ ...botao, padding: '7px 11px', lineHeight: 1 }}
+                        >×</button>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--color-text-muted)' }}>
+                  Nada informado para esta semana.
+                  {totalGravado > 0 && ` Usando ${brl(totalGravado)} dos repasses já lançados.`}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 11 }}>
+                <button type="button" style={botao}
+                        onClick={() => { setColando(v => !v); setAvisoColagem(null) }}>
+                  {colando ? 'Cancelar' : colou ? 'Colar agenda de novo' : 'Colar agenda do Mercado Pago'}
+                </button>
+                {colou && (
+                  <span style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>
+                    {contar(Object.keys(liberacoes).length, 'dia', 'dias')} · {brl(totalColado)} na semana
+                    {informadoEm ? ` · informado em ${diaMes(informadoEm)}` : ''}
+                  </span>
+                )}
+              </div>
+
+              {colando && (
+                <div style={{ marginTop: 10 }}>
+                  <textarea
+                    style={{ ...entrada, minHeight: 120, resize: 'vertical', fontSize: 12.5, lineHeight: 1.5 }}
+                    value={rascunho}
+                    onChange={e => setRascunho(e.target.value)}
+                    spellCheck={false}
+                    autoFocus
+                    placeholder={'Cole aqui, do jeito que o Mercado Pago mostra:\n\nSegunda-feira, 14+R$2.280,51\nTerça-feira, 15+R$16.398,00'} />
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                    <button type="button" style={botao} onClick={() => {
+                      const n = guardarColagem(rascunho)
+                      if (n === 0) {
+                        setAvisoColagem('Não achei nenhum dia desta semana nesse texto. Confira se copiou as linhas com o nome do dia.')
+                        return
+                      }
+                      setRascunho('')
+                      setColando(false)
+                      setAvisoColagem(null)
+                    }}>Ler e guardar</button>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                      Os dias que já estão na lista são substituídos; o resto fica.
+                    </span>
+                  </div>
+                  {avisoColagem && (
+                    <p style={{ margin: '8px 0 0', fontSize: 12.5, color: 'var(--color-warning)' }}>
+                      {avisoColagem}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           </SecaoCard>
 
           <SecaoCard
@@ -518,7 +632,7 @@ export default function CaixaSemana() {
           >
             {!colou ? (
               <Vazio>
-                Cole os lançamentos futuros do Mercado Pago no card acima — é deles que sai o dia a dia.
+                Informe os lançamentos futuros do Mercado Pago no card acima — é deles que sai o dia a dia.
               </Vazio>
             ) : (
               <>

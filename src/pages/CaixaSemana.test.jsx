@@ -139,6 +139,25 @@ Terça-feira, 15+R$16.407,92`)
     expect(numeroBR('abc')).toBe(0)
   })
 
+  it('lê a agenda mesmo quando o Mercado Pago quebra o valor em várias linhas', () => {
+    // Copiando da tela do Mercado Pago o valor vem picado assim. A primeira
+    // versão parava no "2.280" e perdia os centavos de todo dia — o total da
+    // semana saiu redondo e ninguém estranharia.
+    const porDia = lerLiberacoes(`Segunda-feira, 14
++
+R$
+2.280
+,
+51
+Terça-feira, 15
++
+R$
+16.398
+,
+00`)
+    expect(porDia).toEqual({ 14: 2280.51, 15: 16398 })
+  })
+
   it('o saldo de abertura conta como vencido no cálculo da dívida', () => {
     const hoje = new Date(2026, 8, 14)
     const linhas = dividaPorPedido(
