@@ -417,13 +417,61 @@ export default function CaixaSemana() {
             />
           </div>
 
+          {/* Aqui em cima de proposito: estes campos sao a ENTRADA de tudo que
+              a tela mostra. Estavam no fim da pagina, depois de Flavia e
+              Boletos, e em 14/09/2026 ela simplesmente nao os encontrou. Pedir
+              o dado depois de mostrar as contas que dependem dele e ao
+              contrario. */}
+          <SecaoCard
+            titulo="Planejamento da semana"
+            subtitulo="Informado por você, guardado neste navegador. Não vai para o banco — é planejamento, não lançamento."
+          >
+            <div style={{
+              display: 'grid', gap: 14,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+            }}>
+              <label>
+                <span style={rotulo}>Saldo em conta hoje</span>
+                <input type="number" step="0.01" style={entrada}
+                       value={daSemana.saldo ?? ''}
+                       onChange={e => salvar({ saldo: e.target.value })}
+                       placeholder="0,00" />
+              </label>
+              <label>
+                <span style={rotulo}>Reserva aplicada</span>
+                <input type="number" step="0.01" style={entrada}
+                       value={daSemana.reserva ?? ''}
+                       onChange={e => salvar({ reserva: e.target.value })}
+                       placeholder="0,00" />
+              </label>
+            </div>
+
+            <label style={{ display: 'block', marginTop: 14 }}>
+              <span style={rotulo}>Lançamentos futuros do Mercado Pago</span>
+              <textarea
+                style={{ ...entrada, minHeight: 130, resize: 'vertical', fontSize: 12.5, lineHeight: 1.5 }}
+                value={daSemana.textoMP ?? ''}
+                onChange={e => salvar({ textoMP: e.target.value })}
+                spellCheck={false}
+                placeholder={'Cole aqui, do jeito que o Mercado Pago mostra:\n\nSegunda-feira, 14+R$5.809,88\nTerça-feira, 15+R$16.407,92'} />
+            </label>
+
+            <p style={{ margin: '10px 0 0', fontSize: 12.5, color: 'var(--color-text-muted)' }}>
+              {colou
+                ? `${contar(Object.keys(liberacoes).length, 'dia lido', 'dias lidos')} · ${brl(totalColado)} na semana` +
+                  (informadoEm ? ` · informado em ${diaMes(informadoEm)}` : '')
+                : 'Nada colado para esta semana.'}
+              {!colou && totalGravado > 0 && ` Usando ${brl(totalGravado)} dos repasses já lançados.`}
+            </p>
+          </SecaoCard>
+
           <SecaoCard
             titulo="Quando o dinheiro chega"
             subtitulo="Acumulado disponível dia a dia, já descontando os boletos conforme vencem."
           >
             {!colou ? (
               <Vazio>
-                Cole os lançamentos futuros do Mercado Pago lá embaixo — é deles que sai o dia a dia.
+                Cole os lançamentos futuros do Mercado Pago no card acima — é deles que sai o dia a dia.
               </Vazio>
             ) : (
               <>
@@ -570,48 +618,6 @@ export default function CaixaSemana() {
             </p>
           </SecaoCard>
 
-          <SecaoCard
-            titulo="Planejamento da semana"
-            subtitulo="Informado por você, guardado neste navegador. Não vai para o banco — é planejamento, não lançamento."
-          >
-            <div style={{
-              display: 'grid', gap: 14,
-              gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
-            }}>
-              <label>
-                <span style={rotulo}>Saldo em conta hoje</span>
-                <input type="number" step="0.01" style={entrada}
-                       value={daSemana.saldo ?? ''}
-                       onChange={e => salvar({ saldo: e.target.value })}
-                       placeholder="0,00" />
-              </label>
-              <label>
-                <span style={rotulo}>Reserva aplicada</span>
-                <input type="number" step="0.01" style={entrada}
-                       value={daSemana.reserva ?? ''}
-                       onChange={e => salvar({ reserva: e.target.value })}
-                       placeholder="0,00" />
-              </label>
-            </div>
-
-            <label style={{ display: 'block', marginTop: 14 }}>
-              <span style={rotulo}>Lançamentos futuros do Mercado Pago</span>
-              <textarea
-                style={{ ...entrada, minHeight: 130, resize: 'vertical', fontSize: 12.5, lineHeight: 1.5 }}
-                value={daSemana.textoMP ?? ''}
-                onChange={e => salvar({ textoMP: e.target.value })}
-                spellCheck={false}
-                placeholder={'Cole aqui, do jeito que o Mercado Pago mostra:\n\nSegunda-feira, 14+R$5.809,88\nTerça-feira, 15+R$16.407,92'} />
-            </label>
-
-            <p style={{ margin: '10px 0 0', fontSize: 12.5, color: 'var(--color-text-muted)' }}>
-              {colou
-                ? `${contar(Object.keys(liberacoes).length, 'dia lido', 'dias lidos')} · ${brl(totalColado)} na semana` +
-                  (informadoEm ? ` · informado em ${diaMes(informadoEm)}` : '')
-                : 'Nada colado para esta semana.'}
-              {!colou && totalGravado > 0 && ` Usando ${brl(totalGravado)} dos repasses já lançados.`}
-            </p>
-          </SecaoCard>
         </>
       )}
     </Layout>
