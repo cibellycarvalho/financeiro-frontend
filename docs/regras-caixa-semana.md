@@ -12,6 +12,7 @@ mudá-las sem falar com ela.
  − Boletos da semana            os de Contas a Pagar que vencem na semana,
                                 pagos ou não, mais atrasados em aberto
  − Pagamentos a fornecedor      todos os lançados na semana
+ − Pagamentos a funcionários    pagamento do mês e DAS pagos na semana
  ─────────────────────────────
  = Sobra para comprar
 ```
@@ -127,6 +128,14 @@ lançou Meli+ e Merke em Contas a Pagar, pagou, e o card mostrou R$ 0
 (17/09/2026): "o boletos a pagar tem que informar os boletos que eu coloquei".
 Atrasado em aberto entra também (e atrasado pago nesta semana, pela mesma
 razão). Boleto antigo já pago fica de fora.
+
+## Funcionários: pagamento e DAS saem da sobra
+
+Decisão dela em 17/09/2026, ao criar a aba Funcionários: o que foi pago a
+prestador (MEI) na semana — o pagamento dos serviços e o DAS, que a empresa
+paga — **sai da sobra**, como linha própria. O DAS em aberto não sai de lugar
+nenhum até ser pago. O mês de competência (o do serviço) é só organização da
+aba; a Caixa desconta cada valor na semana em que foi pago.
 
 ## O repasse previsto vem dela, não do banco
 

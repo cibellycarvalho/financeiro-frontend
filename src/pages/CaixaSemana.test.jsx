@@ -30,9 +30,10 @@ const FORNECEDORES = [
 
 const SEM_PLANEJAMENTO = { saldo_conta: null, saldo_em: null, reserva_aplicada: null, agenda: {}, ajustes_pagamento: {}, updated_at: null }
 
-function respostas({ pedidos = [], pagamentos = [], contas = [], repasses = [], pagosSemana = [], planejamento = SEM_PLANEJAMENTO }) {
+function respostas({ pedidos = [], pagamentos = [], contas = [], repasses = [], pagosSemana = [], pagosFuncionarios = [], planejamento = SEM_PLANEJAMENTO }) {
   api.get.mockImplementation(url => {
     if (url.startsWith('/api/planejamento/')) return Promise.resolve({ data: planejamento })
+    if (url.startsWith('/api/funcionarios/pagamentos?')) return Promise.resolve({ data: pagosFuncionarios })
     if (url.startsWith('/api/fornecedores/pagamentos?')) return Promise.resolve({ data: pagosSemana })
     if (url === '/api/contas') return Promise.resolve({ data: contas })
     if (url === '/api/fornecedores') return Promise.resolve({ data: FORNECEDORES })
@@ -440,5 +441,30 @@ describe('A conta da semana (ditada em 17/09/2026)', () => {
     montar()
     await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
     expect(screen.queryByText('Antigo pago')).not.toBeInTheDocument()
+  })
+
+  it('pagamento e DAS de funcionário saem da sobra, e o card diz de quem é', async () => {
+    respostas({
+      planejamento: { ...SEM_PLANEJAMENTO, agenda: { [ymd(seg)]: 1000 }, updated_at: hoje.toUTCString() },
+      pagosFuncionarios: [
+        { id: 'u1', tipo: 'pagamento', funcionario_nome: 'Josie', valor: 300, data_pagamento: ymd(hoje), created_at: hoje.toUTCString() },
+        { id: 'u2', tipo: 'das', funcionario_nome: 'Josie', valor: 75.9, data_pagamento: ymd(hoje), created_at: hoje.toUTCString() },
+      ],
+    })
+    montar()
+    await waitFor(() => expect(screen.getByText('Pago a funcionários')).toBeInTheDocument())
+    expect(screen.getByText(/Josie R\$\s?300,00 · DAS Josie R\$\s?75,90/)).toBeInTheDocument()
+    expect(screen.getByText(/− R\$\s?375,90 a funcionários/)).toBeInTheDocument()
+  })
+
+  it('a Caixa abre mesmo se o endpoint de funcionários falhar', async () => {
+    respostas({ planejamento: { ...SEM_PLANEJAMENTO, agenda: { [ymd(seg)]: 1000 }, updated_at: hoje.toUTCString() } })
+    const original = api.get.getMockImplementation()
+    api.get.mockImplementation(url => url.startsWith('/api/funcionarios/') ? Promise.reject(new Error('404')) : original(url))
+    montar()
+    await waitFor(() => expect(screen.getByText('Pago a funcionários')).toBeInTheDocument())
+    // "Nenhum pagamento na semana" aparece duas vezes: o card de fornecedor
+    // (nenhum pagosSemana neste teste) e o de funcionários (endpoint falhou).
+    expect(screen.getAllByText('Nenhum pagamento na semana')).toHaveLength(2)
   })
 })
