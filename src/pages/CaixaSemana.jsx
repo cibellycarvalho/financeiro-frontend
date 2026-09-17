@@ -716,7 +716,11 @@ export default function CaixaSemana() {
               rotulo="Pago a fornecedor"
               valor={totalPagoFornecedor}
               tom="divida"
-              composicao={`${contar(pagosDescontados.length, 'pagamento', 'pagamentos')} na semana`}
+              // Diz DE QUEM: ao lado do "Flávia — vencido" e com número parecido,
+              // o total sozinho foi lido como pagamento à Flávia (17/09/2026).
+              composicao={pagosDescontados.length
+                ? pagosDescontados.map(p => `${p.fornecedor_nome} ${brl(p.valor)}`).join(' · ')
+                : 'Nenhum pagamento na semana'}
             />
             <Indicador
               rotulo="Sobra para comprar"

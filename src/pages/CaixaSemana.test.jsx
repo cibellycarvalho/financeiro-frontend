@@ -286,6 +286,21 @@ R$
   })
 })
 
+describe('Card Pago a fornecedor', () => {
+  it('diz de quem é cada pagamento, para não ser lido como pagamento à Flávia', async () => {
+    const hoje = new Date()
+    const d = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`
+    respostas({
+      pagosSemana: [
+        { id: 'a', fornecedor_nome: 'FY', fornecedor_apelido: 'FY', valor: 34200, data_pagamento: d, created_at: hoje.toUTCString() },
+        { id: 'b', fornecedor_nome: 'Flavia', fornecedor_apelido: 'FL', valor: 49310, data_pagamento: d, created_at: hoje.toUTCString() },
+      ],
+    })
+    montar()
+    await waitFor(() => expect(screen.getByText(/FY R\$\s?34\.200,00 · Flavia R\$\s?49\.310,00/)).toBeInTheDocument())
+  })
+})
+
 describe('Planejamento da semana no banco', () => {
   const SEGUNDA = new Date(2026, 8, 14)   // 14/09/2026
 
