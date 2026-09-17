@@ -19,6 +19,7 @@ const nav = [
   { path: '/', label: 'Caixa da Semana' },
   { path: '/contas', label: 'Contas a Pagar' },
   { path: '/fornecedores', label: 'Fornecedores' },
+  { path: '/funcionarios', label: 'Funcionários' },
   { path: '/repasses', label: 'Repasses ML' },
 ]
 
