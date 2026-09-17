@@ -26,7 +26,14 @@ import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-const dia = d => new Date(d + 'T00:00:00').toLocaleDateString('pt-BR')
+// O Flask manda "Mon, 14 Sep 2026 00:00:00 GMT"; somar 'T00:00:00' nisso dava
+// "Invalid Date". Lido em UTC para o dia não voltar um no horário de Brasília.
+const dia = d => {
+  if (!d) return '—'
+  const s = String(d)
+  const data = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00Z') : new Date(s)
+  return Number.isNaN(data.getTime()) ? '—' : data.toLocaleDateString('pt-BR', { timeZone: 'UTC' })
+}
 
 const PERIODOS = [
   { id: 'semana', label: 'Esta semana' },
