@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import ItensPedidoForm, { ITEM_VAZIO } from '../components/ItensPedidoForm'
 import UploadPedidoCompra from '../components/UploadPedidoCompra'
 import CaixinhaPago from '../components/CaixinhaPago'
+import { abrirAnexo } from '../components/upload/comum'
 
 const inputStyle = { display: 'block', width: '100%', padding: 8, marginTop: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', boxSizing: 'border-box' }
 
@@ -847,20 +848,6 @@ export default function Fornecedores() {
     const r = await api.put(`/api/fornecedores/${modalEditar.id}`, dados)
     await carregarFornecedores()
     if (fornecedorSel?.id === modalEditar.id) setFornecedorSel(r.data)
-  }
-
-  async function abrirAnexo(caminho) {
-    // A aba precisa abrir no clique: depois do await o Safari bloqueia.
-    const janela = window.open('', '_blank')
-    if (janela) janela.opener = null
-    try {
-      const r = await api.get(caminho)
-      if (janela) janela.location.replace(r.data.url)
-      else window.open(r.data.url, '_blank', 'noopener')
-    } catch (err) {
-      janela?.close()
-      alert(err.response?.data?.error || 'Não consegui abrir o anexo.')
-    }
   }
 
   async function excluirFornecedor(f) {

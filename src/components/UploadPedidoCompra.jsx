@@ -5,40 +5,7 @@
 import { useRef, useState } from 'react'
 import api from '../services/api'
 import ItensPedidoForm, { ITEM_VAZIO, totalDosItens } from './ItensPedidoForm'
-
-const TIPOS = 'application/pdf,image/jpeg,image/png'
-const TAMANHO_MAX = 10 * 1024 * 1024
-
-const inputStyle = { display: 'block', width: '100%', padding: 8, marginTop: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', boxSizing: 'border-box' }
-const botaoPrimario = { padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }
-const botaoSecundario = { padding: '8px 20px', background: 'transparent', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }
-
-function formatMoeda(valor) {
-  return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-}
-function formatData(data) {
-  return data ? new Date(data).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '—'
-}
-
-function Faixa({ tipo = 'aviso', children }) {
-  const cor = tipo === 'erro' ? 'var(--color-danger)' : 'var(--color-warning)'
-  return (
-    <div style={{ borderLeft: `4px solid ${cor}`, background: 'var(--color-bg)', padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: 13, marginBottom: 10 }}>
-      {children}
-    </div>
-  )
-}
-
-function validarArquivo(arquivo) {
-  if (!arquivo) return 'Escolha um arquivo.'
-  if (!TIPOS.split(',').includes(arquivo.type)) return 'Só PDF, JPG ou PNG.'
-  if (arquivo.size > TAMANHO_MAX) return 'Arquivo maior que 10 MB.'
-  return null
-}
-
-function mensagemDe(err, padrao) {
-  return err?.response?.data?.error || padrao
-}
+import { TIPOS, inputStyle, botaoPrimario, botaoSecundario, formatMoeda, formatData, Faixa, validarArquivo, mensagemDe, PreviewArquivo } from './upload/comum'
 
 export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalvo }) {
   const [etapa, setEtapa] = useState('ocioso')
@@ -320,15 +287,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
         </div>
       </div>
 
-      {previewUrl && (
-        <div style={{ position: 'sticky', top: 16, alignSelf: 'start' }}>
-          {previewTipo === 'application/pdf'
-            ? <object data={previewUrl} type="application/pdf" style={{ width: '100%', height: 420, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
-                <a href={previewUrl} target="_blank" rel="noopener">Abrir o PDF</a>
-              </object>
-            : <img src={previewUrl} alt="Pedido enviado" style={{ maxWidth: '100%', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }} />}
-        </div>
-      )}
+      <PreviewArquivo url={previewUrl} tipo={previewTipo} alt="Pedido enviado" />
     </form>
   )
 }
