@@ -242,4 +242,41 @@ R$
     expect(r.map(p => [p.id, p.jaFora])).toEqual([['a', true], ['b', true], ['c', false], ['d', false]])
     expect(pagamentosDaSemana(r, segunda, domingo, null).every(p => !p.jaFora)).toBe(true)
   })
+
+  it('a escolha na lista vence a regra do saldo', () => {
+    const segunda = new Date('2026-09-14T00:00:00')
+    const domingo = new Date('2026-09-20T00:00:00')
+    const pix = [{ id: 'pix', valor: 49310, data_pagamento: '2026-09-14', created_at: '2026-09-14T20:40:00Z' }]
+    const saldoEm = new Date('2026-09-15T09:00:00')
+    expect(pagamentosDaSemana(pix, segunda, domingo, saldoEm)[0].jaFora).toBe(true)
+    expect(pagamentosDaSemana(pix, segunda, domingo, saldoEm, { pix: true })[0].jaFora).toBe(false)
+  })
+
+  it('saldo digitado antes da regra nova não tira o Pix da semana', async () => {
+    // Sem saldoEm, a data da ultima edicao nao serve para decidir.
+    const hoje = new Date()
+    const d = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`
+    const seg = new Date(hoje); seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7))
+    const chave = `${seg.getFullYear()}-${String(seg.getMonth() + 1).padStart(2, '0')}-${String(seg.getDate()).padStart(2, '0')}`
+    localStorage.setItem('caixa-semana:planejamento', JSON.stringify({ [chave]: { saldo: '1000', informadoEm: d } }))
+    respostas({
+      pagosSemana: [{ id: 'pix', fornecedor_nome: 'Flávia', fornecedor_apelido: 'FL', valor: 300,
+                      data_pagamento: d, created_at: new Date(hoje.getTime() - 3600e3).toUTCString() }],
+    })
+    montar()
+    await waitFor(() => expect(screen.getByText(/descontado da sobra/)).toBeInTheDocument())
+  })
+
+  it('comprovante de Pix já lançado só marca o pedido', async () => {
+    respostas({ pedidos: [{ id: 'p0', data_pedido: null, valor_total: 400 }] })
+    api.post.mockImplementation(url => url.endsWith('/pagamentos/ler')
+      ? Promise.resolve({ data: { pagamento_existente: { id: 'g', valor: 49310, data_pagamento: 'Mon, 14 Sep 2026 00:00:00 GMT' } } })
+      : Promise.resolve({ data: {} }))
+    const { container } = montar()
+    fireEvent.click(await screen.findByLabelText('Pago'))
+    const arquivo = new File(['x'], 'pix.pdf', { type: 'application/pdf' })
+    fireEvent.change(container.querySelector('input[type=file]'), { target: { files: [arquivo] } })
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2))
+    expect(api.post.mock.calls[1]).toEqual(['/api/fornecedores/f1/pedidos/p0/pago', { modo: 'ja_lancado', data_pagamento: '2026-09-14' }])
+  })
 })

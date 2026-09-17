@@ -27,6 +27,11 @@ já não está nele e não é descontado de novo. Pago em dia anterior ao saldo:
 No mesmo dia: fora se foi lançado antes de o saldo ser digitado. O caso que
 escapa: pagar, digitar o saldo e só depois lançar o pagamento — sai duas vezes.
 
+Cada pagamento da lista tem o botão "Descontar da sobra" / "Não descontar": a
+escolha dela vale mais que a regra. Saldo digitado antes de 17/09/2026 não tem a
+hora guardada; nesse caso todo pagamento da semana é descontado (a data da
+última edição do planejamento tirava da sobra o Pix de 49.310 de 14/09).
+
 A reserva **não** entra nessa conta, nem somando nem subtraindo — ver abaixo.
 
 Horizonte único: **segunda a domingo**. O número que estava no lugar disto

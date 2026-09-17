@@ -225,7 +225,7 @@ export function dividaPorPedido(pedidos, totalPago, hoje) {
  * lançado antes de ela digitar o saldo. O que escapa: pagar, digitar o saldo e
  * só lançar o pagamento depois — esse sai duas vezes.
  */
-export function pagamentosDaSemana(pagamentos, segunda, domingo, saldoEm) {
+export function pagamentosDaSemana(pagamentos, segunda, domingo, saldoEm, ajustes = {}) {
   const de = iso(segunda)
   const ate = iso(domingo)
   const diaSaldo = saldoEm ? iso(saldoEm) : null
@@ -239,7 +239,9 @@ export function pagamentosDaSemana(pagamentos, segunda, domingo, saldoEm) {
         d < diaSaldo ||
         (d === diaSaldo && lancado !== null && !Number.isNaN(lancado.getTime()) && lancado <= saldoEm)
       )
-      return { ...p, jaFora }
+      // A escolha dela vale mais que a regra: o botão na lista grava aqui.
+      const escolhido = ajustes[p.id]
+      return { ...p, jaFora: escolhido === undefined ? jaFora : !escolhido, ajustado: escolhido !== undefined }
     })
 }
 
@@ -472,12 +474,13 @@ export default function CaixaSemana() {
   const saldo = numeroBR(daSemana.saldo)
   const reserva = numeroBR(daSemana.reserva)
 
-  // O saldo guardado antes do saldoEm existir so tem o dia: conta do comeco
-  // dele, e o pagamento do mesmo dia sai da sobra.
-  const saldoEm = daSemana.saldo
-    ? (daSemana.saldoEm ? new Date(daSemana.saldoEm) : comoData(daSemana.informadoEm))
-    : null
-  const pagosSemana = pagamentosDaSemana(pagamentos, segunda, domingo, saldoEm)
+  // Saldo digitado antes do saldoEm existir: nao se sabe quando foi. O
+  // informadoEm nao serve — muda a cada edicao da agenda — e foi ele que tirou
+  // da sobra o Pix de 49.310 de 14/09 (17/09/2026). Na duvida, desconta; o
+  // botao da lista desfaz.
+  const saldoEm = daSemana.saldo && daSemana.saldoEm ? new Date(daSemana.saldoEm) : null
+  const ajustesPagamento = daSemana.ajustesPagamento || {}
+  const pagosSemana = pagamentosDaSemana(pagamentos, segunda, domingo, saldoEm, ajustesPagamento)
   const pagosDescontados = pagosSemana.filter(p => !p.jaFora)
   const totalPagoFornecedor = pagosDescontados.reduce((s, p) => s + p.valor, 0)
 
@@ -507,10 +510,12 @@ export default function CaixaSemana() {
       acumulado += entra - sai
       return { data, nome: NOMES_DIA[i], entra, saiBoletos, saiPagos, acumulado }
     })
-  }, [saldo, liberacoes, contas, pagamentos, daSemana.saldoEm, chaveSemana])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [saldo, liberacoes, contas, pagamentos, daSemana.saldoEm, daSemana.ajustesPagamento, chaveSemana])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const diaFlavia = dias.find(d => d.acumulado >= totalFlavia)
   const indiceFlavia = diaFlavia ? dias.indexOf(diaFlavia) : -1
+
+  const salvarAjuste = ajustes => salvar({ ajustesPagamento: ajustes })
 
   const periodo = `${diaMes(segunda)} a ${diaMes(domingo)}`
   const botao = {
@@ -885,9 +890,15 @@ export default function CaixaSemana() {
                   <Linha key={p.id}
                          esquerda={p.fornecedor_apelido ? `${p.fornecedor_nome} (${p.fornecedor_apelido})` : p.fornecedor_nome}
                          apoio={p.jaFora
-                           ? `Pago em ${dia(iso(p.data))} · já estava fora do saldo em conta informado, não descontado de novo`
-                           : `Pago em ${dia(iso(p.data))}`}
-                         direita={brl(p.valor)} />
+                           ? `Pago em ${dia(iso(p.data))} · não descontado — já estava fora do saldo em conta`
+                           : `Pago em ${dia(iso(p.data))} · descontado da sobra`}
+                         direita={brl(p.valor)}
+                         extra={
+                           <button type="button" style={{ ...botao, padding: '4px 9px', fontSize: 12 }}
+                                   onClick={() => salvarAjuste({ ...ajustesPagamento, [p.id]: p.jaFora })}>
+                             {p.jaFora ? 'Descontar da sobra' : 'Não descontar'}
+                           </button>
+                         } />
                 ))}
               </div>
             )}
