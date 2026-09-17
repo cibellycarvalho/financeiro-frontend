@@ -43,6 +43,18 @@ function LinhaLancamento({ linha, podeEditar, onMudou, onAbrirAnexo }) {
   const [erro, setErro] = useState(null)
   const [salvando, setSalvando] = useState(false)
 
+  // Reseeda os campos a partir da linha atual (props). Chamada ao abrir o
+  // editor — cobre tanto "abrir de novo depois de Cancelar" (descarta o que
+  // foi digitado) quanto "a página recarregou a linha" (mesmo id, dado novo).
+  function reiniciar() {
+    setComp(mesDe(linha.competencia) || '')
+    setValor(linha.valor ?? '')
+    setPagoEm(linha.pago_em ? String(linha.pago_em).slice(0, 10) : '')
+    setVencimento(linha.vencimento ? String(linha.vencimento).slice(0, 10) : '')
+    setNumeroNf(linha.numero_nf || '')
+    setErro(null)
+  }
+
   async function salvar(e) {
     e.preventDefault()
     setErro(null); setSalvando(true)
@@ -80,7 +92,7 @@ function LinhaLancamento({ linha, podeEditar, onMudou, onAbrirAnexo }) {
         {linha.tipo === 'das' && <label style={{ fontSize: 12 }}>Vencimento<br /><input type="date" value={vencimento} onChange={e => setVencimento(e.target.value)} style={{ ...inputStyle, width: 150 }} /></label>}
         {linha.tipo !== 'nf' && <label style={{ fontSize: 12 }}>Pago em{linha.tipo === 'das' ? ' (vazio = em aberto)' : ''}<br /><input type="date" value={pagoEm} onChange={e => setPagoEm(e.target.value)} style={{ ...inputStyle, width: 150 }} /></label>}
         <button type="submit" disabled={salvando} style={{ ...botaoPrimario, padding: '8px 14px' }}>Salvar</button>
-        <button type="button" onClick={() => setEditando(false)} style={botaoMini}>Cancelar</button>
+        <button type="button" onClick={() => { reiniciar(); setEditando(false) }} style={botaoMini}>Cancelar</button>
         {erro && <span style={{ color: 'var(--color-danger)', fontSize: 12 }}>{erro}</span>}
       </form>
     )
@@ -92,7 +104,7 @@ function LinhaLancamento({ linha, podeEditar, onMudou, onAbrirAnexo }) {
       <Anexos linha={linha} onAbrirAnexo={onAbrirAnexo} />
       {podeEditar && (
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
-          <button type="button" onClick={() => setEditando(true)} title="Editar" style={botaoIcone}>✏️</button>
+          <button type="button" onClick={() => { reiniciar(); setEditando(true) }} title="Editar" style={botaoIcone}>✏️</button>
           <button type="button" onClick={apagar} title="Apagar" style={botaoIcone}>🗑️</button>
         </span>
       )}

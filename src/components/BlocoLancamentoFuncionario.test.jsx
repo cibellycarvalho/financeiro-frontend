@@ -61,6 +61,16 @@ describe('BlocoLancamentoFuncionario', () => {
     expect(api.put.mock.calls[0][1]).toEqual({ competencia: '2026-09', valor: 75.9, vencimento: '2026-10-20', pago_em: '2026-10-18' })
   })
 
+  it('cancelar a edição descarta o que foi digitado', () => {
+    render(<BlocoLancamentoFuncionario tipo="das" linhas={[DAS_ABERTO]} podeEditar onAbrir={() => {}} onMudou={() => {}} onAbrirAnexo={() => {}} />)
+    fireEvent.click(screen.getByTitle('Editar'))
+    fireEvent.change(screen.getByLabelText(/Pago em/), { target: { value: '2026-10-18' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    fireEvent.click(screen.getByTitle('Editar'))
+    expect(screen.getByLabelText(/Pago em/).value).toBe('')
+    expect(api.put).not.toHaveBeenCalled()
+  })
+
   it('apagar pede confirmação e manda DELETE', async () => {
     api.delete.mockResolvedValue({})
     vi.spyOn(window, 'confirm').mockReturnValue(true)
