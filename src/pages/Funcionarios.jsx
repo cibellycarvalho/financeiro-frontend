@@ -2,7 +2,7 @@
 // Funcionários (prestadores MEI): cartões com o nome, e dentro de cada um o
 // mês de competência com três blocos — pagamento, DAS e NF. Não copia
 // Fornecedores.jsx: a página é a cola entre blocos pequenos.
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Layout from '../components/Layout'
 import PaginaHeader from '../components/PaginaHeader'
 import api from '../services/api'
@@ -77,10 +77,15 @@ export default function Funcionarios() {
   const [modalNovo, setModalNovo] = useState(false)
   const [modalEditar, setModalEditar] = useState(null)
   const [erro, setErro] = useState(null)
+  // Conta os pedidos de carregarMes para descartar respostas atrasadas: ao
+  // trocar de mês rapidamente, a resposta de um mês antigo pode chegar depois
+  // da do mês atual e não pode sobrescrever o que já está na tela.
+  const pedidoAtual = useRef(0)
 
   const carregarFuncionarios = useCallback(async () => {
     try {
       const r = await api.get('/api/funcionarios')
+      setErro(null)
       setFuncionarios(r.data)
       setSel(s => (s ? r.data.find(f => f.id === s.id) || null : s))
     } catch {
@@ -89,14 +94,20 @@ export default function Funcionarios() {
   }, [])
 
   const carregarMes = useCallback(async (f, m) => {
+    const pedido = ++pedidoAtual.current
+    setErro(null)
     try {
       const [rLinhas, rMeses] = await Promise.all([
         api.get(`/api/funcionarios/${f.id}/lancamentos?competencia=${m}`),
         api.get(`/api/funcionarios/${f.id}/meses?ate=${m}&n=12`),
       ])
+      if (pedido !== pedidoAtual.current) return  // resposta atrasada de um mês que não é mais o atual
       setLinhas(rLinhas.data)
       setMeses(rMeses.data)
     } catch {
+      if (pedido !== pedidoAtual.current) return
+      setLinhas([])
+      setMeses([])
       setErro('Não consegui carregar o mês.')
     }
   }, [])

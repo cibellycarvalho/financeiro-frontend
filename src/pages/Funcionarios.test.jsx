@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Funcionarios, { resumoTexto } from './Funcionarios'
 
@@ -67,5 +67,62 @@ describe('Funcionários', () => {
     await waitFor(() => screen.getByText('PAGAMENTO'))
     fireEvent.change(screen.getByLabelText(/Mês/), { target: { value: '2026-08' } })
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/funcionarios/f-1/lancamentos?competencia=2026-08'))
+  })
+
+  it('resposta atrasada de um mês antigo não sobrescreve o mês atual', async () => {
+    let resolve08
+    const pendente08 = new Promise(resolve => { resolve08 = resolve })
+    api.get.mockImplementation(url => {
+      if (url === '/api/funcionarios') return Promise.resolve({ data: [JOSIE] })
+      if (url.includes('/lancamentos?competencia=2026-08')) return pendente08
+      if (url.includes('/lancamentos?competencia=2026-07')) {
+        return Promise.resolve({ data: [{ id: 'l-07', funcionario_id: 'f-1', tipo: 'nf', competencia: '2026-07-01', valor: 10, numero_nf: '999' }] })
+      }
+      if (url.includes('/lancamentos?competencia=')) return Promise.resolve({ data: [] })
+      if (url.includes('/meses?')) return Promise.resolve({ data: [] })
+      throw new Error('URL não prevista: ' + url)
+    })
+
+    render(<MemoryRouter><Funcionarios /></MemoryRouter>)
+    await waitFor(() => screen.getByText('Josie'))
+    fireEvent.click(screen.getByText('Josie'))
+    await waitFor(() => screen.getByText('PAGAMENTO'))
+
+    // Troca rápido: 08 fica pendente (controlado à mão) e 07 já resolve.
+    fireEvent.change(screen.getByLabelText(/Mês/), { target: { value: '2026-08' } })
+    fireEvent.change(screen.getByLabelText(/Mês/), { target: { value: '2026-07' } })
+    await waitFor(() => expect(screen.getByText(/NF nº 999/)).toBeInTheDocument())
+
+    // A resposta atrasada do 08 chega por último — não pode aparecer.
+    await act(async () => {
+      resolve08({ data: [{ id: 'l-08', funcionario_id: 'f-1', tipo: 'nf', competencia: '2026-08-01', valor: 20, numero_nf: '888' }] })
+      await pendente08
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByText(/NF nº 888/)).not.toBeInTheDocument()
+    expect(screen.getByText(/NF nº 999/)).toBeInTheDocument()
+  })
+
+  it('erro de carga some quando a carga seguinte dá certo', async () => {
+    let falhouUmaVez = false
+    api.get.mockImplementation(url => {
+      if (url === '/api/funcionarios') return Promise.resolve({ data: [JOSIE] })
+      if (url.includes('/lancamentos?competencia=')) {
+        if (!falhouUmaVez) { falhouUmaVez = true; return Promise.reject(new Error('falhou')) }
+        return Promise.resolve({ data: [] })
+      }
+      if (url.includes('/meses?')) return Promise.resolve({ data: [] })
+      throw new Error('URL não prevista: ' + url)
+    })
+
+    render(<MemoryRouter><Funcionarios /></MemoryRouter>)
+    await waitFor(() => screen.getByText('Josie'))
+    fireEvent.click(screen.getByText('Josie'))
+    await waitFor(() => expect(screen.getByText('Não consegui carregar o mês.')).toBeInTheDocument())
+
+    fireEvent.change(screen.getByLabelText(/Mês/), { target: { value: '2026-08' } })
+    await waitFor(() => expect(screen.queryByText('Não consegui carregar o mês.')).not.toBeInTheDocument())
   })
 })
