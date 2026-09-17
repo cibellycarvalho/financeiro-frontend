@@ -12,10 +12,10 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { fireEvent } from '@testing-library/react'
-import CaixaSemana, { lerLiberacoes, dividaPorPedido, numeroBR, pagamentosDaSemana } from './CaixaSemana'
+import CaixaSemana, { lerLiberacoes, dividaPorPedido, numeroBR, pagamentosDaSemana, planoDoBanco, planoParaBanco } from './CaixaSemana'
 
 vi.mock('../services/api', () => ({
-  default: { get: vi.fn(), post: vi.fn() },
+  default: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
 }))
 vi.mock('../components/Layout', () => ({
   default: ({ children }) => <div>{children}</div>,
@@ -28,8 +28,11 @@ const FORNECEDORES = [
   { id: 'f2', nome: 'Luana', apelido: 'LUANA', saldo_aberto: 0 },
 ]
 
-function respostas({ pedidos = [], pagamentos = [], contas = [], repasses = [], pagosSemana = [] }) {
+const SEM_PLANEJAMENTO = { saldo_conta: null, saldo_em: null, reserva_aplicada: null, agenda: {}, ajustes_pagamento: {}, updated_at: null }
+
+function respostas({ pedidos = [], pagamentos = [], contas = [], repasses = [], pagosSemana = [], planejamento = SEM_PLANEJAMENTO }) {
   api.get.mockImplementation(url => {
+    if (url.startsWith('/api/planejamento/')) return Promise.resolve({ data: planejamento })
     if (url.startsWith('/api/fornecedores/pagamentos?')) return Promise.resolve({ data: pagosSemana })
     if (url === '/api/contas') return Promise.resolve({ data: contas })
     if (url === '/api/fornecedores') return Promise.resolve({ data: FORNECEDORES })
@@ -47,7 +50,9 @@ function montar() {
 beforeEach(() => {
   api.get.mockReset()
   api.post.mockReset()
-  localStorage.clear()   // o planejamento da semana mora aqui
+  api.put.mockReset()
+  api.put.mockResolvedValue({ data: {} })
+  localStorage.clear()   // só a cópia antiga do planejamento, de antes de ir pro banco
 })
 
 describe('Caixa da Semana', () => {
@@ -258,8 +263,8 @@ R$
     const d = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`
     const seg = new Date(hoje); seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7))
     const chave = `${seg.getFullYear()}-${String(seg.getMonth() + 1).padStart(2, '0')}-${String(seg.getDate()).padStart(2, '0')}`
-    localStorage.setItem('caixa-semana:planejamento', JSON.stringify({ [chave]: { saldo: '1000', informadoEm: d } }))
     respostas({
+      planejamento: { ...SEM_PLANEJAMENTO, saldo_conta: '1000.00', saldo_em: null, updated_at: new Date().toUTCString() },
       pagosSemana: [{ id: 'pix', fornecedor_nome: 'Flávia', fornecedor_apelido: 'FL', valor: 300,
                       data_pagamento: d, created_at: new Date(hoje.getTime() - 3600e3).toUTCString() }],
     })
@@ -278,5 +283,91 @@ R$
     fireEvent.change(container.querySelector('input[type=file]'), { target: { files: [arquivo] } })
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2))
     expect(api.post.mock.calls[1]).toEqual(['/api/fornecedores/f1/pedidos/p0/pago', { modo: 'ja_lancado', data_pagamento: '2026-09-14' }])
+  })
+})
+
+describe('Planejamento da semana no banco', () => {
+  const SEGUNDA = new Date(2026, 8, 14)   // 14/09/2026
+
+  it('do banco para a tela: número vira texto em reais e a data vira dia do mês', () => {
+    const d = planoDoBanco({
+      saldo_conta: '12000.50', saldo_em: 'Tue, 15 Sep 2026 13:20:00 GMT', reserva_aplicada: null,
+      agenda: { '2026-09-15': 2280.51 }, ajustes_pagamento: { pg1: true },
+      updated_at: 'Wed, 16 Sep 2026 10:00:00 GMT',
+    })
+    expect(d.saldo).toBe('12.000,50')
+    expect(d.reserva).toBeUndefined()           // "não informado" não vira zero
+    expect(d.agenda).toEqual({ 15: '2.280,51' })
+    expect(d.ajustesPagamento).toEqual({ pg1: true })
+    expect(new Date(d.saldoEm).toISOString()).toBe('2026-09-15T13:20:00.000Z')
+  })
+
+  it('da tela para o banco: texto em reais vira número e dia do mês vira data da semana', () => {
+    const corpo = planoParaBanco({
+      saldo: '5.922,92', saldoEm: '2026-09-15T13:20:00.000Z', reserva: '',
+      agenda: { 14: '2.280,51', 15: '' }, ajustesPagamento: { pg1: false },
+    }, SEGUNDA)
+    expect(corpo).toEqual({
+      saldo_conta: 5922.92, saldo_em: '2026-09-15T13:20:00.000Z', reserva_aplicada: null,
+      agenda: { '2026-09-14': 2280.51 }, ajustes_pagamento: { pg1: false },
+    })
+  })
+
+  it('não aceita resposta estranha do banco como planejamento', () => {
+    expect(planoDoBanco([])).toEqual({})
+    expect(planoDoBanco(null)).toEqual({})
+  })
+
+  it('o saldo guardado no banco aparece e entra na sobra', async () => {
+    respostas({ planejamento: { ...SEM_PLANEJAMENTO, saldo_conta: '5000.00', updated_at: new Date().toUTCString() } })
+    montar()
+    await waitFor(() => expect(screen.getByDisplayValue('5.000,00')).toBeInTheDocument())
+    expect(screen.getByText(/R\$\s?5\.000,00 − R\$\s?0,00 de boletos/)).toBeInTheDocument()
+  })
+
+  it('digitar o saldo grava no banco, para aparecer em qualquer aparelho', async () => {
+    respostas({})
+    montar()
+    const campo = await screen.findByPlaceholderText('5.922,92')
+    await waitFor(() => expect(campo).not.toBeDisabled())
+    fireEvent.change(campo, { target: { value: '3.500,00' } })
+    await waitFor(() => expect(api.put).toHaveBeenCalled(), { timeout: 3000 })
+    const [url, corpo] = api.put.mock.calls.at(-1)
+    expect(url).toMatch(/^\/api\/planejamento\/\d{4}-\d{2}-\d{2}$/)
+    expect(corpo.saldo_conta).toBe(3500)
+    expect(corpo.saldo_em).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
+
+  it('o que estava só neste navegador sobe para o banco uma vez e sai do navegador', async () => {
+    const hoje = new Date()
+    const seg = new Date(hoje); seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7))
+    const chave = `${seg.getFullYear()}-${String(seg.getMonth() + 1).padStart(2, '0')}-${String(seg.getDate()).padStart(2, '0')}`
+    localStorage.setItem('caixa-semana:planejamento', JSON.stringify({
+      [chave]: { saldo: '7.000,00', saldoEm: '2026-09-15T10:00:00.000Z' },
+      '2020-01-06': { saldo: '1,00' },
+    }))
+    respostas({})   // banco vazio para esta semana
+    montar()
+    await waitFor(() => expect(api.put).toHaveBeenCalled())
+    const [url, corpo] = api.put.mock.calls[0]
+    expect(url).toBe(`/api/planejamento/${chave}`)
+    expect(corpo.saldo_conta).toBe(7000)
+    expect(corpo.saldo_em).toBe('2026-09-15T10:00:00.000Z')   // a hora de quando ela digitou
+    await waitFor(() => {
+      const resto = JSON.parse(localStorage.getItem('caixa-semana:planejamento') || '{}')
+      expect(resto[chave]).toBeUndefined()
+      expect(resto['2020-01-06']).toBeDefined()   // outras semanas ficam onde estão
+    })
+  })
+
+  it('banco com dado ganha do navegador: não sobrescreve com cópia velha', async () => {
+    const hoje = new Date()
+    const seg = new Date(hoje); seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7))
+    const chave = `${seg.getFullYear()}-${String(seg.getMonth() + 1).padStart(2, '0')}-${String(seg.getDate()).padStart(2, '0')}`
+    localStorage.setItem('caixa-semana:planejamento', JSON.stringify({ [chave]: { saldo: '1,00' } }))
+    respostas({ planejamento: { ...SEM_PLANEJAMENTO, saldo_conta: '9000.00', updated_at: new Date().toUTCString() } })
+    montar()
+    await waitFor(() => expect(screen.getByDisplayValue('9.000,00')).toBeInTheDocument())
+    expect(api.put).not.toHaveBeenCalled()
   })
 })

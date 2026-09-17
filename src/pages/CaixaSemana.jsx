@@ -22,20 +22,21 @@
  * constante aqui e não numa configuração: exceção escrita como exceção é mais
  * honesta que generalidade com um caso só.
  *
- * PLANEJAMENTO GUARDADO NO NAVEGADOR, NÃO NO BANCO. Saldo em conta, reserva e
- * os lançamentos futuros do Mercado Pago são informação de PLANEJAMENTO, não
- * lançamento contábil: ela relê no Mercado Pago toda semana e o número muda.
- * Gravar isso em fin_repasses_ml criaria registro que ninguém consegue apagar
- * — `routes/repasses.py` não tem DELETE nem PUT (ver
- * docs/endpoints-editar-apagar-repasse.md). Um botão que soma e não desfaz é
- * pior que um campo de digitar.
+ * PLANEJAMENTO NO BANCO (fin_planejamento_semana), UMA LINHA POR SEMANA. Saldo
+ * em conta, reserva, os lançamentos futuros do Mercado Pago e o "Descontar /
+ * Não descontar" de cada pagamento são PLANEJAMENTO, não lançamento contábil:
+ * ela relê no Mercado Pago toda semana e reescreve à vontade.
  *
- * Aqui fica no navegador, por semana, livre para reescrever. A troco disso:
- * some se ela trocar de computador. Daí o "informado em" ao lado de cada valor
- * e o aviso quando envelhece — dado velho apresentado como atual é o defeito
- * que este painel mais combate.
+ * Moravam no localStorage até 17/09/2026. Cada aparelho via um painel
+ * diferente — o marido dela em 14/09, e ela mesma em 17/09, quando o saldo que
+ * tinha colado "saiu da tela" por estar em outro navegador. O que ainda estiver
+ * só num navegador sobe para o banco na primeira vez que a tela abrir lá.
+ *
+ * Os dois donos gravam (rota sem require_admin). O "informado em" ao lado de
+ * cada valor e o aviso quando envelhece continuam: dado velho apresentado como
+ * atual é o defeito que este painel mais combate.
  */
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import Layout from '../components/Layout'
 import PaginaHeader from '../components/PaginaHeader'
 import Indicador from '../components/Indicador'
@@ -245,11 +246,86 @@ export function pagamentosDaSemana(pagamentos, segunda, domingo, saldoEm, ajuste
     })
 }
 
+/** Cópia antiga, de quando o planejamento morava no navegador. Só é lida para subir ao banco. */
 function lerPlanejamento() {
   try {
     return JSON.parse(localStorage.getItem(CHAVE) || '{}') || {}
   } catch {
     return {}
+  }
+}
+
+function esquecerSemanaLocal(chave) {
+  try {
+    const todas = lerPlanejamento()
+    delete todas[chave]
+    if (Object.keys(todas).length) localStorage.setItem(CHAVE, JSON.stringify(todas))
+    else localStorage.removeItem(CHAVE)
+  } catch { /* modo privado */ }
+}
+
+function temPlanejamento(d) {
+  return !!d && ['saldo', 'reserva', 'agenda', 'ajustesPagamento', 'textoMP'].some(k => {
+    const v = d[k]
+    return v !== undefined && v !== null && v !== '' && !(typeof v === 'object' && !Object.keys(v).length)
+  })
+}
+
+const DEBOUNCE_GRAVAR_MS = 600
+
+function emReais(n) {
+  return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/**
+ * Linha do banco para o formato da tela: valores como texto em reais (é o que
+ * ela digita e edita) e a agenda por dia do mês. "Não informado" fica de fora —
+ * não vira zero, senão a sobra sairia calculada em cima de um saldo que ninguém
+ * digitou.
+ */
+export function planoDoBanco(linha) {
+  if (!linha || Array.isArray(linha) || typeof linha !== 'object') return {}
+  const d = {}
+  const num = v => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v))) ? undefined : Number(v)
+  if (num(linha.saldo_conta) !== undefined) d.saldo = emReais(num(linha.saldo_conta))
+  if (num(linha.reserva_aplicada) !== undefined) d.reserva = emReais(num(linha.reserva_aplicada))
+  if (linha.saldo_em) {
+    const quando = new Date(linha.saldo_em)
+    if (!Number.isNaN(quando.getTime())) d.saldoEm = quando.toISOString()
+  }
+  const agenda = {}
+  Object.entries(linha.agenda || {}).forEach(([data, valor]) => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(data) && num(valor) !== undefined) agenda[Number(data.slice(8, 10))] = emReais(num(valor))
+  })
+  if (Object.keys(agenda).length) d.agenda = agenda
+  if (linha.ajustes_pagamento && Object.keys(linha.ajustes_pagamento).length) d.ajustesPagamento = linha.ajustes_pagamento
+  const atualizado = comoData(linha.updated_at)
+  if (atualizado) d.informadoEm = iso(atualizado)
+  return d
+}
+
+/** O que a tela guarda para o corpo do PUT: texto em reais vira número, dia do mês vira data da semana. */
+export function planoParaBanco(d, segunda) {
+  const num = t => {
+    if (t === undefined || t === null || String(t).trim() === '') return null
+    const n = numeroBR(t)
+    return Number.isFinite(n) ? n : null
+  }
+  const agenda = {}
+  Object.entries((d && d.agenda) || {}).forEach(([dia, valor]) => {
+    const v = num(valor)
+    if (v === null) return
+    for (let i = 0; i < 7; i++) {
+      const data = somaDias(segunda, i)
+      if (data.getDate() === Number(dia)) { agenda[iso(data)] = v; break }
+    }
+  })
+  return {
+    saldo_conta: num(d && d.saldo),
+    saldo_em: (d && d.saldoEm) || null,
+    reserva_aplicada: num(d && d.reserva),
+    agenda,
+    ajustes_pagamento: (d && d.ajustesPagamento) || {},
   }
 }
 
@@ -313,7 +389,11 @@ export default function CaixaSemana() {
   const [repasses, setRepasses] = useState(null)
   const [flavia, setFlavia] = useState(null)
   const [erro, setErro] = useState(null)
-  const [plano, setPlano] = useState(lerPlanejamento)
+  const [plano, setPlano] = useState({})
+  const [planoCarregado, setPlanoCarregado] = useState(false)
+  const [erroPlano, setErroPlano] = useState(null)
+  const pendente = useRef(null)          // { chave, dados, timer }
+  const semanaCarregada = useRef(null)
   const [colando, setColando] = useState(false)
   const [rascunho, setRascunho] = useState('')
   const [avisoColagem, setAvisoColagem] = useState(null)
@@ -327,21 +407,78 @@ export default function CaixaSemana() {
 
   const daSemana = plano[chaveSemana] || {}
 
+  const gravarNoBanco = useCallback(async (chave, dados) => {
+    try {
+      await api.put(`/api/planejamento/${chave}`, planoParaBanco(dados, comoData(chave)))
+      setErroPlano(null)
+      return true
+    } catch (err) {
+      const motivo = err?.response?.data?.error
+      setErroPlano(motivo
+        ? `Não salvou: ${motivo}`
+        : 'Não salvou o planejamento. Confira a internet e digite de novo.')
+      return false
+    }
+  }, [])
+
+  // Grava o que estiver pendente agora — usado ao trocar de semana e ao sair,
+  // para os últimos números digitados não se perderem no debounce.
+  const descarregar = useCallback(() => {
+    const p = pendente.current
+    if (!p) return
+    clearTimeout(p.timer)
+    pendente.current = null
+    gravarNoBanco(p.chave, p.dados)
+  }, [gravarNoBanco])
+
   const salvar = useCallback((campos) => {
     setPlano(anterior => {
-      const proximo = {
-        ...anterior,
-        [chaveSemana]: {
-          ...(anterior[chaveSemana] || {}),
-          ...campos,
-          informadoEm: iso(new Date()),
-          ...('saldo' in campos ? { saldoEm: new Date().toISOString() } : {}),
-        },
+      const semana = {
+        ...(anterior[chaveSemana] || {}),
+        ...campos,
+        informadoEm: iso(new Date()),
+        ...('saldo' in campos ? { saldoEm: new Date().toISOString() } : {}),
       }
-      try { localStorage.setItem(CHAVE, JSON.stringify(proximo)) } catch { /* modo privado */ }
-      return proximo
+      // Antes de a semana chegar do banco, gravar sobrescreveria o que está lá.
+      if (semanaCarregada.current === chaveSemana) {
+        if (pendente.current) clearTimeout(pendente.current.timer)
+        pendente.current = { chave: chaveSemana, dados: semana, timer: setTimeout(descarregar, DEBOUNCE_GRAVAR_MS) }
+      }
+      return { ...anterior, [chaveSemana]: semana }
     })
-  }, [chaveSemana])
+  }, [chaveSemana, descarregar])
+
+  useEffect(() => () => descarregar(), [descarregar])
+
+  useEffect(() => {
+    let vivo = true
+    descarregar()
+    semanaCarregada.current = null
+    setPlanoCarregado(false)
+    setErroPlano(null)
+    api.get(`/api/planejamento/${chaveSemana}`)
+      .then(async r => {
+        if (!vivo) return
+        const linha = r.data
+        const local = lerPlanejamento()[chaveSemana]
+        semanaCarregada.current = chaveSemana
+        const bancoNuncaInformado = !linha || Array.isArray(linha) || !linha.updated_at
+        if (bancoNuncaInformado && temPlanejamento(local)) {
+          // Estava só neste navegador: sobe uma vez e sai daqui. Banco com
+          // dado nunca é sobrescrito por cópia local, que pode estar velha.
+          setPlano(p => ({ ...p, [chaveSemana]: local }))
+          setPlanoCarregado(true)
+          if (await gravarNoBanco(chaveSemana, local)) esquecerSemanaLocal(chaveSemana)
+          return
+        }
+        setPlano(p => ({ ...p, [chaveSemana]: planoDoBanco(linha) }))
+        setPlanoCarregado(true)
+      })
+      .catch(() => {
+        if (vivo) setErroPlano('Não consegui carregar o planejamento da semana. Recarregue a página.')
+      })
+    return () => { vivo = false }
+  }, [chaveSemana])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const diasDaSemana = useMemo(
     () => Array.from({ length: 7 }, (_, i) => somaDias(segunda, i)),
@@ -596,8 +733,11 @@ export default function CaixaSemana() {
               contrario. */}
           <SecaoCard
             titulo="Planejamento da semana"
-            subtitulo="Informado por você, guardado neste navegador. Não vai para o banco — é planejamento, não lançamento."
+            subtitulo="Informado por vocês e guardado no painel — aparece igual em qualquer aparelho. É planejamento, não lançamento."
           >
+            {erroPlano && (
+              <p role="alert" style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--color-danger)' }}>{erroPlano}</p>
+            )}
             <div style={{
               display: 'grid', gap: 14,
               gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
@@ -606,6 +746,7 @@ export default function CaixaSemana() {
                 <span style={rotulo}>Saldo em conta hoje</span>
                 <input type="text" inputMode="decimal" style={entrada}
                        value={daSemana.saldo ?? ''}
+                       disabled={!planoCarregado}
                        onChange={e => salvar({ saldo: e.target.value })}
                        placeholder="5.922,92" />
                 <Lido valor={daSemana.saldo} />
@@ -614,6 +755,7 @@ export default function CaixaSemana() {
                 <span style={rotulo}>Reserva aplicada</span>
                 <input type="text" inputMode="decimal" style={entrada}
                        value={daSemana.reserva ?? ''}
+                       disabled={!planoCarregado}
                        onChange={e => salvar({ reserva: e.target.value })}
                        placeholder="59.256,58" />
                 <Lido valor={daSemana.reserva} />
@@ -662,7 +804,7 @@ export default function CaixaSemana() {
               )}
 
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 11 }}>
-                <button type="button" style={botao}
+                <button type="button" style={botao} disabled={!planoCarregado}
                         onClick={() => { setColando(v => !v); setAvisoColagem(null) }}>
                   {colando ? 'Cancelar' : colou ? 'Colar agenda de novo' : 'Colar agenda do Mercado Pago'}
                 </button>

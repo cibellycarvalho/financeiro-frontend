@@ -123,6 +123,13 @@ desfeita em silêncio pela próxima sincronização.
 
 ## Parte 2 — Planejamento da semana no banco
 
+> **Feita em 17/09/2026** (backend `routes/planejamento.py`, migração
+> `20260917_planejamento_semana.sql`; tela lê e grava pela rota). Acrescentados
+> dois campos que a Caixa passou a usar depois desta ordem: `saldo_em` (vem da
+> tela — é a hora em que o saldo foi digitado, e decide o que já estava fora da
+> conta) e `ajustes_pagamento` (o "Descontar / Não descontar" de cada pagamento).
+> A parte 1 (repasses) continua pendente.
+
 ### Por que
 
 A Caixa da Semana precisa de três informações que não existem em lugar nenhum do
