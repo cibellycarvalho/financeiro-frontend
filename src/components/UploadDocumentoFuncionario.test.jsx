@@ -91,4 +91,27 @@ describe('UploadDocumentoFuncionario', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Substituir' }))
     await waitFor(() => expect(api.put.mock.calls[0][0]).toBe('/api/funcionarios/f-1/lancamentos/l-9'))
   })
+
+  it('Substituir não dispara duas vezes enquanto o PUT está pendente', async () => {
+    api.post.mockResolvedValueOnce({ data: { leitura_falhou: true, arquivo_token: null, aviso: null, numero: null, valor: null, data_emissao: null, competencia: null, competencia_inferida: false, cnpj_prestador: null, nome_prestador: null, cnpj_confere: null, nf_existente: null } })
+    const onSalvo = vi.fn()
+    render(<UploadDocumentoFuncionario funcionario={JOSIE} tipo="nf" competencia="2026-09" arquivo={pdf()} existente={null} onSalvo={onSalvo} onCancelar={() => {}} />)
+    await waitFor(() => expect(screen.getByText(/Não consegui ler/)).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText(/Nº da nota/), { target: { value: '77' } })
+    api.post.mockRejectedValueOnce({ response: { status: 409, data: { error: 'Já existe NF em 09/2026', existente_id: 'l-9' } } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Substituir' })).toBeInTheDocument())
+
+    let resolver
+    api.put.mockImplementationOnce(() => new Promise(r => { resolver = r }))
+    const botaoSubstituir = screen.getByRole('button', { name: 'Substituir' })
+    fireEvent.click(botaoSubstituir)
+    await waitFor(() => expect(botaoSubstituir).toBeDisabled())
+    fireEvent.click(botaoSubstituir)
+    expect(api.put).toHaveBeenCalledTimes(1)
+
+    resolver({ data: { id: 'l-9' } })
+    await waitFor(() => expect(onSalvo).toHaveBeenCalledTimes(1))
+    expect(api.put).toHaveBeenCalledTimes(1)
+  })
 })

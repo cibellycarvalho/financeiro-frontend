@@ -92,6 +92,7 @@ export default function UploadDocumentoFuncionario({ funcionario, tipo, competen
 
   async function salvar(e, forcarPut = null) {
     e?.preventDefault()
+    if (etapa === 'salvando') return
     const invalido = validar()
     if (invalido) { setErro(invalido); return }
     setErro(null); setEtapa('salvando')
@@ -155,7 +156,7 @@ export default function UploadDocumentoFuncionario({ funcionario, tipo, competen
           </p>
         )}
         {conflito && (
-          <Faixa>{conflito.mensagem}. <button type="button" onClick={() => salvar(null, conflito.id)} style={{ ...botaoSecundario, padding: '4px 10px', fontSize: 12, marginLeft: 8 }}>Substituir</button></Faixa>
+          <Faixa>{conflito.mensagem}. <button type="button" onClick={() => salvar(null, conflito.id)} disabled={etapa !== 'conferindo'} style={{ ...botaoSecundario, padding: '4px 10px', fontSize: 12, marginLeft: 8 }}>Substituir</button></Faixa>
         )}
 
         {leitura && !leitura.leitura_falhou && (tipo === 'pagamento' || tipo === 'das_comprovante') && (
