@@ -203,16 +203,29 @@ R$
     expect(screen.getByText(/− R\$ 1\.200,00 pagos/)).toBeInTheDocument()
   })
 
-  it('marcar a Flávia como paga lança o pagamento com o vencido já preenchido', async () => {
+  it('a caixinha Pago do pedido lança o pagamento amarrado a ele', async () => {
     respostas({ pedidos: [{ id: 'p0', data_pedido: null, valor_total: 400 }] })
     api.post.mockResolvedValue({ data: {} })
     montar()
-    fireEvent.click(await screen.findByText('Marcar como pago'))
-    fireEvent.click(screen.getByText('Salvar pagamento'))
+    fireEvent.click(await screen.findByLabelText('Pago'))
+    fireEvent.click(screen.getByText('Lançar pagamento de R$ 400,00'))
     await waitFor(() => expect(api.post).toHaveBeenCalled())
     const [url, corpo] = api.post.mock.calls[0]
-    expect(url).toBe('/api/fornecedores/f1/pagamentos')
-    expect(corpo.valor).toBe(400)
+    expect(url).toBe('/api/fornecedores/f1/pedidos/p0/pago')
+    expect(corpo.modo).toBe('lancar')
+  })
+
+  it('pedido marcado como pago consome o próprio valor antes do mais antigo', () => {
+    // Pix de 49.310 pagou os pedidos de 10 e 11/08, não o saldo de julho.
+    const hoje = new Date('2026-09-17T00:00:00')
+    const linhas = dividaPorPedido([
+      { id: 'jul', data_pedido: '2026-07-01', valor_total: 1000 },
+      { id: 'a10', data_pedido: '2026-08-10', valor_total: 35310, pago_em: '2026-09-14' },
+      { id: 'a11', data_pedido: '2026-08-11', valor_total: 14000, pago_em: '2026-09-14' },
+    ], 49310, hoje)
+    const por = Object.fromEntries(linhas.map(l => [l.id, l]))
+    expect(por.jul.restante).toBe(1000)
+    expect(por.a10.quitado && por.a11.quitado).toBe(true)
   })
 
   it('não desconta de novo o que foi pago antes do saldo em conta ser digitado', () => {

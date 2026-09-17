@@ -138,6 +138,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
       return
     }
     setEtapa('salvando')
+    let idDoPedido = pedidoSalvoId
     if (!pedidoSalvoId) {
       try {
         const r = await api.post(`/api/fornecedores/${fornecedorId}/pedidos`, {
@@ -148,6 +149,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
           alias_vendedor: leitura?.texto_vendedor || null,
         })
         setPedidoSalvoId(r.data.id)
+        idDoPedido = r.data.id
       } catch (err) {
         setErro(mensagemDe(err, 'Erro ao salvar o pedido.'))
         setEtapa('conferindo')
@@ -162,6 +164,8 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
           id_transacao: comprovante.id_transacao || null,
           arquivo_token: comprovante.arquivo_token || null,
           alias_destinatario: comprovante.destinatario || null,
+          // Pedido subido já pago nasce com a caixinha "Pago" marcada.
+          pedido_id: idDoPedido,
         })
         if (r.data?.aviso) {
           // pagamento salvo, mas algo não saiu perfeito (ex.: anexo não guardado) —

@@ -41,6 +41,7 @@ import PaginaHeader from '../components/PaginaHeader'
 import Indicador from '../components/Indicador'
 import SecaoCard from '../components/SecaoCard'
 import api from '../services/api'
+import CaixinhaPago from '../components/CaixinhaPago'
 
 const APELIDO_FORNECEDOR_COM_PRAZO = 'FL'
 const DIAS_DE_PRAZO = 30
@@ -163,10 +164,16 @@ export function lerLiberacoes(texto) {
 /**
  * Consome os pedidos do mais antigo para o mais novo com o total já pago.
  * Devolve, por pedido, quanto falta e em que estado está.
+ *
+ * Pedido com a caixinha "Pago" marcada (pago_em) está quitado e consome o
+ * próprio valor primeiro. Só o que sobra do total pago desce do mais antigo
+ * para o mais novo. Sem isso, o Pix que pagou os pedidos de 10 e 11/08 ia
+ * parar no saldo de julho (17/09/2026).
  */
 export function dividaPorPedido(pedidos, totalPago, hoje) {
   const limite = somaDias(hoje, -DIAS_DE_PRAZO)
-  let credito = totalPago
+  const marcados = pedidos.filter(p => p.pago_em)
+  let credito = Math.max(0, totalPago - marcados.reduce((s, p) => s + Number(p.valor_total || 0), 0))
   const linhas = []
 
   // Pedido sem data vai para o fim da fila: não se sabe onde ele entra na
@@ -179,13 +186,14 @@ export function dividaPorPedido(pedidos, totalPago, hoje) {
 
   for (const p of ordenados) {
     const valor = Number(p.valor_total || 0)
-    const abatido = Math.min(credito, valor)
-    credito -= abatido
+    const abatido = p.pago_em ? valor : Math.min(credito, valor)
+    if (!p.pago_em) credito -= abatido
     const restante = Number((valor - abatido).toFixed(2))
 
     const data = comoData(p.data_pedido)
     linhas.push({
       id: p.id,
+      pedido: p,
       data,
       descricao: p.descricao_produtos,
       valor,
@@ -252,7 +260,7 @@ function Vazio({ children }) {
   )
 }
 
-function Linha({ esquerda, direita, apoio, tom }) {
+function Linha({ esquerda, direita, apoio, tom, extra }) {
   return (
     <div style={{
       background: 'var(--color-row)', borderRadius: 'var(--radius-sm)',
@@ -266,6 +274,7 @@ function Linha({ esquerda, direita, apoio, tom }) {
             {apoio}
           </div>
         )}
+        {extra && <div style={{ marginTop: 6 }}>{extra}</div>}
       </div>
       <span style={{
         fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
@@ -308,9 +317,6 @@ export default function CaixaSemana() {
   const [avisoColagem, setAvisoColagem] = useState(null)
   const [pagamentos, setPagamentos] = useState(null)
   const [recarga, setRecarga] = useState(0)
-  const [pagandoFL, setPagandoFL] = useState(null)   // { valor, data } enquanto o formulário está aberto
-  const [erroPagamento, setErroPagamento] = useState(null)
-  const [salvandoPagamento, setSalvandoPagamento] = useState(false)
 
   const segunda = refSemana
   const domingo = somaDias(segunda, 6)
@@ -505,25 +511,6 @@ export default function CaixaSemana() {
 
   const diaFlavia = dias.find(d => d.acumulado >= totalFlavia)
   const indiceFlavia = diaFlavia ? dias.indexOf(diaFlavia) : -1
-
-  async function registrarPagamentoFL() {
-    const valor = numeroBR(pagandoFL.valor)
-    if (valor <= 0) { setErroPagamento('Informe o valor pago.'); return }
-    if (!pagandoFL.data) { setErroPagamento('Informe a data do pagamento.'); return }
-    setSalvandoPagamento(true)
-    setErroPagamento(null)
-    try {
-      await api.post(`/api/fornecedores/${flavia.id}/pagamentos`, {
-        valor, data_pagamento: pagandoFL.data,
-      })
-      setPagandoFL(null)
-      setRecarga(n => n + 1)
-    } catch (e) {
-      setErroPagamento(e?.response?.data?.error || 'Não consegui salvar o pagamento.')
-    } finally {
-      setSalvandoPagamento(false)
-    }
-  }
 
   const periodo = `${diaMes(segunda)} a ${diaMes(domingo)}`
   const botao = {
@@ -789,54 +776,10 @@ export default function CaixaSemana() {
 
           <SecaoCard
             titulo={flavia.ausente ? 'Flávia (FL)' : flavia.nome}
-            subtitulo={`O que os pagamentos ainda não cobriram, do mais antigo para o mais novo. Vencido = passou de ${DIAS_DE_PRAZO} dias.`}
+            subtitulo={`Marque "Pago" no pedido que você pagou. O resto dos pagamentos desce do mais antigo para o mais novo. Vencido = passou de ${DIAS_DE_PRAZO} dias.`}
             total={brl(totalFlavia)}
             totalRotulo="Vencido"
           >
-            {!flavia.ausente && (
-              <div style={{ marginBottom: 12 }}>
-                {pagandoFL === null ? (
-                  <button type="button" style={botao} onClick={() => {
-                    setErroPagamento(null)
-                    setPagandoFL({
-                      valor: totalFlavia > 0
-                        ? totalFlavia.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                        : '',
-                      data: iso(hoje),
-                    })
-                  }}>Marcar como pago</button>
-                ) : (
-                  <div style={{
-                    display: 'grid', gap: 10, alignItems: 'end',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                  }}>
-                    <label>
-                      <span style={rotulo}>Valor pago</span>
-                      <input type="text" inputMode="decimal" style={entrada} autoFocus
-                             value={pagandoFL.valor}
-                             onChange={e => setPagandoFL({ ...pagandoFL, valor: e.target.value })} />
-                      <Lido valor={pagandoFL.valor} />
-                    </label>
-                    <label>
-                      <span style={rotulo}>Data do pagamento</span>
-                      <input type="date" style={entrada}
-                             value={pagandoFL.data}
-                             onChange={e => setPagandoFL({ ...pagandoFL, data: e.target.value })} />
-                    </label>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button type="button" style={botao} disabled={salvandoPagamento}
-                              onClick={registrarPagamentoFL}>
-                        {salvandoPagamento ? 'Salvando…' : 'Salvar pagamento'}
-                      </button>
-                      <button type="button" style={botao} onClick={() => setPagandoFL(null)}>Cancelar</button>
-                    </div>
-                  </div>
-                )}
-                {erroPagamento && (
-                  <p style={{ margin: '8px 0 0', fontSize: 12.5, color: 'var(--color-danger)' }}>{erroPagamento}</p>
-                )}
-              </div>
-            )}
             {flavia.ausente ? (
               <Vazio>Não achei fornecedor com apelido “{APELIDO_FORNECEDOR_COM_PRAZO}”. Cadastre em Fornecedores.</Vazio>
             ) : pendentes.length === 0 ? (
@@ -864,6 +807,8 @@ export default function CaixaSemana() {
                     ].filter(Boolean).join(' · ')}
                     direita={brl(d.restante)}
                     tom="divida"
+                    extra={<CaixinhaPago fornecedorId={flavia.id} pedido={d.pedido}
+                                         onMudou={() => setRecarga(n => n + 1)} />}
                   />
                 ))}
                 {aVencer.length > 0 && (
@@ -877,6 +822,8 @@ export default function CaixaSemana() {
                         esquerda={`Pedido de ${dia(iso(d.data))}`}
                         apoio={`Vence em ${dia(iso(somaDias(d.data, DIAS_DE_PRAZO)))}`}
                         direita={brl(d.restante)}
+                        extra={<CaixinhaPago fornecedorId={flavia.id} pedido={d.pedido}
+                                             onMudou={() => setRecarga(n => n + 1)} />}
                       />
                     ))}
                   </>
@@ -901,7 +848,7 @@ export default function CaixaSemana() {
                         <Linha
                           key={d.id}
                           esquerda={d.data ? `Pedido de ${dia(iso(d.data))}` : 'Saldo de meses anteriores'}
-                          apoio="Coberto por inteiro"
+                          apoio={d.pedido.pago_em ? `Marcado como pago em ${dia(d.pedido.pago_em)}` : 'Coberto por inteiro'}
                           direita={brl(d.valor)}
                         />
                       ))}

@@ -33,6 +33,23 @@ Horizonte único: **segunda a domingo**. O número que estava no lugar disto
 somava três horizontes diferentes (mês, mês e sempre) e por isso não servia para
 decidir nada.
 
+## A caixinha "Pago" do pedido
+
+Pedido dela em 17/09/2026. Ela paga pedido específico — o Pix de 49.310 de 14/09
+foi os pedidos de 10 e 11/08 —, mas a tela distribuía todo pagamento do mais
+antigo para o mais novo, começando pelo saldo de julho. O vencido saía errado.
+
+Cada pedido tem a caixinha "Pago" (em Fornecedores e na Caixa da Semana):
+- **Lançar pagamento**: cria o pagamento do valor do pedido, amarrado a ele. É o
+  que sai da sobra da semana.
+- **Pix já lançado**: só marca, para pedido antigo cujo Pix já está em
+  Fornecedores. O backend recusa se os pagamentos soltos não cobrem o pedido.
+- Pedido subido com comprovante ("já foi pago") nasce marcado.
+- Desmarcar apaga o pagamento amarrado ao pedido.
+
+Pedido marcado consome o próprio valor do total pago; só o que sobra desce do mais
+antigo para o mais novo.
+
 ## A reserva não é dinheiro disponível
 
 A reserva está **aplicada**, fora da conta corrente. Então ela não é subtraída:

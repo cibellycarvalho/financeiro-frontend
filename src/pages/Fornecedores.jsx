@@ -5,6 +5,7 @@ import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import ItensPedidoForm, { ITEM_VAZIO } from '../components/ItensPedidoForm'
 import UploadPedidoCompra from '../components/UploadPedidoCompra'
+import CaixinhaPago from '../components/CaixinhaPago'
 
 const inputStyle = { display: 'block', width: '100%', padding: 8, marginTop: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', boxSizing: 'border-box' }
 
@@ -1028,6 +1029,10 @@ export default function Fornecedores() {
                               📎
                             </button>
                           )}
+                        </div>
+                        <div style={{ marginTop: 6 }}>
+                          <CaixinhaPago fornecedorId={fornecedorSel.id} pedido={p}
+                            podeEditar={finRole === 'fin_admin'} onMudou={recarregarDados} />
                         </div>
                       </td>
                     )}
