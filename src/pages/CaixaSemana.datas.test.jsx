@@ -57,7 +57,7 @@ describe('Caixa da Semana — datas no formato que o backend manda', () => {
     // letra com número, e o boleto sumia da semana sem aviso.
     render(<MemoryRouter><CaixaSemana /></MemoryRouter>)
     await screen.findByText('Sobra para comprar')
-    expect(screen.getByText(/900,00 vencem na semana/)).toBeInTheDocument()
+    expect(screen.getByText(/900,00 na semana, pagos ou não/)).toBeInTheDocument()
   })
 
   it('pedido com mais de 30 dias conta como vencido', async () => {

@@ -7,36 +7,39 @@ mudá-las sem falar com ela.
 ## A conta
 
 ```
-   Saldo em conta hoje          (só a conta corrente — a reserva está aplicada)
- + Repasse previsto da semana
- − Boletos da semana e atrasados
- − Pagamentos a fornecedor lançados na semana
+   Entra na semana              repasses do Mercado Pago, segunda a domingo —
+                                o que já caiu e o que ainda vai cair
+ − Boletos da semana            os de Contas a Pagar que vencem na semana,
+                                pagos ou não, mais atrasados em aberto
+ − Pagamentos a fornecedor      todos os lançados na semana
  ─────────────────────────────
  = Sobra para comprar
 ```
 
+Ditada por ela em 17/09/2026, depois de uma tarde em que a tela tentou partir do
+saldo em conta: *"o que sobra para comprar é o que entra na semana menos os
+boletos a pagar menos o que foi pago a fornecedor"*. É **fluxo da semana**, não
+saldo: o que as vendas trouxeram menos o que a semana levou. O que sobra é o que
+dá para comprar produto novo **sem mexer na reserva**.
+
+O saldo em conta (Sicredi) fica na tela **só como informação**. Ele carrega
+resgate de reserva e sobra de semanas anteriores; entrando na conta, a tela
+dizia "tem 98 mil para gastar" numa semana em que as vendas mal cobriram a
+Flávia. Por isso também não existe mais a regra do "pago antes de digitar o
+saldo": sem saldo na conta, não há o que descontar duas vezes. Todo pagamento
+da semana sai; o botão "Não descontar" continua, por escolha dela.
+
+Horizonte único: **segunda a domingo**. A agenda do Mercado Pago é colada
+inteira, os sete dias; o que já caiu conta tanto quanto o que vai cair.
+
 ## A Flávia vencida é informativa; o que sai é o pagamento
 
-Pedido dela em 17/09/2026: o vencido da Flávia **não** sai da sobra só por
-existir. Sai quando ela paga — pelo botão "Marcar como pago" na Caixa da Semana
-ou lançando o pagamento em Fornecedores › FL. Vale igual para qualquer compra
-de fornecedor subida com comprovante: o pagamento dela sai da sobra.
-
-O saldo em conta é digitado à mão, então o que foi pago **antes** de digitá-lo
-já não está nele e não é descontado de novo. Pago em dia anterior ao saldo: fora.
-No mesmo dia: fora se foi lançado antes de o saldo ser digitado. O caso que
-escapa: pagar, digitar o saldo e só depois lançar o pagamento — sai duas vezes.
-
-Cada pagamento da lista tem o botão "Descontar da sobra" / "Não descontar": a
-escolha dela vale mais que a regra. Saldo digitado antes de 17/09/2026 não tem a
-hora guardada; nesse caso todo pagamento da semana é descontado (a data da
-última edição do planejamento tirava da sobra o Pix de 49.310 de 14/09).
+Pedido dela em 17/09/2026: o vencido da Flávia **não entra em nada** — nem
+soma, nem subtrai. O que sai da sobra é o pagamento, quando ela paga: pelo
+botão "Pago" no pedido ou lançando em Fornecedores › FL. Vale igual para
+qualquer fornecedor.
 
 A reserva **não** entra nessa conta, nem somando nem subtraindo — ver abaixo.
-
-Horizonte único: **segunda a domingo**. O número que estava no lugar disto
-somava três horizontes diferentes (mês, mês e sempre) e por isso não servia para
-decidir nada.
 
 ## A caixinha "Pago" do pedido
 
@@ -117,12 +120,13 @@ então conta como vencida, com o rótulo "Saldo de meses anteriores".
 
 Deixá-la de fora subestimava justamente a parte que precisa ser paga primeiro.
 
-## Boletos incluem os atrasados
+## Boletos: os da semana, pagos ou não, mais os atrasados
 
-A Cibelly pediu "quanto tenho de boleto pra pagar na semana". A tela soma os que
-vencem na semana **mais** os que já passaram do vencimento e continuam abertos.
-Ignorar os atrasados subestimaria o que precisa sair do caixa — e eles não
-deixam de existir por terem vencido.
+Boleto que vence na semana é dinheiro que a semana leva — pago ou não. Ela
+lançou Meli+ e Merke em Contas a Pagar, pagou, e o card mostrou R$ 0
+(17/09/2026): "o boletos a pagar tem que informar os boletos que eu coloquei".
+Atrasado em aberto entra também (e atrasado pago nesta semana, pela mesma
+razão). Boleto antigo já pago fica de fora.
 
 ## O repasse previsto vem dela, não do banco
 

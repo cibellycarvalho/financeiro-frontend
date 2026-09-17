@@ -233,32 +233,27 @@ R$
     expect(por.a10.quitado && por.a11.quitado).toBe(true)
   })
 
-  it('não desconta de novo o que foi pago antes do saldo em conta ser digitado', () => {
+  it('todo pagamento da semana sai da sobra — o saldo em conta não muda isso', () => {
     const segunda = new Date('2026-09-14T00:00:00')
     const domingo = new Date('2026-09-20T00:00:00')
-    const saldoEm = new Date('2026-09-16T10:00:00')
     const r = pagamentosDaSemana([
-      { id: 'a', valor: 1, data_pagamento: '2026-09-15', created_at: '2026-09-17T09:00:00' },  // dia anterior
-      { id: 'b', valor: 1, data_pagamento: '2026-09-16', created_at: '2026-09-16T09:00:00' },  // mesmo dia, antes
-      { id: 'c', valor: 1, data_pagamento: '2026-09-16', created_at: '2026-09-16T11:00:00' },  // mesmo dia, depois
-      { id: 'd', valor: 1, data_pagamento: '2026-09-18', created_at: '2026-09-18T09:00:00' },  // depois
+      { id: 'a', valor: 1, data_pagamento: '2026-09-14', created_at: '2026-09-14T09:00:00' },
+      { id: 'b', valor: 1, data_pagamento: '2026-09-16', created_at: '2026-09-16T09:00:00' },
       { id: 'e', valor: 1, data_pagamento: '2026-09-22', created_at: '2026-09-22T09:00:00' },  // outra semana
-    ], segunda, domingo, saldoEm)
-    expect(r.map(p => [p.id, p.jaFora])).toEqual([['a', true], ['b', true], ['c', false], ['d', false]])
-    expect(pagamentosDaSemana(r, segunda, domingo, null).every(p => !p.jaFora)).toBe(true)
+    ], segunda, domingo)
+    expect(r.map(p => [p.id, p.jaFora])).toEqual([['a', false], ['b', false]])
   })
 
-  it('a escolha na lista vence a regra do saldo', () => {
+  it('a escolha na lista tira ou devolve um pagamento à sobra', () => {
     const segunda = new Date('2026-09-14T00:00:00')
     const domingo = new Date('2026-09-20T00:00:00')
     const pix = [{ id: 'pix', valor: 49310, data_pagamento: '2026-09-14', created_at: '2026-09-14T20:40:00Z' }]
-    const saldoEm = new Date('2026-09-15T09:00:00')
-    expect(pagamentosDaSemana(pix, segunda, domingo, saldoEm)[0].jaFora).toBe(true)
-    expect(pagamentosDaSemana(pix, segunda, domingo, saldoEm, { pix: true })[0].jaFora).toBe(false)
+    expect(pagamentosDaSemana(pix, segunda, domingo)[0].jaFora).toBe(false)
+    expect(pagamentosDaSemana(pix, segunda, domingo, { pix: false })[0].jaFora).toBe(true)
+    expect(pagamentosDaSemana(pix, segunda, domingo, { pix: true })[0].jaFora).toBe(false)
   })
 
-  it('saldo digitado antes da regra nova não tira o Pix da semana', async () => {
-    // Sem saldoEm, a data da ultima edicao nao serve para decidir.
+  it('pagamento da semana é descontado mesmo com saldo digitado', async () => {
     const hoje = new Date()
     const d = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`
     const seg = new Date(hoje); seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7))
@@ -333,11 +328,11 @@ describe('Planejamento da semana no banco', () => {
     expect(planoDoBanco(null)).toEqual({})
   })
 
-  it('o saldo guardado no banco aparece e entra na sobra', async () => {
+  it('o saldo guardado no banco aparece, mas é só informação — não entra na sobra', async () => {
     respostas({ planejamento: { ...SEM_PLANEJAMENTO, saldo_conta: '5000.00', updated_at: new Date().toUTCString() } })
     montar()
     await waitFor(() => expect(screen.getByDisplayValue('5.000,00')).toBeInTheDocument())
-    expect(screen.getByText(/R\$\s?5\.000,00 − R\$\s?0,00 de boletos/)).toBeInTheDocument()
+    expect(screen.getByText(/R\$\s?0,00 − R\$\s?0,00 de boletos − R\$\s?0,00 pagos/)).toBeInTheDocument()
   })
 
   it('digitar o saldo grava no banco, para aparecer em qualquer aparelho', async () => {
@@ -384,5 +379,42 @@ describe('Planejamento da semana no banco', () => {
     montar()
     await waitFor(() => expect(screen.getByDisplayValue('9.000,00')).toBeInTheDocument())
     expect(api.put).not.toHaveBeenCalled()
+  })
+})
+
+describe('A conta da semana (ditada em 17/09/2026)', () => {
+  const hoje = new Date()
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const seg = new Date(hoje); seg.setDate(seg.getDate() - ((seg.getDay() + 6) % 7))
+  const dom = new Date(seg); dom.setDate(dom.getDate() + 6)
+
+  it('entra na semana é a agenda inteira: o que já caiu mais o que vai cair', async () => {
+    respostas({ planejamento: { ...SEM_PLANEJAMENTO, agenda: { [ymd(seg)]: 1000, [ymd(dom)]: 500 }, updated_at: hoje.toUTCString() } })
+    montar()
+    await waitFor(() => expect(screen.getByText('Entra na semana')).toBeInTheDocument())
+    expect(screen.getAllByText('R$ 1.500,00').length).toBeGreaterThan(0)
+    expect(screen.getByText(/já caíram/)).toBeInTheDocument()
+  })
+
+  it('sobra = entra − boletos da semana (pagos ou não) − pagos a fornecedor; saldo não entra', async () => {
+    respostas({
+      planejamento: { ...SEM_PLANEJAMENTO, saldo_conta: '99999.00', agenda: { [ymd(seg)]: 1000 }, updated_at: hoje.toUTCString() },
+      contas: [{ id: 'c1', descricao: 'Meli +', valor: 100, vencimento: ymd(hoje), status: 'pago',
+                 data_pagamento: ymd(hoje), categoria: 'OUTRO' }],
+      pagosSemana: [{ id: 'g1', fornecedor_nome: 'FY', fornecedor_apelido: 'FY', valor: 200,
+                      data_pagamento: ymd(hoje), created_at: hoje.toUTCString() }],
+    })
+    montar()
+    await waitFor(() => expect(screen.getByText(/R\$\s?1\.000,00 − R\$\s?100,00 de boletos − R\$\s?200,00 pagos/)).toBeInTheDocument())
+    expect(screen.getByText('Meli +')).toBeInTheDocument()
+    expect(screen.getByText(/Pago em .* vencia/)).toBeInTheDocument()
+  })
+
+  it('boleto de outra semana já pago não entra', async () => {
+    respostas({ contas: [{ id: 'c2', descricao: 'Antigo pago', valor: 900, vencimento: '2026-01-11',
+                           status: 'pago', data_pagamento: '2026-01-11', categoria: 'OUTRO' }] })
+    montar()
+    await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
+    expect(screen.queryByText('Antigo pago')).not.toBeInTheDocument()
   })
 })

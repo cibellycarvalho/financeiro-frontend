@@ -46,7 +46,6 @@ import CaixinhaPago from '../components/CaixinhaPago'
 
 const APELIDO_FORNECEDOR_COM_PRAZO = 'FL'
 const DIAS_DE_PRAZO = 30
-const DIAS_ATE_ENVELHECER = 3
 const CHAVE = 'caixa-semana:planejamento'
 
 const NOMES_DIA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
@@ -213,36 +212,21 @@ export function dividaPorPedido(pedidos, totalPago, hoje) {
 }
 
 /**
- * Separa os pagamentos a fornecedor da semana entre os que saem da sobra e os
- * que já estavam fora do saldo em conta que ela digitou.
- *
- * Pedido dela em 17/09/2026: a dívida da Flávia não sai da sobra por existir
- * — sai quando é paga. Vale igual para compra de outro fornecedor lançada com
- * comprovante. Mas o saldo em conta é digitado à mão: o que foi pago ANTES de
- * digitá-lo já não está nele, e descontar de novo tiraria o mesmo dinheiro
- * duas vezes.
- *
- * Pago em dia anterior ao do saldo: já fora. No mesmo dia: já fora se foi
- * lançado antes de ela digitar o saldo. O que escapa: pagar, digitar o saldo e
- * só lançar o pagamento depois — esse sai duas vezes.
+ * Pagamentos a fornecedor da semana. Todos saem da sobra — a conta é fluxo da
+ * semana (entra − boletos − pagos), então não existe "já estava fora do saldo".
+ * A regra do saldo em conta que morava aqui saiu em 17/09/2026, quando ela
+ * ditou a conta de novo. O botão "Não descontar" da lista continua valendo:
+ * a escolha dela vale mais que a regra.
  */
-export function pagamentosDaSemana(pagamentos, segunda, domingo, saldoEm, ajustes = {}) {
+export function pagamentosDaSemana(pagamentos, segunda, domingo, ajustes = {}) {
   const de = iso(segunda)
   const ate = iso(domingo)
-  const diaSaldo = saldoEm ? iso(saldoEm) : null
   return (pagamentos || [])
     .map(p => ({ ...p, data: comoData(p.data_pagamento), valor: Number(p.valor || 0) }))
     .filter(p => p.data && iso(p.data) >= de && iso(p.data) <= ate)
     .map(p => {
-      const d = iso(p.data)
-      const lancado = p.created_at ? new Date(p.created_at) : null
-      const jaFora = diaSaldo !== null && (
-        d < diaSaldo ||
-        (d === diaSaldo && lancado !== null && !Number.isNaN(lancado.getTime()) && lancado <= saldoEm)
-      )
-      // A escolha dela vale mais que a regra: o botão na lista grava aqui.
       const escolhido = ajustes[p.id]
-      return { ...p, jaFora: escolhido === undefined ? jaFora : !escolhido, ajustado: escolhido !== undefined }
+      return { ...p, jaFora: escolhido === undefined ? false : !escolhido, ajustado: escolhido !== undefined }
     })
 }
 
@@ -561,11 +545,16 @@ export default function CaixaSemana() {
     if (!v) return false
     return v >= iso(segunda) && v <= iso(domingo)
   }
-  const abertas = (contas || []).filter(c => c.status !== 'pago')
-  const boletosSemana = abertas.filter(naSemana)
-  const boletosAtrasados = abertas.filter(c => {
+  // Pago ou não: boleto que vence na semana é dinheiro que a semana leva.
+  // Ela lançou Meli+ e Merke, pagou, e o card mostrou R$ 0 (17/09/2026).
+  const pagoNaSemana = c => {
+    const q = iso(comoData(c.data_pagamento))
+    return c.status === 'pago' && q !== null && q >= iso(segunda) && q <= iso(domingo)
+  }
+  const boletosSemana = (contas || []).filter(naSemana)
+  const boletosAtrasados = (contas || []).filter(c => {
     const v = iso(comoData(c.vencimento))
-    return v !== null && v < iso(segunda)
+    return v !== null && v < iso(segunda) && (c.status !== 'pago' || pagoNaSemana(c))
   })
   const totalBoletosSemana = boletosSemana.reduce((s, c) => s + Number(c.valor || 0), 0)
   const totalBoletosAtrasados = boletosAtrasados.reduce((s, c) => s + Number(c.valor || 0), 0)
@@ -608,33 +597,35 @@ export default function CaixaSemana() {
   const totalRepasse = colou ? totalColado : totalGravado
 
   // ---- a conta ------------------------------------------------------------
+  // Ditada por ela em 17/09/2026: "o que sobra para comprar é o que entra na
+  // semana menos os boletos a pagar menos o que foi pago a fornecedor". É
+  // fluxo da semana. O saldo em conta fica na tela só como informação: ele
+  // carrega resgate de reserva e sobra de outras semanas, e entrando aqui a
+  // tela dizia "tem 98 mil" numa semana em que as vendas mal cobriram a Flávia.
   const saldo = numeroBR(daSemana.saldo)
   const reserva = numeroBR(daSemana.reserva)
-
-  // Saldo digitado antes do saldoEm existir: nao se sabe quando foi. O
-  // informadoEm nao serve — muda a cada edicao da agenda — e foi ele que tirou
-  // da sobra o Pix de 49.310 de 14/09 (17/09/2026). Na duvida, desconta; o
-  // botao da lista desfaz.
-  const saldoEm = daSemana.saldo && daSemana.saldoEm ? new Date(daSemana.saldoEm) : null
   const ajustesPagamento = daSemana.ajustesPagamento || {}
-  const pagosSemana = pagamentosDaSemana(pagamentos, segunda, domingo, saldoEm, ajustesPagamento)
+  const pagosSemana = pagamentosDaSemana(pagamentos, segunda, domingo, ajustesPagamento)
   const pagosDescontados = pagosSemana.filter(p => !p.jaFora)
   const totalPagoFornecedor = pagosDescontados.reduce((s, p) => s + p.valor, 0)
 
-  // A Flavia vencida NAO sai daqui: e informativo. Sai o que foi pago a ela
-  // (e a qualquer fornecedor) — pedido dela em 17/09/2026.
-  const sobra = saldo + totalRepasse - totalBoletos - totalPagoFornecedor
+  // O que da agenda já caiu (até hoje) e o que ainda vai cair.
+  const jaCaiu = Object.entries(liberacoes)
+    .filter(([d]) => diasDaSemana.some(x => x.getDate() === Number(d) && x <= hoje))
+    .reduce((s, [, v]) => s + v, 0)
+  const aCair = totalColado - jaCaiu
+
+  // A Flavia vencida NAO entra em nada: e informativo.
+  const sobra = totalRepasse - totalBoletos - totalPagoFornecedor
 
   // Depois de alguns dias a data do saldo aparece junto do numero, discreta.
   // Nao vira quadro de aviso: repetir de volta o que ela digitou, toda semana,
   // e a tela falando com ela sem ter nada novo a dizer.
   const informadoEm = comoData(daSemana.informadoEm)
-  const envelheceu = informadoEm !== null &&
-    Math.round((hoje - informadoEm) / 86400000) > DIAS_ATE_ENVELHECER
 
   // ---- dia a dia ----------------------------------------------------------
   const dias = useMemo(() => {
-    let acumulado = saldo
+    let acumulado = 0   // fluxo da semana: começa do zero, não do saldo
     return Array.from({ length: 7 }, (_, i) => {
       const data = somaDias(segunda, i)
       const entra = liberacoes[data.getDate()] || 0
@@ -647,7 +638,7 @@ export default function CaixaSemana() {
       acumulado += entra - sai
       return { data, nome: NOMES_DIA[i], entra, saiBoletos, saiPagos, acumulado }
     })
-  }, [saldo, liberacoes, contas, pagamentos, daSemana.saldoEm, daSemana.ajustesPagamento, chaveSemana])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [liberacoes, contas, pagamentos, daSemana.ajustesPagamento, chaveSemana])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const diaFlavia = dias.find(d => d.acumulado >= totalFlavia)
   const indiceFlavia = diaFlavia ? dias.indexOf(diaFlavia) : -1
@@ -692,10 +683,13 @@ export default function CaixaSemana() {
           }}>
             <Indicador
               rotulo="Entra na semana"
-              valor={saldo + totalRepasse}
+              valor={totalRepasse}
               tom="neutro"
-              composicao={`${brl(saldo)} em conta + ${brl(totalRepasse)} de repasse` +
-                (envelheceu ? ` · saldo de ${diaMes(informadoEm)}` : '')}
+              composicao={colou
+                ? `${brl(jaCaiu)} já caíram + ${brl(aCair)} a cair · repasses do Mercado Pago`
+                : totalGravado > 0
+                  ? `${brl(totalGravado)} de repasses já lançados`
+                  : 'Nada informado — cole a agenda do Mercado Pago'}
             />
             <Indicador
               rotulo="Flávia (FL) — vencido"
@@ -709,7 +703,7 @@ export default function CaixaSemana() {
               rotulo="Boletos a pagar"
               valor={totalBoletos}
               tom="divida"
-              composicao={`${brl(totalBoletosSemana)} vencem na semana` +
+              composicao={`${brl(totalBoletosSemana)} na semana, pagos ou não` +
                 (totalBoletosAtrasados > 0 ? ` + ${brl(totalBoletosAtrasados)} atrasados` : '')}
             />
             <Indicador
@@ -726,7 +720,7 @@ export default function CaixaSemana() {
               rotulo="Sobra para comprar"
               valor={sobra}
               tom="auto"
-              composicao={`${brl(saldo + totalRepasse)} − ${brl(totalBoletos)} de boletos − ${brl(totalPagoFornecedor)} pagos`}
+              composicao={`${brl(totalRepasse)} − ${brl(totalBoletos)} de boletos − ${brl(totalPagoFornecedor)} pagos`}
             />
           </div>
 
@@ -747,7 +741,7 @@ export default function CaixaSemana() {
               gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
             }}>
               <label>
-                <span style={rotulo}>Saldo em conta hoje</span>
+                <span style={rotulo}>Saldo na Sicredi hoje <small style={{ fontWeight: 400 }}>· só informação, não entra na sobra</small></span>
                 <input type="text" inputMode="decimal" style={entrada}
                        value={daSemana.saldo ?? ''}
                        disabled={!planoCarregado}
@@ -856,7 +850,7 @@ export default function CaixaSemana() {
 
           <SecaoCard
             titulo="Quando o dinheiro chega"
-            subtitulo="Acumulado disponível dia a dia, já descontando boletos e pagamentos a fornecedor."
+            subtitulo="O que a semana acumula dia a dia: o que entrou menos boletos e pagamentos a fornecedor. Começa do zero na segunda."
           >
             {!colou ? (
               <Vazio>
@@ -1036,7 +1030,7 @@ export default function CaixaSemana() {
                   <Linha key={p.id}
                          esquerda={p.fornecedor_apelido ? `${p.fornecedor_nome} (${p.fornecedor_apelido})` : p.fornecedor_nome}
                          apoio={p.jaFora
-                           ? `Pago em ${dia(iso(p.data))} · não descontado — já estava fora do saldo em conta`
+                           ? `Pago em ${dia(iso(p.data))} · não descontado — sua escolha`
                            : `Pago em ${dia(iso(p.data))} · descontado da sobra`}
                          direita={brl(p.valor)}
                          extra={
@@ -1052,21 +1046,25 @@ export default function CaixaSemana() {
 
           <SecaoCard
             titulo="Boletos"
-            subtitulo="Vencendo nesta semana, mais o que já passou do vencimento e continua aberto."
+            subtitulo="Os de Contas a Pagar que vencem nesta semana, pagos ou não, mais o que passou do vencimento e continua aberto."
             total={brl(totalBoletos)}
           >
             {boletosSemana.length === 0 && boletosAtrasados.length === 0 ? (
-              <Vazio>Nenhuma conta aberta para esta semana.</Vazio>
+              <Vazio>Nenhuma conta nesta semana.</Vazio>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {boletosAtrasados.map(c => (
                   <Linha key={c.id} esquerda={c.descricao}
-                         apoio={`Atrasado desde ${dia(c.vencimento)} · ${c.categoria}`}
-                         direita={brl(c.valor)} tom="divida" />
+                         apoio={c.status === 'pago'
+                           ? `Pago em ${dia(c.data_pagamento)} · vencia ${dia(c.vencimento)} · ${c.categoria}`
+                           : `Atrasado desde ${dia(c.vencimento)} · ${c.categoria}`}
+                         direita={brl(c.valor)} tom={c.status === 'pago' ? undefined : 'divida'} />
                 ))}
                 {boletosSemana.map(c => (
                   <Linha key={c.id} esquerda={c.descricao}
-                         apoio={`Vence ${dia(c.vencimento)} · ${c.categoria}`}
+                         apoio={c.status === 'pago'
+                           ? `Pago em ${dia(c.data_pagamento)} · vencia ${dia(c.vencimento)} · ${c.categoria}`
+                           : `Vence ${dia(c.vencimento)} · ${c.categoria}`}
                          direita={brl(c.valor)} />
                 ))}
               </div>
