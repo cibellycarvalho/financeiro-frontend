@@ -410,6 +410,16 @@ describe('A conta da semana (ditada em 17/09/2026)', () => {
     expect(screen.getByText(/Pago em .* vencia/)).toBeInTheDocument()
   })
 
+  it('boleto de antes pago nesta semana entra, mas não é chamado de atrasado', async () => {
+    const sab = new Date(seg); sab.setDate(sab.getDate() - 2)   // sábado anterior
+    respostas({ contas: [{ id: 'c3', descricao: 'Santander', valor: 3202.57, vencimento: ymd(sab),
+                           status: 'pago', data_pagamento: ymd(seg), categoria: 'OUTRO' }] })
+    montar()
+    await waitFor(() => expect(screen.getByText('Santander')).toBeInTheDocument())
+    expect(screen.getByText(/3\.202,57 de antes, pagos na semana/)).toBeInTheDocument()
+    expect(screen.queryByText(/atrasados/)).not.toBeInTheDocument()
+  })
+
   it('boleto de outra semana já pago não entra', async () => {
     respostas({ contas: [{ id: 'c2', descricao: 'Antigo pago', valor: 900, vencimento: '2026-01-11',
                            status: 'pago', data_pagamento: '2026-01-11', categoria: 'OUTRO' }] })

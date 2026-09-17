@@ -558,6 +558,11 @@ export default function CaixaSemana() {
   })
   const totalBoletosSemana = boletosSemana.reduce((s, c) => s + Number(c.valor || 0), 0)
   const totalBoletosAtrasados = boletosAtrasados.reduce((s, c) => s + Number(c.valor || 0), 0)
+  // "Atrasado" só é o que continua em aberto. Boleto de antes que ela pagou
+  // nesta semana (Santander vence dia 12, caiu no sábado, pago segunda) não
+  // é atraso — é conta da semana.
+  const totalAtrasadosAbertos = boletosAtrasados.filter(c => c.status !== 'pago').reduce((s, c) => s + Number(c.valor || 0), 0)
+  const totalDeAntesPagos = totalBoletosAtrasados - totalAtrasadosAbertos
   const totalBoletos = totalBoletosSemana + totalBoletosAtrasados
 
   // ---- Flávia -------------------------------------------------------------
@@ -704,7 +709,8 @@ export default function CaixaSemana() {
               valor={totalBoletos}
               tom="divida"
               composicao={`${brl(totalBoletosSemana)} na semana, pagos ou não` +
-                (totalBoletosAtrasados > 0 ? ` + ${brl(totalBoletosAtrasados)} atrasados` : '')}
+                (totalDeAntesPagos > 0 ? ` + ${brl(totalDeAntesPagos)} de antes, pagos na semana` : '') +
+                (totalAtrasadosAbertos > 0 ? ` + ${brl(totalAtrasadosAbertos)} atrasados` : '')}
             />
             <Indicador
               rotulo="Pago a fornecedor"
