@@ -302,11 +302,12 @@ describe('Planejamento da semana no banco', () => {
   it('do banco para a tela: número vira texto em reais e a data vira dia do mês', () => {
     const d = planoDoBanco({
       saldo_conta: '12000.50', saldo_em: 'Tue, 15 Sep 2026 13:20:00 GMT', reserva_aplicada: null,
-      agenda: { '2026-09-15': 2280.51 }, ajustes_pagamento: { pg1: true },
+      retirada_reserva: '40797.00', agenda: { '2026-09-15': 2280.51 }, ajustes_pagamento: { pg1: true },
       updated_at: 'Wed, 16 Sep 2026 10:00:00 GMT',
     })
     expect(d.saldo).toBe('12.000,50')
     expect(d.reserva).toBeUndefined()           // "não informado" não vira zero
+    expect(d.retirada).toBe('40.797,00')
     expect(d.agenda).toEqual({ 15: '2.280,51' })
     expect(d.ajustesPagamento).toEqual({ pg1: true })
     expect(new Date(d.saldoEm).toISOString()).toBe('2026-09-15T13:20:00.000Z')
@@ -314,11 +315,11 @@ describe('Planejamento da semana no banco', () => {
 
   it('da tela para o banco: texto em reais vira número e dia do mês vira data da semana', () => {
     const corpo = planoParaBanco({
-      saldo: '5.922,92', saldoEm: '2026-09-15T13:20:00.000Z', reserva: '',
+      saldo: '5.922,92', saldoEm: '2026-09-15T13:20:00.000Z', reserva: '', retirada: '40.797,00',
       agenda: { 14: '2.280,51', 15: '' }, ajustesPagamento: { pg1: false },
     }, SEGUNDA)
     expect(corpo).toEqual({
-      saldo_conta: 5922.92, saldo_em: '2026-09-15T13:20:00.000Z', reserva_aplicada: null,
+      saldo_conta: 5922.92, saldo_em: '2026-09-15T13:20:00.000Z', reserva_aplicada: null, retirada_reserva: 40797,
       agenda: { '2026-09-14': 2280.51 }, ajustes_pagamento: { pg1: false },
     })
   })
@@ -418,6 +419,19 @@ describe('A conta da semana (ditada em 17/09/2026)', () => {
     await waitFor(() => expect(screen.getByText('Santander')).toBeInTheDocument())
     expect(screen.getByText(/3\.202,57 de antes, pagos na semana/)).toBeInTheDocument()
     expect(screen.queryByText(/atrasados/)).not.toBeInTheDocument()
+  })
+
+  it('retirado da reserva aparece como informação e não muda a sobra', async () => {
+    respostas({
+      planejamento: { ...SEM_PLANEJAMENTO, retirada_reserva: '40797.00', agenda: { [ymd(seg)]: 1000 }, updated_at: hoje.toUTCString() },
+      pagosSemana: [{ id: 'g1', fornecedor_nome: 'Flavia', fornecedor_apelido: 'FL', valor: 6000,
+                      data_pagamento: ymd(hoje), created_at: hoje.toUTCString() }],
+    })
+    montar()
+    await waitFor(() => expect(screen.getByText('Retirado da reserva')).toBeInTheDocument())
+    expect(screen.getAllByText('R$ 40.797,00').length).toBeGreaterThan(0)   // card + seção Reserva
+    // sobra = 1.000 − 0 − 6.000 = −5.000: a reserva não entrou na conta, só explica o buraco
+    expect(screen.getByText(/R\$\s?1\.000,00 − R\$\s?0,00 de boletos − R\$\s?6\.000,00 pagos · os R\$\s?5\.000,00 que faltaram saíram da reserva/)).toBeInTheDocument()
   })
 
   it('boleto de outra semana já pago não entra', async () => {

@@ -273,6 +273,7 @@ export function planoDoBanco(linha) {
   const num = v => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v))) ? undefined : Number(v)
   if (num(linha.saldo_conta) !== undefined) d.saldo = emReais(num(linha.saldo_conta))
   if (num(linha.reserva_aplicada) !== undefined) d.reserva = emReais(num(linha.reserva_aplicada))
+  if (num(linha.retirada_reserva) !== undefined) d.retirada = emReais(num(linha.retirada_reserva))
   if (linha.saldo_em) {
     const quando = new Date(linha.saldo_em)
     if (!Number.isNaN(quando.getTime())) d.saldoEm = quando.toISOString()
@@ -308,6 +309,7 @@ export function planoParaBanco(d, segunda) {
     saldo_conta: num(d && d.saldo),
     saldo_em: (d && d.saldoEm) || null,
     reserva_aplicada: num(d && d.reserva),
+    retirada_reserva: num(d && d.retirada),
     agenda,
     ajustes_pagamento: (d && d.ajustesPagamento) || {},
   }
@@ -609,6 +611,9 @@ export default function CaixaSemana() {
   // tela dizia "tem 98 mil" numa semana em que as vendas mal cobriram a Flávia.
   const saldo = numeroBR(daSemana.saldo)
   const reserva = numeroBR(daSemana.reserva)
+  // Quanto saiu da reserva nesta semana. Informação, não entra na sobra
+  // (escolha dela em 17/09/2026 entre mostrar e somar: mostrar).
+  const retirada = numeroBR(daSemana.retirada)
   const ajustesPagamento = daSemana.ajustesPagamento || {}
   const pagosSemana = pagamentosDaSemana(pagamentos, segunda, domingo, ajustesPagamento)
   const pagosDescontados = pagosSemana.filter(p => !p.jaFora)
@@ -704,6 +709,14 @@ export default function CaixaSemana() {
                 ? `${contar(devidos.length, 'lançamento', 'lançamentos')} passados dos ${DIAS_DE_PRAZO} dias`
                 : `Nada passou dos ${DIAS_DE_PRAZO} dias`) + ' · informativo, não sai da sobra'}
             />
+            {retirada > 0 && (
+              <Indicador
+                rotulo="Retirado da reserva"
+                valor={retirada}
+                tom="neutro"
+                composicao="nesta semana · informativo, não entra na sobra"
+              />
+            )}
             <Indicador
               rotulo="Boletos a pagar"
               valor={totalBoletos}
@@ -726,7 +739,12 @@ export default function CaixaSemana() {
               rotulo="Sobra para comprar"
               valor={sobra}
               tom="auto"
-              composicao={`${brl(totalRepasse)} − ${brl(totalBoletos)} de boletos − ${brl(totalPagoFornecedor)} pagos`}
+              composicao={`${brl(totalRepasse)} − ${brl(totalBoletos)} de boletos − ${brl(totalPagoFornecedor)} pagos` +
+                (retirada > 0
+                  ? (sobra < 0
+                    ? ` · os ${brl(-sobra)} que faltaram saíram da reserva`
+                    : ` · sem contar os ${brl(retirada)} tirados da reserva`)
+                  : '')}
             />
           </div>
 
@@ -763,6 +781,15 @@ export default function CaixaSemana() {
                        onChange={e => salvar({ reserva: e.target.value })}
                        placeholder="59.256,58" />
                 <Lido valor={daSemana.reserva} />
+              </label>
+              <label>
+                <span style={rotulo}>Retirado da reserva nesta semana</span>
+                <input type="text" inputMode="decimal" style={entrada}
+                       value={daSemana.retirada ?? ''}
+                       disabled={!planoCarregado}
+                       onChange={e => salvar({ retirada: e.target.value })}
+                       placeholder="0,00" />
+                <Lido valor={daSemana.retirada} />
               </label>
             </div>
 
@@ -1088,6 +1115,11 @@ export default function CaixaSemana() {
                 tela ela viraria a tela mandando nela. Pedido dela em 14/09/2026:
                 "quero que o painel apenas me mostre as informacoes e eu vou
                 decidir o que fazer, se vou tirar dinheiro da reserva ou nao". */}
+            {retirada > 0 && (
+              <p style={{ margin: '0 0 8px', fontSize: 13 }}>
+                Retirado nesta semana: <strong>{brl(retirada)}</strong>
+              </p>
+            )}
             <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-text-muted)' }}>
               Não está no saldo em conta acima, e não entra na sobra para comprar.
             </p>
