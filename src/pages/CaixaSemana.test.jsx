@@ -11,7 +11,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
-import CaixaSemana, { lerLiberacoes, dividaPorPedido, numeroBR } from './CaixaSemana'
+import { fireEvent } from '@testing-library/react'
+import CaixaSemana, { lerLiberacoes, dividaPorPedido, numeroBR, pagamentosDaSemana } from './CaixaSemana'
 
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn() },
@@ -27,8 +28,9 @@ const FORNECEDORES = [
   { id: 'f2', nome: 'Luana', apelido: 'LUANA', saldo_aberto: 0 },
 ]
 
-function respostas({ pedidos = [], pagamentos = [], contas = [], repasses = [] }) {
+function respostas({ pedidos = [], pagamentos = [], contas = [], repasses = [], pagosSemana = [] }) {
   api.get.mockImplementation(url => {
+    if (url.startsWith('/api/fornecedores/pagamentos?')) return Promise.resolve({ data: pagosSemana })
     if (url === '/api/contas') return Promise.resolve({ data: contas })
     if (url === '/api/fornecedores') return Promise.resolve({ data: FORNECEDORES })
     if (url.includes('/pedidos')) return Promise.resolve({ data: pedidos })
@@ -180,5 +182,51 @@ R$
     const recente = linhas.find(l => l.id === 'p1')
     expect(semData.estado).toBe('anterior')
     expect(recente.estado).toBe('a_vencer')
+  })
+
+  it('a Flávia vencida é informativa: não sai da sobra para comprar', async () => {
+    respostas({ pedidos: [{ id: 'p0', data_pedido: null, valor_total: 400 }] })
+    montar()
+    await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
+    expect(screen.getByText(/R\$ 0,00 − R\$ 0,00 de boletos − R\$ 0,00 pagos/)).toBeInTheDocument()
+  })
+
+  it('pagamento a fornecedor da semana sai da sobra e aparece na lista', async () => {
+    const hoje = new Date()
+    const d = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`
+    respostas({
+      pagosSemana: [{ id: 'g9', fornecedor_nome: 'Luana', fornecedor_apelido: 'LUANA', valor: 1200,
+                      data_pagamento: d, created_at: hoje.toUTCString() }],
+    })
+    montar()
+    await waitFor(() => expect(screen.getByText('Luana (LUANA)')).toBeInTheDocument())
+    expect(screen.getByText(/− R\$ 1\.200,00 pagos/)).toBeInTheDocument()
+  })
+
+  it('marcar a Flávia como paga lança o pagamento com o vencido já preenchido', async () => {
+    respostas({ pedidos: [{ id: 'p0', data_pedido: null, valor_total: 400 }] })
+    api.post.mockResolvedValue({ data: {} })
+    montar()
+    fireEvent.click(await screen.findByText('Marcar como pago'))
+    fireEvent.click(screen.getByText('Salvar pagamento'))
+    await waitFor(() => expect(api.post).toHaveBeenCalled())
+    const [url, corpo] = api.post.mock.calls[0]
+    expect(url).toBe('/api/fornecedores/f1/pagamentos')
+    expect(corpo.valor).toBe(400)
+  })
+
+  it('não desconta de novo o que foi pago antes do saldo em conta ser digitado', () => {
+    const segunda = new Date('2026-09-14T00:00:00')
+    const domingo = new Date('2026-09-20T00:00:00')
+    const saldoEm = new Date('2026-09-16T10:00:00')
+    const r = pagamentosDaSemana([
+      { id: 'a', valor: 1, data_pagamento: '2026-09-15', created_at: '2026-09-17T09:00:00' },  // dia anterior
+      { id: 'b', valor: 1, data_pagamento: '2026-09-16', created_at: '2026-09-16T09:00:00' },  // mesmo dia, antes
+      { id: 'c', valor: 1, data_pagamento: '2026-09-16', created_at: '2026-09-16T11:00:00' },  // mesmo dia, depois
+      { id: 'd', valor: 1, data_pagamento: '2026-09-18', created_at: '2026-09-18T09:00:00' },  // depois
+      { id: 'e', valor: 1, data_pagamento: '2026-09-22', created_at: '2026-09-22T09:00:00' },  // outra semana
+    ], segunda, domingo, saldoEm)
+    expect(r.map(p => [p.id, p.jaFora])).toEqual([['a', true], ['b', true], ['c', false], ['d', false]])
+    expect(pagamentosDaSemana(r, segunda, domingo, null).every(p => !p.jaFora)).toBe(true)
   })
 })

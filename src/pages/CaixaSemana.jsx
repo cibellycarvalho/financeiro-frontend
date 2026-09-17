@@ -203,6 +203,38 @@ export function dividaPorPedido(pedidos, totalPago, hoje) {
   return linhas
 }
 
+/**
+ * Separa os pagamentos a fornecedor da semana entre os que saem da sobra e os
+ * que já estavam fora do saldo em conta que ela digitou.
+ *
+ * Pedido dela em 17/09/2026: a dívida da Flávia não sai da sobra por existir
+ * — sai quando é paga. Vale igual para compra de outro fornecedor lançada com
+ * comprovante. Mas o saldo em conta é digitado à mão: o que foi pago ANTES de
+ * digitá-lo já não está nele, e descontar de novo tiraria o mesmo dinheiro
+ * duas vezes.
+ *
+ * Pago em dia anterior ao do saldo: já fora. No mesmo dia: já fora se foi
+ * lançado antes de ela digitar o saldo. O que escapa: pagar, digitar o saldo e
+ * só lançar o pagamento depois — esse sai duas vezes.
+ */
+export function pagamentosDaSemana(pagamentos, segunda, domingo, saldoEm) {
+  const de = iso(segunda)
+  const ate = iso(domingo)
+  const diaSaldo = saldoEm ? iso(saldoEm) : null
+  return (pagamentos || [])
+    .map(p => ({ ...p, data: comoData(p.data_pagamento), valor: Number(p.valor || 0) }))
+    .filter(p => p.data && iso(p.data) >= de && iso(p.data) <= ate)
+    .map(p => {
+      const d = iso(p.data)
+      const lancado = p.created_at ? new Date(p.created_at) : null
+      const jaFora = diaSaldo !== null && (
+        d < diaSaldo ||
+        (d === diaSaldo && lancado !== null && !Number.isNaN(lancado.getTime()) && lancado <= saldoEm)
+      )
+      return { ...p, jaFora }
+    })
+}
+
 function lerPlanejamento() {
   try {
     return JSON.parse(localStorage.getItem(CHAVE) || '{}') || {}
@@ -274,6 +306,11 @@ export default function CaixaSemana() {
   const [colando, setColando] = useState(false)
   const [rascunho, setRascunho] = useState('')
   const [avisoColagem, setAvisoColagem] = useState(null)
+  const [pagamentos, setPagamentos] = useState(null)
+  const [recarga, setRecarga] = useState(0)
+  const [pagandoFL, setPagandoFL] = useState(null)   // { valor, data } enquanto o formulário está aberto
+  const [erroPagamento, setErroPagamento] = useState(null)
+  const [salvandoPagamento, setSalvandoPagamento] = useState(false)
 
   const segunda = refSemana
   const domingo = somaDias(segunda, 6)
@@ -290,6 +327,7 @@ export default function CaixaSemana() {
           ...(anterior[chaveSemana] || {}),
           ...campos,
           informadoEm: iso(new Date()),
+          ...('saldo' in campos ? { saldoEm: new Date().toISOString() } : {}),
         },
       }
       try { localStorage.setItem(CHAVE, JSON.stringify(proximo)) } catch { /* modo privado */ }
@@ -331,12 +369,14 @@ export default function CaixaSemana() {
     async function carregar() {
       setErro(null)
       try {
-        const [rContas, rFornecedores] = await Promise.all([
+        const [rContas, rFornecedores, rPagosSemana] = await Promise.all([
           api.get('/api/contas'),
           api.get('/api/fornecedores'),
+          api.get(`/api/fornecedores/pagamentos?de=${iso(segunda)}&ate=${iso(domingo)}`),
         ])
         if (!vivo) return
         setContas(rContas.data)
+        setPagamentos(rPagosSemana.data)
 
         // A semana pode atravessar a virada do mês, e o endpoint filtra por mês.
         const meses = [...new Set([segunda, domingo].map(d => iso(d).slice(0, 7)))]
@@ -355,6 +395,7 @@ export default function CaixaSemana() {
         ])
         if (!vivo) return
         setFlavia({
+          id: f.id,
           nome: f.apelido ? `${f.nome} (${f.apelido})` : f.nome,
           pedidos: rPedidos.data,
           totalPago: rPagamentos.data.reduce((s, p) => s + Number(p.valor || 0), 0),
@@ -365,9 +406,9 @@ export default function CaixaSemana() {
     }
     carregar()
     return () => { vivo = false }
-  }, [chaveSemana])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chaveSemana, recarga])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const carregando = !contas || !repasses || !flavia
+  const carregando = !contas || !repasses || !flavia || !pagamentos
 
   // ---- boletos ------------------------------------------------------------
   const naSemana = c => {
@@ -424,7 +465,19 @@ export default function CaixaSemana() {
   // ---- a conta ------------------------------------------------------------
   const saldo = numeroBR(daSemana.saldo)
   const reserva = numeroBR(daSemana.reserva)
-  const sobra = saldo + totalRepasse - totalFlavia - totalBoletos
+
+  // O saldo guardado antes do saldoEm existir so tem o dia: conta do comeco
+  // dele, e o pagamento do mesmo dia sai da sobra.
+  const saldoEm = daSemana.saldo
+    ? (daSemana.saldoEm ? new Date(daSemana.saldoEm) : comoData(daSemana.informadoEm))
+    : null
+  const pagosSemana = pagamentosDaSemana(pagamentos, segunda, domingo, saldoEm)
+  const pagosDescontados = pagosSemana.filter(p => !p.jaFora)
+  const totalPagoFornecedor = pagosDescontados.reduce((s, p) => s + p.valor, 0)
+
+  // A Flavia vencida NAO sai daqui: e informativo. Sai o que foi pago a ela
+  // (e a qualquer fornecedor) — pedido dela em 17/09/2026.
+  const sobra = saldo + totalRepasse - totalBoletos - totalPagoFornecedor
 
   // Depois de alguns dias a data do saldo aparece junto do numero, discreta.
   // Nao vira quadro de aviso: repetir de volta o que ela digitou, toda semana,
@@ -442,14 +495,35 @@ export default function CaixaSemana() {
       const saiBoletos = boletosSemana.filter(
         c => iso(comoData(c.vencimento)) === iso(data)
       )
-      const sai = saiBoletos.reduce((s, c) => s + Number(c.valor || 0), 0)
+      const saiPagos = pagosDescontados.filter(p => iso(p.data) === iso(data))
+      const sai = saiBoletos.reduce((s, c) => s + Number(c.valor || 0), 0) +
+        saiPagos.reduce((s, p) => s + p.valor, 0)
       acumulado += entra - sai
-      return { data, nome: NOMES_DIA[i], entra, saiBoletos, acumulado }
+      return { data, nome: NOMES_DIA[i], entra, saiBoletos, saiPagos, acumulado }
     })
-  }, [saldo, liberacoes, contas, chaveSemana])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [saldo, liberacoes, contas, pagamentos, daSemana.saldoEm, chaveSemana])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const diaFlavia = dias.find(d => d.acumulado >= totalFlavia)
   const indiceFlavia = diaFlavia ? dias.indexOf(diaFlavia) : -1
+
+  async function registrarPagamentoFL() {
+    const valor = numeroBR(pagandoFL.valor)
+    if (valor <= 0) { setErroPagamento('Informe o valor pago.'); return }
+    if (!pagandoFL.data) { setErroPagamento('Informe a data do pagamento.'); return }
+    setSalvandoPagamento(true)
+    setErroPagamento(null)
+    try {
+      await api.post(`/api/fornecedores/${flavia.id}/pagamentos`, {
+        valor, data_pagamento: pagandoFL.data,
+      })
+      setPagandoFL(null)
+      setRecarga(n => n + 1)
+    } catch (e) {
+      setErroPagamento(e?.response?.data?.error || 'Não consegui salvar o pagamento.')
+    } finally {
+      setSalvandoPagamento(false)
+    }
+  }
 
   const periodo = `${diaMes(segunda)} a ${diaMes(domingo)}`
   const botao = {
@@ -498,9 +572,9 @@ export default function CaixaSemana() {
               rotulo="Flávia (FL) — vencido"
               valor={totalFlavia}
               tom="divida"
-              composicao={devidos.length
+              composicao={(devidos.length
                 ? `${contar(devidos.length, 'lançamento', 'lançamentos')} passados dos ${DIAS_DE_PRAZO} dias`
-                : `Nada passou dos ${DIAS_DE_PRAZO} dias`}
+                : `Nada passou dos ${DIAS_DE_PRAZO} dias`) + ' · informativo, não sai da sobra'}
             />
             <Indicador
               rotulo="Boletos a pagar"
@@ -510,10 +584,16 @@ export default function CaixaSemana() {
                 (totalBoletosAtrasados > 0 ? ` + ${brl(totalBoletosAtrasados)} atrasados` : '')}
             />
             <Indicador
+              rotulo="Pago a fornecedor"
+              valor={totalPagoFornecedor}
+              tom="divida"
+              composicao={`${contar(pagosDescontados.length, 'pagamento', 'pagamentos')} na semana`}
+            />
+            <Indicador
               rotulo="Sobra para comprar"
               valor={sobra}
               tom="auto"
-              composicao={`${brl(saldo + totalRepasse)} − ${brl(totalFlavia)} − ${brl(totalBoletos)}`}
+              composicao={`${brl(saldo + totalRepasse)} − ${brl(totalBoletos)} de boletos − ${brl(totalPagoFornecedor)} pagos`}
             />
           </div>
 
@@ -638,7 +718,7 @@ export default function CaixaSemana() {
 
           <SecaoCard
             titulo="Quando o dinheiro chega"
-            subtitulo="Acumulado disponível dia a dia, já descontando os boletos conforme vencem."
+            subtitulo="Acumulado disponível dia a dia, já descontando boletos e pagamentos a fornecedor."
           >
             {!colou ? (
               <Vazio>
@@ -653,6 +733,7 @@ export default function CaixaSemana() {
                     const notas = []
                     if (d.entra) notas.push(`entra ${brl(d.entra)}`)
                     d.saiBoletos.forEach(c => notas.push(`− ${c.descricao} ${brl(c.valor)}`))
+                    d.saiPagos.forEach(p => notas.push(`− ${p.fornecedor_apelido || p.fornecedor_nome} ${brl(p.valor)}`))
                     return (
                       <div key={iso(d.data)} style={{
                         display: 'grid', gridTemplateColumns: '6.2rem 1fr auto',
@@ -712,6 +793,50 @@ export default function CaixaSemana() {
             total={brl(totalFlavia)}
             totalRotulo="Vencido"
           >
+            {!flavia.ausente && (
+              <div style={{ marginBottom: 12 }}>
+                {pagandoFL === null ? (
+                  <button type="button" style={botao} onClick={() => {
+                    setErroPagamento(null)
+                    setPagandoFL({
+                      valor: totalFlavia > 0
+                        ? totalFlavia.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        : '',
+                      data: iso(hoje),
+                    })
+                  }}>Marcar como pago</button>
+                ) : (
+                  <div style={{
+                    display: 'grid', gap: 10, alignItems: 'end',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                  }}>
+                    <label>
+                      <span style={rotulo}>Valor pago</span>
+                      <input type="text" inputMode="decimal" style={entrada} autoFocus
+                             value={pagandoFL.valor}
+                             onChange={e => setPagandoFL({ ...pagandoFL, valor: e.target.value })} />
+                      <Lido valor={pagandoFL.valor} />
+                    </label>
+                    <label>
+                      <span style={rotulo}>Data do pagamento</span>
+                      <input type="date" style={entrada}
+                             value={pagandoFL.data}
+                             onChange={e => setPagandoFL({ ...pagandoFL, data: e.target.value })} />
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="button" style={botao} disabled={salvandoPagamento}
+                              onClick={registrarPagamentoFL}>
+                        {salvandoPagamento ? 'Salvando…' : 'Salvar pagamento'}
+                      </button>
+                      <button type="button" style={botao} onClick={() => setPagandoFL(null)}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+                {erroPagamento && (
+                  <p style={{ margin: '8px 0 0', fontSize: 12.5, color: 'var(--color-danger)' }}>{erroPagamento}</p>
+                )}
+              </div>
+            )}
             {flavia.ausente ? (
               <Vazio>Não achei fornecedor com apelido “{APELIDO_FORNECEDOR_COM_PRAZO}”. Cadastre em Fornecedores.</Vazio>
             ) : pendentes.length === 0 ? (
@@ -796,6 +921,27 @@ export default function CaixaSemana() {
                     </div>
                   </details>
                 )}
+              </div>
+            )}
+          </SecaoCard>
+
+          <SecaoCard
+            titulo="Pagamentos a fornecedor"
+            subtitulo="Lançados nesta semana — pela Flávia aqui em cima ou em Fornecedores. Saem da sobra para comprar."
+            total={brl(totalPagoFornecedor)}
+          >
+            {pagosSemana.length === 0 ? (
+              <Vazio>Nenhum pagamento a fornecedor nesta semana.</Vazio>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {pagosSemana.map(p => (
+                  <Linha key={p.id}
+                         esquerda={p.fornecedor_apelido ? `${p.fornecedor_nome} (${p.fornecedor_apelido})` : p.fornecedor_nome}
+                         apoio={p.jaFora
+                           ? `Pago em ${dia(iso(p.data))} · já estava fora do saldo em conta informado, não descontado de novo`
+                           : `Pago em ${dia(iso(p.data))}`}
+                         direita={brl(p.valor)} />
+                ))}
               </div>
             )}
           </SecaoCard>

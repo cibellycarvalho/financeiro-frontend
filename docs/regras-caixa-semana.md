@@ -9,11 +9,23 @@ mudá-las sem falar com ela.
 ```
    Saldo em conta hoje          (só a conta corrente — a reserva está aplicada)
  + Repasse previsto da semana
- − Flávia (FL) vencido
  − Boletos da semana e atrasados
+ − Pagamentos a fornecedor lançados na semana
  ─────────────────────────────
- = Sobra para comprar produto
+ = Sobra para comprar
 ```
+
+## A Flávia vencida é informativa; o que sai é o pagamento
+
+Pedido dela em 17/09/2026: o vencido da Flávia **não** sai da sobra só por
+existir. Sai quando ela paga — pelo botão "Marcar como pago" na Caixa da Semana
+ou lançando o pagamento em Fornecedores › FL. Vale igual para qualquer compra
+de fornecedor subida com comprovante: o pagamento dela sai da sobra.
+
+O saldo em conta é digitado à mão, então o que foi pago **antes** de digitá-lo
+já não está nele e não é descontado de novo. Pago em dia anterior ao saldo: fora.
+No mesmo dia: fora se foi lançado antes de o saldo ser digitado. O caso que
+escapa: pagar, digitar o saldo e só depois lançar o pagamento — sai duas vezes.
 
 A reserva **não** entra nessa conta, nem somando nem subtraindo — ver abaixo.
 
