@@ -50,8 +50,19 @@ describe('UploadDocumentoFuncionario', () => {
     } })
     render(<UploadDocumentoFuncionario funcionario={JOSIE} tipo="nf" competencia="2026-09" arquivo={pdf()} existente={null} onSalvo={() => {}} onCancelar={() => {}} />)
     await waitFor(() => expect(screen.getByText(/CNPJ/)).toBeInTheDocument())
-    expect(screen.getByText(/não diz o mês dos serviços/)).toBeInTheDocument()
+    expect(screen.getByText(/não diz o mês dos serviços; usei o mês da emissão/)).toBeInTheDocument()
     expect(screen.getByLabelText(/Nº da nota/).value).toBe('123')
+  })
+
+  it('NF sem competência nem data de emissão: deixa o mês aberto', async () => {
+    api.post.mockResolvedValueOnce({ data: {
+      leitura_falhou: false, arquivo_token: null, aviso: null, numero: '123', valor: 2500, data_emissao: null,
+      competencia: null, competencia_inferida: true, cnpj_prestador: '12345678000195', nome_prestador: 'JOSIE',
+      cnpj_confere: true, nf_existente: null,
+    } })
+    render(<UploadDocumentoFuncionario funcionario={JOSIE} tipo="nf" competencia="2026-09" arquivo={pdf()} existente={null} onSalvo={() => {}} onCancelar={() => {}} />)
+    await waitFor(() => expect(screen.getByText(/A nota não diz o mês dos serviços; deixei o mês aberto\./)).toBeInTheDocument())
+    expect(screen.getByLabelText(/Competência/).value).toBe('2026-09')
   })
 
   it('comprovante do DAS marca o DAS existente como pago com PUT', async () => {

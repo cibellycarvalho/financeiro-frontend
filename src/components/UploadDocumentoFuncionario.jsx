@@ -7,13 +7,12 @@
 import { useEffect, useState } from 'react'
 import api from '../services/api'
 import { Faixa, PreviewArquivo, inputStyle, botaoPrimario, botaoSecundario, formatMoeda, formatData, mensagemDe, validarArquivo } from './upload/comum'
-import { rotuloMes } from '../lib/meses'
+import { rotuloMes, hojeISO } from '../lib/meses'
 
 const ROTA_LEITURA = { pagamento: 'pix', das_boleto: 'das', das_comprovante: 'pix', nf: 'nf' }
 const TITULO = { pagamento: 'Pagamento', das_boleto: 'Boleto do DAS', das_comprovante: 'Comprovante do DAS', nf: 'Nota fiscal' }
 const ROTULO_EXISTENTE = { das_boleto: 'DAS', nf: 'NF' }
 
-const hojeISO = () => new Date().toISOString().slice(0, 10)
 const mesDeISO = d => (d ? String(d).slice(0, 7) : null)
 
 export default function UploadDocumentoFuncionario({ funcionario, tipo, competencia, arquivo, existente, onSalvo, onCancelar }) {
@@ -146,7 +145,8 @@ export default function UploadDocumentoFuncionario({ funcionario, tipo, competen
         {compLida && compLida !== competencia && tipo !== 'das_comprovante' && (
           <Faixa>O documento é de {rotuloMes(compLida)}, e o mês aberto é {rotuloMes(competencia)}. A competência abaixo já veio com a do documento — confira.</Faixa>
         )}
-        {leitura?.competencia_inferida && <Faixa>A nota não diz o mês dos serviços; usei o mês da emissão ({formatData(leitura.data_emissao)}).</Faixa>}
+        {leitura?.competencia_inferida && leitura.data_emissao && <Faixa>A nota não diz o mês dos serviços; usei o mês da emissão ({formatData(leitura.data_emissao)}).</Faixa>}
+        {leitura?.competencia_inferida && !leitura.data_emissao && <Faixa>A nota não diz o mês dos serviços; deixei o mês aberto.</Faixa>}
         {jaExiste && (
           <Faixa>Já existe {ROTULO_EXISTENTE[tipo]} em {rotuloMes(comp)}{jaExiste.valor != null ? ` (${formatMoeda(jaExiste.valor)})` : ''}. Salvar substitui.</Faixa>
         )}

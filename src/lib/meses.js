@@ -7,6 +7,11 @@ export function mesAtual(hoje = new Date()) {
   return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
 }
 
+/** Data de hoje em 'AAAA-MM-DD' pelo fuso local — não usar toISOString() (UTC). */
+export function hojeISO(hoje = new Date()) {
+  return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`
+}
+
 /** '2026-09', '2026-09-01' ou data RFC do backend → '2026-09'. Sem data → null. */
 export function mesDe(data) {
   if (!data) return null

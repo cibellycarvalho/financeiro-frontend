@@ -113,10 +113,9 @@ function LinhaLancamento({ linha, podeEditar, onMudou, onAbrirAnexo }) {
 }
 
 export default function BlocoLancamentoFuncionario({ tipo, linhas, podeEditar, onAbrir, onMudou, onAbrirAnexo }) {
-  const [lendo, setLendo] = useState(false)
   const subir = (rotulo, tipoCartao) => (
-    <BotaoSubirArquivo key={tipoCartao} rotulo={rotulo} lendo={lendo} style={{ padding: '6px 12px', fontSize: 12 }}
-      onArquivo={f => { setLendo(false); onAbrir(tipoCartao, f) }} />
+    <BotaoSubirArquivo key={tipoCartao} rotulo={rotulo} style={{ padding: '6px 12px', fontSize: 12 }}
+      onArquivo={f => onAbrir(tipoCartao, f)} />
   )
   const aMao = (rotulo, tipoCartao) => (
     <button type="button" key={rotulo} onClick={() => onAbrir(tipoCartao, null)} style={botaoMini}>{rotulo}</button>

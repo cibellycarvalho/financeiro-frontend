@@ -185,7 +185,7 @@ export default function Funcionarios() {
             <UploadDocumentoFuncionario
               key={`${cartao.tipo}-${mes}-${cartao.n}`}
               funcionario={sel} tipo={cartao.tipo} competencia={mes} arquivo={cartao.arquivo} existente={existenteParaCartao}
-              onSalvo={compSalva => { setCartao(null); if (compSalva !== mes) setMes(compSalva); else recarregar() }}
+              onSalvo={compSalva => { setCartao(null); carregarFuncionarios(); if (compSalva !== mes) setMes(compSalva); else carregarMes(sel, mes) }}
               onCancelar={() => setCartao(null)}
             />
           )}
