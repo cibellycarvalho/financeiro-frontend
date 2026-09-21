@@ -569,14 +569,28 @@ export default function CaixaSemana() {
     const v = iso(comoData(c.vencimento))
     return v !== null && v < iso(segunda) && (c.status !== 'pago' || pagoNaSemana(c))
   })
-  const totalBoletosSemana = boletosSemana.reduce((s, c) => s + Number(c.valor || 0), 0)
-  const totalBoletosAtrasados = boletosAtrasados.reduce((s, c) => s + Number(c.valor || 0), 0)
-  // "Atrasado" só é o que continua em aberto. Boleto de antes que ela pagou
-  // nesta semana (Santander vence dia 12, caiu no sábado, pago segunda) não
-  // é atraso — é conta da semana.
-  const totalAtrasadosAbertos = boletosAtrasados.filter(c => c.status !== 'pago').reduce((s, c) => s + Number(c.valor || 0), 0)
-  const totalDeAntesPagos = totalBoletosAtrasados - totalAtrasadosAbertos
-  const totalBoletos = totalBoletosSemana + totalBoletosAtrasados
+  // Pedido dela em 21/09/2026: marcou "pago" em Contas a Pagar e o valor
+  // continuou em "Boletos a pagar". Pago sai de lá: conta de fornecedor vai
+  // para "Pago a fornecedor", o resto para "Boletos pagos". A sobra não muda
+  // por isso — o boleto já saía dela; muda o card onde ela o encontra.
+  // Pago antes do vencimento (MXT vence dia 30, pago hoje) entra na semana
+  // em que foi pago.
+  const pagosDaSemana = (contas || []).filter(c =>
+    c.status === 'pago' && (naSemana(c) || pagoNaSemana(c)))
+  const ehFornecedor = c => c.categoria === 'FORNECEDOR'
+  const boletosPagos = pagosDaSemana.filter(c => !ehFornecedor(c))
+  const contasFornecedorPagas = pagosDaSemana.filter(ehFornecedor)
+  const boletosAbertosSemana = boletosSemana.filter(c => c.status !== 'pago')
+  const boletosAtrasadosAbertos = boletosAtrasados.filter(c => c.status !== 'pago')
+  const soma = l => l.reduce((s, c) => s + Number(c.valor || 0), 0)
+  const totalAbertosSemana = soma(boletosAbertosSemana)
+  const totalAtrasadosAbertos = soma(boletosAtrasadosAbertos)
+  const totalBoletosAPagar = totalAbertosSemana + totalAtrasadosAbertos
+  const totalBoletosPagos = soma(boletosPagos)
+  const totalContasFornecedorPagas = soma(contasFornecedorPagas)
+  const totalBoletos = totalBoletosAPagar + totalBoletosPagos
+  // Dia em que a conta sai: a do pagamento, se paga; senão o vencimento.
+  const diaDaConta = c => iso(comoData(c.status === 'pago' && c.data_pagamento ? c.data_pagamento : c.vencimento))
 
   // ---- Flávia -------------------------------------------------------------
   const dividas = flavia && !flavia.ausente
@@ -630,7 +644,7 @@ export default function CaixaSemana() {
   const ajustesPagamento = daSemana.ajustesPagamento || {}
   const pagosSemana = pagamentosDaSemana(pagamentos, segunda, domingo, ajustesPagamento)
   const pagosDescontados = pagosSemana.filter(p => !p.jaFora)
-  const totalPagoFornecedor = pagosDescontados.reduce((s, p) => s + p.valor, 0)
+  const totalPagoFornecedor = pagosDescontados.reduce((s, p) => s + p.valor, 0) + totalContasFornecedorPagas
 
   // Funcionários: pagamento do mês e DAS pago saem da sobra igual (decisão
   // dela em 17/09/2026). O mesmo botão "Não descontar" vale — ids são UUID.
@@ -659,8 +673,8 @@ export default function CaixaSemana() {
     return Array.from({ length: 7 }, (_, i) => {
       const data = somaDias(segunda, i)
       const entra = liberacoes[data.getDate()] || 0
-      const saiBoletos = boletosSemana.filter(
-        c => iso(comoData(c.vencimento)) === iso(data)
+      const saiBoletos = [...boletosAbertosSemana, ...pagosDaSemana].filter(
+        c => diaDaConta(c) === iso(data)
       )
       const saiPagos = pagosDescontados.filter(p => iso(p.data) === iso(data))
       const saiFuncionarios = funcDescontados.filter(p => iso(p.data) === iso(data))
@@ -741,11 +755,20 @@ export default function CaixaSemana() {
             )}
             <Indicador
               rotulo="Boletos a pagar"
-              valor={totalBoletos}
+              valor={totalBoletosAPagar}
               tom="divida"
-              composicao={`${brl(totalBoletosSemana)} na semana, pagos ou não` +
-                (totalDeAntesPagos > 0 ? ` + ${brl(totalDeAntesPagos)} de antes, pagos na semana` : '') +
-                (totalAtrasadosAbertos > 0 ? ` + ${brl(totalAtrasadosAbertos)} atrasados` : '')}
+              composicao={totalBoletosAPagar === 0
+                ? 'Nenhum em aberto'
+                : `${brl(totalAbertosSemana)} vencem na semana` +
+                  (totalAtrasadosAbertos > 0 ? ` + ${brl(totalAtrasadosAbertos)} atrasados` : '')}
+            />
+            <Indicador
+              rotulo="Boletos pagos"
+              valor={totalBoletosPagos}
+              tom="divida"
+              composicao={boletosPagos.length
+                ? boletosPagos.map(c => `${c.descricao} ${brl(c.valor)}`).join(' · ')
+                : 'Nenhum pago na semana'}
             />
             <Indicador
               rotulo="Pago a fornecedor"
@@ -753,8 +776,9 @@ export default function CaixaSemana() {
               tom="divida"
               // Diz DE QUEM: ao lado do "Flávia — vencido" e com número parecido,
               // o total sozinho foi lido como pagamento à Flávia (17/09/2026).
-              composicao={pagosDescontados.length
-                ? pagosDescontados.map(p => `${p.fornecedor_nome} ${brl(p.valor)}`).join(' · ')
+              composicao={pagosDescontados.length || contasFornecedorPagas.length
+                ? [...pagosDescontados.map(p => `${p.fornecedor_nome} ${brl(p.valor)}`),
+                   ...contasFornecedorPagas.map(c => `${c.descricao} ${brl(c.valor)}`)].join(' · ')
                 : 'Nenhum pagamento na semana'}
             />
             <Indicador
@@ -1138,25 +1162,27 @@ export default function CaixaSemana() {
 
           <SecaoCard
             titulo="Boletos"
-            subtitulo="Os de Contas a Pagar que vencem nesta semana, pagos ou não, mais o que passou do vencimento e continua aberto."
-            total={brl(totalBoletos)}
+            subtitulo="De Contas a Pagar: os em aberto que vencem na semana ou já venceram, e os pagos na semana. Conta de fornecedor paga soma em Pago a fornecedor."
+            total={brl(totalBoletosAPagar + totalBoletosPagos + totalContasFornecedorPagas)}
           >
-            {boletosSemana.length === 0 && boletosAtrasados.length === 0 ? (
+            {boletosAtrasadosAbertos.length === 0 && boletosAbertosSemana.length === 0 && pagosDaSemana.length === 0 ? (
               <Vazio>Nenhuma conta nesta semana.</Vazio>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {boletosAtrasados.map(c => (
+                {boletosAtrasadosAbertos.map(c => (
                   <Linha key={c.id} esquerda={c.descricao}
-                         apoio={c.status === 'pago'
-                           ? `Pago em ${dia(c.data_pagamento)} · vencia ${dia(c.vencimento)} · ${c.categoria}`
-                           : `Atrasado desde ${dia(c.vencimento)} · ${c.categoria}`}
-                         direita={brl(c.valor)} tom={c.status === 'pago' ? undefined : 'divida'} />
+                         apoio={`Atrasado desde ${dia(c.vencimento)} · ${c.categoria}`}
+                         direita={brl(c.valor)} tom="divida" />
                 ))}
-                {boletosSemana.map(c => (
+                {boletosAbertosSemana.map(c => (
                   <Linha key={c.id} esquerda={c.descricao}
-                         apoio={c.status === 'pago'
-                           ? `Pago em ${dia(c.data_pagamento)} · vencia ${dia(c.vencimento)} · ${c.categoria}`
-                           : `Vence ${dia(c.vencimento)} · ${c.categoria}`}
+                         apoio={`Vence ${dia(c.vencimento)} · ${c.categoria}`}
+                         direita={brl(c.valor)} />
+                ))}
+                {pagosDaSemana.map(c => (
+                  <Linha key={c.id} esquerda={c.descricao}
+                         apoio={`Pago em ${dia(c.data_pagamento)} · vencia ${dia(c.vencimento)} · ${c.categoria}` +
+                           (ehFornecedor(c) ? ' · em Pago a fornecedor' : '')}
                          direita={brl(c.valor)} />
                 ))}
               </div>

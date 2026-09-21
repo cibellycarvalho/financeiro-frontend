@@ -418,8 +418,38 @@ describe('A conta da semana (ditada em 17/09/2026)', () => {
                            status: 'pago', data_pagamento: ymd(seg), categoria: 'OUTRO' }] })
     montar()
     await waitFor(() => expect(screen.getByText('Santander')).toBeInTheDocument())
-    expect(screen.getByText(/3\.202,57 de antes, pagos na semana/)).toBeInTheDocument()
+    expect(screen.getByText(/Santander R\$\s?3\.202,57/)).toBeInTheDocument()   // card Boletos pagos
     expect(screen.queryByText(/atrasados/)).not.toBeInTheDocument()
+  })
+
+  it('pago sai de "Boletos a pagar": fornecedor vai para Pago a fornecedor, o resto para Boletos pagos', async () => {
+    respostas({
+      planejamento: { ...SEM_PLANEJAMENTO, agenda: { [ymd(seg)]: 5000 }, updated_at: hoje.toUTCString() },
+      contas: [
+        { id: 'e1', descricao: 'Embalagens', valor: 1103, vencimento: ymd(hoje), status: 'pago',
+          data_pagamento: ymd(hoje), categoria: 'FORNECEDOR' },
+        { id: 'e2', descricao: 'Meli +', valor: 100, vencimento: ymd(hoje), status: 'pago',
+          data_pagamento: ymd(hoje), categoria: 'OUTRO' },
+        { id: 'e3', descricao: 'Luz', valor: 50, vencimento: ymd(hoje), status: 'pendente', categoria: 'OUTRO' },
+      ],
+      pagosSemana: [{ id: 'g1', fornecedor_nome: 'FY', fornecedor_apelido: 'FY', valor: 200,
+                      data_pagamento: ymd(hoje), created_at: hoje.toUTCString() }],
+    })
+    montar()
+    await waitFor(() => expect(screen.getByText('Boletos pagos')).toBeInTheDocument())
+    expect(screen.getByText(/R\$\s?50,00 vencem na semana/)).toBeInTheDocument()
+    expect(screen.getByText(/^Meli \+ R\$\s?100,00$/)).toBeInTheDocument()
+    expect(screen.getByText(/FY R\$\s?200,00 · Embalagens R\$\s?1\.103,00/)).toBeInTheDocument()
+    // a sobra desconta cada um uma vez só: 5.000 − 150 − 1.303 = 3.547
+    expect(screen.getByText(/R\$\s?5\.000,00 − R\$\s?150,00 de boletos − R\$\s?1\.303,00 pagos/)).toBeInTheDocument()
+  })
+
+  it('conta paga antes do vencimento sai na semana em que foi paga', async () => {
+    const depois = new Date(seg); depois.setDate(depois.getDate() + 9)
+    respostas({ contas: [{ id: 'm1', descricao: 'MXT', valor: 1814.69, vencimento: ymd(depois),
+                           status: 'pago', data_pagamento: ymd(hoje), categoria: 'FORNECEDOR' }] })
+    montar()
+    await waitFor(() => expect(screen.getByText(/MXT R\$\s?1\.814,69/)).toBeInTheDocument())
   })
 
   it('retirado da reserva aparece como informação e não muda a sobra', async () => {

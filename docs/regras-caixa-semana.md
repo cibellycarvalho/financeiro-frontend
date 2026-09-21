@@ -129,6 +129,21 @@ lançou Meli+ e Merke em Contas a Pagar, pagou, e o card mostrou R$ 0
 Atrasado em aberto entra também (e atrasado pago nesta semana, pela mesma
 razão). Boleto antigo já pago fica de fora.
 
+### Pago sai de "Boletos a pagar" (21/09/2026)
+
+Ela marcou duas Embalagens como pagas e elas continuaram em "Boletos a pagar".
+Pedido dela: *"quando eu marcasse 'pago' as contas a pagar, o valor já fosse
+pra 'pago a fornecedor' ou 'boletos pagos'"*. Então:
+
+- **Boletos a pagar** = só os em aberto (vencem na semana + atrasados).
+- **Boletos pagos** = pagos na semana, categoria diferente de FORNECEDOR.
+- Conta de categoria **FORNECEDOR** paga soma em **Pago a fornecedor**.
+- Pago conta na semana do vencimento **ou** na do pagamento (pago adiantado
+  sai na semana em que foi pago). No dia a dia, sai no dia do pagamento.
+
+A sobra desconta cada conta uma vez só. Se o mesmo pagamento for lançado
+também em Fornecedores, ele sai duas vezes — a tela não cruza os dois.
+
 ## Funcionários: pagamento e DAS saem da sobra
 
 Decisão dela em 17/09/2026, ao criar a aba Funcionários: o que foi pago a
