@@ -117,6 +117,45 @@ describe('Pix sem compra', () => {
     await waitFor(() => expect(screen.queryByText(/49.310,00/)).not.toBeInTheDocument())
   })
 
+  it('amarrar um Pix não trava o botão de outro Pix ainda salvando (fix round 2)', async () => {
+    // Fix round 2: a guarda de clique duplo era um `salvando` global (id de
+    // um só Pix). Com dois Pix soltos, clicar em Amarrar no Pix B enquanto o
+    // Pix A ainda estava em voo era engolido em silêncio — sem erro, sem
+    // POST nenhum — porque o `disabled` do botão é por pagamento, mas a
+    // guarda não era.
+    const SOLTOS_DOIS = [
+      { id: 'pg-1', valor: 30000, data_pagamento: '2026-09-14', arquivo_path: null },
+      { id: 'pg-2', valor: 19310, data_pagamento: '2026-09-15', arquivo_path: null },
+    ]
+    api.get.mockResolvedValue({ data: SOLTOS_DOIS })
+    let resolverPg1
+    const pendentePg1 = new Promise(resolve => { resolverPg1 = resolve })
+    api.post.mockImplementation(url => {
+      if (url === '/api/fornecedores/f1/pagamentos/pg-1/pedidos') return pendentePg1
+      return Promise.resolve({ data: { itens: [] } })
+    })
+
+    render(<PixSemCompra fornecedorId="f1" pedidos={PEDIDOS} aoMudar={() => {}} />)
+    const checkboxesPedido10 = await screen.findAllByLabelText(/pedido 10/)
+    fireEvent.click(checkboxesPedido10[0]) // marca o pedido 10 no Pix A (pg-1)
+    fireEvent.click(checkboxesPedido10[1]) // marca o pedido 10 no Pix B (pg-2)
+
+    const botoesAmarrar = screen.getAllByRole('button', { name: /Amarrar/ })
+    fireEvent.click(botoesAmarrar[0]) // Pix A começa a salvar e fica pendurado (promise não resolvida)
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      '/api/fornecedores/f1/pagamentos/pg-1/pedidos', expect.anything(),
+    ))
+
+    // Enquanto o Pix A ainda está salvando, clicar no Amarrar do Pix B tem
+    // que mandar o POST dele normalmente — não pode ser engolido.
+    fireEvent.click(botoesAmarrar[1])
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      '/api/fornecedores/f1/pagamentos/pg-2/pedidos', expect.anything(),
+    ))
+
+    await act(async () => { resolverPg1({ data: { itens: [] } }) })
+  })
+
   it('busca os soltos de novo quando a lista de pedidos da tela recarrega (fix round 1, item 9)', async () => {
     const { rerender } = render(<PixSemCompra fornecedorId="f1" pedidos={PEDIDOS} aoMudar={() => {}} />)
     await screen.findByText(/49.310,00/)

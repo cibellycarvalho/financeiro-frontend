@@ -26,6 +26,13 @@
  *  - Busca os soltos de novo sempre que a lista de pedidos da tela mudar
  *    (não só quando troca de fornecedor), pra um Pix lançado do lado
  *    aparecer aqui sem precisar recarregar a página.
+ *
+ * Fix round 2 (23/09/2026): a guarda contra clique duplo do round 1 era um
+ * único `salvando` (o id de um só Pix). Com dois Pix soltos na tela, clicar
+ * em Amarrar no Pix B enquanto o Pix A ainda estava salvando não fazia nada
+ * — sem erro, sem aviso, e o botão do B nem parecia desabilitado porque o
+ * `disabled` já era por pagamento. Virou um objeto `{ [pagamentoId]: true }`:
+ * cada Pix trava só a si mesmo, e vários podem salvar ao mesmo tempo.
  */
 import { useEffect, useState } from 'react'
 import api from '../services/api'
@@ -60,7 +67,7 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
   const [escolhas, setEscolhas] = useState({})   // { [pagamentoId]: { [pedidoId]: valor } }
   const [tocados, setTocados] = useState({})     // { [pagamentoId]: Set(pedidoId) editado à mão }
   const [erros, setErros] = useState({})         // { [pagamentoId]: mensagem }
-  const [salvando, setSalvando] = useState(null) // pagamentoId em voo
+  const [salvando, setSalvando] = useState({})   // { [pagamentoId]: true } — Pix em voo, cada um independente
 
   useEffect(() => {
     let vivo = true
@@ -125,13 +132,16 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
   }
 
   async function amarrar(pagamento) {
-    if (salvando) return // trava contra clique duplo além do disabled do botão
+    // Trava contra clique duplo do MESMO Pix, além do disabled do botão — não
+    // pode ser um "salvando" global, senão o Pix B fica travado em silêncio
+    // enquanto o Pix A está salvando (fix round 2).
+    if (salvando[pagamento.id]) return
     const desta = escolhas[pagamento.id] || {}
     const itens = emAberto
       .filter(p => desta[p.id] !== undefined)
       .map(p => ({ pedido_id: p.id, valor: Number(desta[p.id]) }))
     setErros(atual => ({ ...atual, [pagamento.id]: null }))
-    setSalvando(pagamento.id)
+    setSalvando(atual => ({ ...atual, [pagamento.id]: true }))
     try {
       await api.post(`/api/fornecedores/${fornecedorId}/pagamentos/${pagamento.id}/pedidos`, { itens })
       setSoltos(s => s.filter(x => x.id !== pagamento.id))
@@ -139,7 +149,10 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
     } catch (e) {
       setErros(atual => ({ ...atual, [pagamento.id]: e.response?.data?.error || 'Não consegui amarrar. Tente de novo.' }))
     } finally {
-      setSalvando(null)
+      setSalvando(atual => {
+        const { [pagamento.id]: _fora, ...resto } = atual
+        return resto
+      })
     }
   }
 
@@ -175,7 +188,7 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
                         type="checkbox"
                         aria-label={`pedido ${p.numero_pedido || 'sem número'}`}
                         checked={marcado}
-                        disabled={salvando === pg.id}
+                        disabled={!!salvando[pg.id]}
                         onChange={() => alternar(pg, p)}
                       />
                       <span style={{ marginLeft: 8 }}>
@@ -187,7 +200,7 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
                           step="0.01"
                           aria-label={`valor amarrado ao pedido ${p.numero_pedido || 'sem número'}`}
                           value={desta[p.id] ?? ''}
-                          disabled={salvando === pg.id}
+                          disabled={!!salvando[pg.id]}
                           onClick={e => e.stopPropagation()}
                           onChange={e => editarValor(pg, p, e.target.value)}
                           style={campoValor}
@@ -198,10 +211,10 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
                 })}
                 <button
                   onClick={() => amarrar(pg)}
-                  disabled={salvando === pg.id || marcados.length === 0 || faltaValor}
+                  disabled={!!salvando[pg.id] || marcados.length === 0 || faltaValor}
                   style={botao}
                 >
-                  {salvando === pg.id ? 'Amarrando...' : 'Amarrar'}
+                  {!!salvando[pg.id] ? 'Amarrando...' : 'Amarrar'}
                 </button>
                 {faltaValor && (
                   <p style={{ margin: 0, fontSize: 12, color: 'var(--color-warning)' }}>
