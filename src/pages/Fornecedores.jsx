@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import ItensPedidoForm, { ITEM_VAZIO } from '../components/ItensPedidoForm'
 import UploadPedidoCompra from '../components/UploadPedidoCompra'
 import CaixinhaPago from '../components/CaixinhaPago'
+import PixSemCompra from '../components/PixSemCompra'
 import { abrirAnexo, TIPOS, validarArquivo, mensagemDe } from '../components/upload/comum'
 
 const inputStyle = { display: 'block', width: '100%', padding: 8, marginTop: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', boxSizing: 'border-box' }
@@ -1128,6 +1129,16 @@ export default function Fornecedores() {
               />
             </div>
           </div>
+
+          {finRole === 'fin_admin' && (
+            <div style={{ marginTop: 24 }}>
+              <PixSemCompra
+                fornecedorId={fornecedorSel.id}
+                pedidos={pedidos}
+                aoMudar={recarregarDados}
+              />
+            </div>
+          )}
         </>
       )}
 
