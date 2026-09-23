@@ -27,6 +27,13 @@
  *    (não só quando troca de fornecedor), pra um Pix lançado do lado
  *    aparecer aqui sem precisar recarregar a página.
  *
+ * Fix round 3 (23/09/2026, CRITICAL 2a): a lista de compras deixou de ser
+ * "as que não têm pago_em" e passou a ser "as que ainda têm valor não
+ * amarrado". Compra marcada por "Pix já lançado" fica com pago_em e sem
+ * link nenhum: sumia daqui para sempre e o Pix que a pagou continuava
+ * solto, pronto para ser amarrado noutra compra e contar o mesmo dinheiro
+ * duas vezes. Quem já está marcada como paga aparece dizendo isso.
+ *
  * Fix round 2 (23/09/2026): a guarda contra clique duplo do round 1 era um
  * único `salvando` (o id de um só Pix). Com dois Pix soltos na tela, clicar
  * em Amarrar no Pix B enquanto o Pix A ainda estava salvando não fazia nada
@@ -82,8 +89,15 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
 
   if (!soltos.length) return null
 
+  // Fix round 3 (CRITICAL 2a): o filtro era `!p.pago_em`. Uma compra marcada
+  // por "Pix já lançado" fica com pago_em e SEM link — sumia daqui para
+  // sempre, e o Pix que a pagou continuava solto; amarrá-lo a outra compra
+  // fazia o mesmo dinheiro contar duas vezes. O que decide é quanto ainda
+  // falta amarrar: a compra aparece enquanto sobrar valor NÃO AMARRADO,
+  // tenha pago_em ou não. A marcação manual vira informação na linha, para
+  // ela saber o que está fazendo.
   const emAberto = pedidos
-    .filter(p => !p.pago_em)
+    .filter(p => Number(p.valor_total) - Number(p.amarrado || 0) > 0.005)
     .sort((a, b) => String(a.data_pedido).localeCompare(String(b.data_pedido)))
 
   // Distribui o que falta do Pix (descontado o que já está fixado por edição
@@ -176,7 +190,7 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
 
             {emAberto.length === 0 ? (
               <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                Não há compra em aberto deste fornecedor para amarrar.
+                Não há compra deste fornecedor com valor para amarrar.
               </p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -193,6 +207,16 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
                       />
                       <span style={{ marginLeft: 8 }}>
                         {`pedido ${p.numero_pedido || 'sem número'} · ${String(p.data_pedido).slice(0, 10).split('-').reverse().join('/')} · ${brl(p.valor_total)}`}
+                        {Number(p.amarrado || 0) > 0 && (
+                          <span style={{ color: 'var(--color-text-muted)' }}>
+                            {` · já amarrado ${brl(p.amarrado)}`}
+                          </span>
+                        )}
+                        {p.pago_em && (
+                          <span style={{ color: 'var(--color-warning)' }}>
+                            {' · já marcada como paga'}
+                          </span>
+                        )}
                       </span>
                       {marcado && (
                         <input

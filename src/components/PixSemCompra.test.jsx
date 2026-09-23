@@ -156,6 +156,54 @@ describe('Pix sem compra', () => {
     await act(async () => { resolverPg1({ data: { itens: [] } }) })
   })
 
+  it('mostra a compra já marcada como paga que ainda tem valor sem amarrar (fix round 3, CRITICAL 2a)', async () => {
+    // Cenário real: a compra foi marcada por "Pix já lançado" — ficou com
+    // pago_em e SEM link. Antes, o filtro `!p.pago_em` a escondia para
+    // sempre, o Pix continuava solto e ela acabava amarrando esse Pix a
+    // outra compra: o mesmo dinheiro contado duas vezes.
+    const pagaSemLink = [
+      { id: 'a', data_pedido: '2026-08-10', valor_total: 30000, numero_pedido: '10', pago_em: '2026-09-14', amarrado: 0 },
+    ]
+    render(<PixSemCompra fornecedorId="f1" pedidos={pagaSemLink} aoMudar={() => {}} />)
+    expect(await screen.findByLabelText(/pedido 10/)).toBeInTheDocument()
+    // e a tela diz que ela já está marcada como paga
+    expect(screen.getByText(/já marcada como paga/)).toBeInTheDocument()
+  })
+
+  it('amarra o Pix à compra já marcada como paga, pelo valor que falta', async () => {
+    const pagaSemLink = [
+      { id: 'a', data_pedido: '2026-08-10', valor_total: 30000, numero_pedido: '10', pago_em: '2026-09-14', amarrado: 0 },
+    ]
+    api.get.mockResolvedValue({ data: [{ id: 'pg-1', valor: 30000, data_pagamento: '2026-09-14', arquivo_path: null }] })
+    api.post.mockResolvedValue({ data: { itens: [] } })
+    render(<PixSemCompra fornecedorId="f1" pedidos={pagaSemLink} aoMudar={() => {}} />)
+    fireEvent.click(await screen.findByLabelText(/pedido 10/))
+    fireEvent.click(screen.getByRole('button', { name: /Amarrar/ }))
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      '/api/fornecedores/f1/pagamentos/pg-1/pedidos',
+      { itens: [{ pedido_id: 'a', valor: 30000 }] },
+    ))
+  })
+
+  it('some da lista quando todo o valor da compra já está amarrado (fix round 3, CRITICAL 2a)', async () => {
+    // Nada a fazer aqui: o valor da compra já está inteiro amarrado a algum
+    // Pix. Continuar mostrando seria convidar a amarrar duas vezes.
+    const totalmenteAmarrada = [
+      { id: 'a', data_pedido: '2026-08-10', valor_total: 30000, numero_pedido: '10', pago_em: null, amarrado: 30000 },
+    ]
+    render(<PixSemCompra fornecedorId="f1" pedidos={totalmenteAmarrada} aoMudar={() => {}} />)
+    expect(await screen.findByText(/Não há compra deste fornecedor com valor para amarrar/)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/pedido 10/)).not.toBeInTheDocument()
+  })
+
+  it('mostra quanto da compra já está amarrado', async () => {
+    const parcial = [
+      { id: 'a', data_pedido: '2026-08-10', valor_total: 30000, numero_pedido: '10', pago_em: null, amarrado: 12000 },
+    ]
+    render(<PixSemCompra fornecedorId="f1" pedidos={parcial} aoMudar={() => {}} />)
+    expect(await screen.findByText(/já amarrado/)).toBeInTheDocument()
+  })
+
   it('busca os soltos de novo quando a lista de pedidos da tela recarrega (fix round 1, item 9)', async () => {
     const { rerender } = render(<PixSemCompra fornecedorId="f1" pedidos={PEDIDOS} aoMudar={() => {}} />)
     await screen.findByText(/49.310,00/)
