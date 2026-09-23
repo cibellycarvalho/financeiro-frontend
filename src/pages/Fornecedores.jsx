@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import ItensPedidoForm, { ITEM_VAZIO } from '../components/ItensPedidoForm'
 import UploadPedidoCompra from '../components/UploadPedidoCompra'
 import CaixinhaPago from '../components/CaixinhaPago'
-import { abrirAnexo } from '../components/upload/comum'
+import { abrirAnexo, TIPOS, validarArquivo, mensagemDe } from '../components/upload/comum'
 
 const inputStyle = { display: 'block', width: '100%', padding: 8, marginTop: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', boxSizing: 'border-box' }
 
@@ -839,6 +839,25 @@ export default function Fornecedores() {
     await recarregarDados()
   }
 
+  // Anexar nota fiscal nunca é obrigatório para salvar o pedido — é só um
+  // upload à parte, igual ao clipe do pedido de compra que já existe.
+  async function subirNota(pedido, arquivo) {
+    if (!arquivo) return
+    const invalido = validarArquivo(arquivo)
+    if (invalido) { setErro(invalido); return }
+    if (pedido.nf_path && !confirm('Já tem nota fiscal nesta compra. Substituir?')) return
+    setErro(null)
+    const corpo = new FormData()
+    corpo.append('arquivo', arquivo)
+    try {
+      await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedido.id}/nf`, corpo,
+        { headers: { 'Content-Type': 'multipart/form-data' } })
+      await recarregarDados()
+    } catch (err) {
+      setErro(mensagemDe(err, 'Não consegui guardar a nota fiscal.'))
+    }
+  }
+
   async function salvarNovoFornecedor(dados) {
     await api.post('/api/fornecedores', dados)
     await carregarFornecedores()
@@ -1016,6 +1035,25 @@ export default function Fornecedores() {
                               📎
                             </button>
                           )}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                            <label style={{ cursor: 'pointer', fontSize: 12.5, opacity: p.nf_path ? 1 : 0.6, whiteSpace: 'nowrap' }}
+                              title={p.nf_path ? 'Substituir nota fiscal' : 'Anexar nota fiscal'}>
+                              🧾 {p.nf_path ? 'Nota fiscal' : 'Nota fiscal (sem)'}
+                              <input
+                                type="file"
+                                data-testid={`nf-${p.id}`}
+                                accept={TIPOS}
+                                style={{ display: 'none' }}
+                                onChange={e => { const arquivo = e.target.files[0]; e.target.value = ''; subirNota(p, arquivo) }}
+                              />
+                            </label>
+                            {p.nf_path && (
+                              <button onClick={() => abrirAnexo(`/api/fornecedores/${fornecedorSel.id}/pedidos/${p.id}/nf`)} title="Ver nota fiscal"
+                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.7, padding: 0 }}>
+                                👁️
+                              </button>
+                            )}
+                          </span>
                         </div>
                         <div style={{ marginTop: 6 }}>
                           <CaixinhaPago fornecedorId={fornecedorSel.id} pedido={p}
