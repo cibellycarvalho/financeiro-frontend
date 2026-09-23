@@ -6,15 +6,23 @@ vi.mock('../services/api', () => ({ default: { get: vi.fn() } }))
 import api from '../services/api'
 
 let cliques
+let revokesNoMomentoDoClique
 
 beforeEach(() => {
   api.get.mockReset()
   global.URL.createObjectURL = vi.fn(() => 'blob:x')
   global.URL.revokeObjectURL = vi.fn()
   cliques = []
+  revokesNoMomentoDoClique = []
   // O componente cria um <a> e chama .click() nele para disparar o download.
-  // jsdom não implementa navegação por link, então grava quem foi clicado.
-  HTMLAnchorElement.prototype.click = vi.fn(function () { cliques.push(this) })
+  // jsdom não implementa navegação por link, então grava quem foi clicado —
+  // e, no instante exato do clique, se já estava no DOM e quantas vezes o
+  // revoke já tinha rodado (para provar a ordem, sem depender de quanto
+  // tempo waitFor deixa passar).
+  HTMLAnchorElement.prototype.click = vi.fn(function () {
+    revokesNoMomentoDoClique.push(global.URL.revokeObjectURL.mock.calls.length)
+    cliques.push({ el: this, conectadoNoClique: this.isConnected })
+  })
 })
 
 function blobDeErro(objeto) {
@@ -32,8 +40,35 @@ describe('Baixar mês', () => {
       '/api/pacote/compras/2026-08', { responseType: 'blob' },
     ))
     await waitFor(() => expect(cliques).toHaveLength(1))
-    expect(cliques[0].download).toBe('compras-2026-08.zip')
-    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:x')
+    expect(cliques[0].el.download).toBe('compras-2026-08.zip')
+    await waitFor(() => expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:x'))
+  })
+
+  it('anexa o link ao DOM antes de clicar e o remove logo depois (navegador antigo exige isso para o .click() disparar)', async () => {
+    api.get.mockResolvedValue({ data: new Blob(['zip']) })
+    render(<BaixarMes />)
+    fireEvent.click(screen.getByRole('button', { name: /Baixar mês/ }))
+
+    await waitFor(() => expect(cliques).toHaveLength(1))
+    // No momento do clique, o link precisa estar na árvore do documento —
+    // gravado dentro do próprio .click(), não depois (waitFor deixa tempo
+    // real passar e o link já teria sido removido).
+    expect(cliques[0].conectadoNoClique).toBe(true)
+    // E depois de usado, não deve sobrar pendurado na página.
+    await waitFor(() => expect(document.body.contains(cliques[0].el)).toBe(false))
+  })
+
+  it('não revoga a URL do blob no mesmo tick do clique (revoke síncrono corrompe o download no Firefox/Safari antigos)', async () => {
+    api.get.mockResolvedValue({ data: new Blob(['zip']) })
+    render(<BaixarMes />)
+    fireEvent.click(screen.getByRole('button', { name: /Baixar mês/ }))
+
+    await waitFor(() => expect(cliques).toHaveLength(1))
+    // Contado no instante exato do .click(): o revoke ainda não podia ter
+    // rodado (senão o download corromperia no Firefox/Safari antigos).
+    expect(revokesNoMomentoDoClique[0]).toBe(0)
+
+    await waitFor(() => expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:x'))
   })
 
   it('mês sem compra mostra o aviso do backend quando o erro já vem como JSON', async () => {

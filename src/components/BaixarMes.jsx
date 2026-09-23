@@ -73,8 +73,15 @@ export default function BaixarMes() {
       const link = document.createElement('a')
       link.href = url
       link.download = `compras-${mes}.zip`
+      // Precisa estar na árvore do DOM para o .click() disparar o download em
+      // navegadores mais antigos, e é removido logo depois — não fica visível.
+      document.body.appendChild(link)
       link.click()
-      URL.revokeObjectURL(url)
+      document.body.removeChild(link)
+      // Adiar o revoke: se rodar no mesmo tick do clique, Firefox e Safari
+      // mais antigos podem cancelar/corromper o download — o botão volta ao
+      // normal e a pessoa não vê arquivo nem erro.
+      setTimeout(() => URL.revokeObjectURL(url), 0)
     } catch (e) {
       const msg = await mensagemDoErro(e)
       setErro(msg || 'Não consegui montar o arquivo. Tente de novo.')
