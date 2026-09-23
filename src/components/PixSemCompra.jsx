@@ -12,6 +12,20 @@
  * aberto, compra repetida, compra de outro fornecedor) e devolve a mensagem
  * pronta em português — este componente só mostra o que ele manda, sem
  * reescrever nem revalidar essas regras aqui.
+ *
+ * Fix round 1 (revisão do brief e da spec, 23/09/2026):
+ *  - A redistribuição automática não pode mais sobrescrever um valor que a
+ *    usuária já editou à mão — só mexe nas compras marcadas que ainda não
+ *    foram tocadas (Set `tocados`, por Pix).
+ *  - Um campo de valor apagado (marcado, mas sem número) trava o botão
+ *    Amarrar com o motivo escrito na tela, em vez de sumir da amarração em
+ *    silêncio.
+ *  - A distribuição propõe `valor_total - amarrado` de cada compra (o que o
+ *    backend manda em `GET /pedidos`), não o valor_total cheio — senão
+ *    propunha amarrar de novo o que outro Pix já cobriu.
+ *  - Busca os soltos de novo sempre que a lista de pedidos da tela mudar
+ *    (não só quando troca de fornecedor), pra um Pix lançado do lado
+ *    aparecer aqui sem precisar recarregar a página.
  */
 import { useEffect, useState } from 'react'
 import api from '../services/api'
@@ -37,9 +51,14 @@ const campoValor = {
   background: 'var(--color-bg)', color: 'var(--color-text)',
 }
 
+function valorFaltando(v) {
+  return v === '' || v === null || v === undefined
+}
+
 export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
   const [soltos, setSoltos] = useState([])
   const [escolhas, setEscolhas] = useState({})   // { [pagamentoId]: { [pedidoId]: valor } }
+  const [tocados, setTocados] = useState({})     // { [pagamentoId]: Set(pedidoId) editado à mão }
   const [erros, setErros] = useState({})         // { [pagamentoId]: mensagem }
   const [salvando, setSalvando] = useState(null) // pagamentoId em voo
 
@@ -49,7 +68,10 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
       .then(r => vivo && setSoltos(r.data))
       .catch(() => vivo && setSoltos([]))
     return () => { vivo = false }
-  }, [fornecedorId])
+    // `pedidos` muda de referência sempre que a tela recarrega os dados do
+    // fornecedor — é o gatilho para buscar os soltos de novo sem precisar de
+    // um prop dedicado (item 9 do fix round 1).
+  }, [fornecedorId, pedidos])
 
   if (!soltos.length) return null
 
@@ -57,21 +79,37 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
     .filter(p => !p.pago_em)
     .sort((a, b) => String(a.data_pedido).localeCompare(String(b.data_pedido)))
 
-  function alternar(pagamento, pedido) {
-    setEscolhas(atual => {
-      const desta = { ...(atual[pagamento.id] || {}) }
-      if (desta[pedido.id] !== undefined) delete desta[pedido.id]
-      else desta[pedido.id] = null
-      // Distribui o valor do Pix da compra mais antiga para a mais nova.
-      let restante = Number(pagamento.valor)
-      const marcados = emAberto.filter(p => desta[p.id] !== undefined)
-      marcados.forEach(p => {
-        const cabe = Math.min(restante, Number(p.valor_total))
-        desta[p.id] = Number(cabe.toFixed(2))
-        restante -= cabe
-      })
-      return { ...atual, [pagamento.id]: desta }
+  // Distribui o que falta do Pix (descontado o que já está fixado por edição
+  // manual) da compra mais antiga para a mais nova, só nas compras marcadas
+  // que ainda não foram tocadas. Muta `desta` e devolve.
+  function distribuir(pagamento, desta, tocadosDeste) {
+    const marcados = emAberto.filter(p => desta[p.id] !== undefined)
+    let restante = Number(pagamento.valor)
+    marcados.forEach(p => {
+      if (tocadosDeste.has(p.id)) restante -= Number(desta[p.id] || 0)
     })
+    marcados.forEach(p => {
+      if (tocadosDeste.has(p.id)) return
+      const disponivel = Number(p.valor_total) - Number(p.amarrado || 0)
+      const cabe = Math.max(0, Math.min(restante, disponivel))
+      desta[p.id] = Number(cabe.toFixed(2))
+      restante -= cabe
+    })
+    return desta
+  }
+
+  function alternar(pagamento, pedido) {
+    const desta = { ...(escolhas[pagamento.id] || {}) }
+    const tocadosDeste = new Set(tocados[pagamento.id] || [])
+    if (desta[pedido.id] !== undefined) {
+      delete desta[pedido.id]
+      tocadosDeste.delete(pedido.id)
+    } else {
+      desta[pedido.id] = null
+    }
+    distribuir(pagamento, desta, tocadosDeste)
+    setEscolhas(atual => ({ ...atual, [pagamento.id]: desta }))
+    setTocados(atual => ({ ...atual, [pagamento.id]: tocadosDeste }))
   }
 
   function editarValor(pagamento, pedido, valor) {
@@ -79,12 +117,18 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
       ...atual,
       [pagamento.id]: { ...(atual[pagamento.id] || {}), [pedido.id]: valor === '' ? '' : Number(valor) },
     }))
+    setTocados(atual => {
+      const setDeste = new Set(atual[pagamento.id] || [])
+      setDeste.add(pedido.id)
+      return { ...atual, [pagamento.id]: setDeste }
+    })
   }
 
   async function amarrar(pagamento) {
+    if (salvando) return // trava contra clique duplo além do disabled do botão
     const desta = escolhas[pagamento.id] || {}
     const itens = emAberto
-      .filter(p => desta[p.id] !== undefined && desta[p.id] !== '')
+      .filter(p => desta[p.id] !== undefined)
       .map(p => ({ pedido_id: p.id, valor: Number(desta[p.id]) }))
     setErros(atual => ({ ...atual, [pagamento.id]: null }))
     setSalvando(pagamento.id)
@@ -106,6 +150,8 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
     >
       {soltos.map(pg => {
         const desta = escolhas[pg.id] || {}
+        const marcados = Object.keys(desta)
+        const faltaValor = marcados.some(id => valorFaltando(desta[id]))
         return (
           <div key={pg.id} style={linha}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
@@ -152,11 +198,16 @@ export default function PixSemCompra({ fornecedorId, pedidos, aoMudar }) {
                 })}
                 <button
                   onClick={() => amarrar(pg)}
-                  disabled={salvando === pg.id || Object.keys(desta).length === 0}
+                  disabled={salvando === pg.id || marcados.length === 0 || faltaValor}
                   style={botao}
                 >
                   {salvando === pg.id ? 'Amarrando...' : 'Amarrar'}
                 </button>
+                {faltaValor && (
+                  <p style={{ margin: 0, fontSize: 12, color: 'var(--color-warning)' }}>
+                    Preencha o valor de todas as compras marcadas antes de amarrar.
+                  </p>
+                )}
               </div>
             )}
 

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import PixSemCompra from './PixSemCompra'
 
@@ -7,8 +7,8 @@ import api from '../services/api'
 
 const SOLTOS = [{ id: 'pg-1', valor: 49310, data_pagamento: '2026-09-14', arquivo_path: null }]
 const PEDIDOS = [
-  { id: 'a', data_pedido: '2026-08-10', valor_total: 30000, numero_pedido: '10', pago_em: null },
-  { id: 'b', data_pedido: '2026-08-11', valor_total: 19310, numero_pedido: '11', pago_em: null },
+  { id: 'a', data_pedido: '2026-08-10', valor_total: 30000, numero_pedido: '10', pago_em: null, amarrado: 0 },
+  { id: 'b', data_pedido: '2026-08-11', valor_total: 19310, numero_pedido: '11', pago_em: null, amarrado: 0 },
 ]
 
 beforeEach(() => {
@@ -42,8 +42,16 @@ describe('Pix sem compra', () => {
   })
 
   it('não aparece quando não há Pix solto', async () => {
-    api.get.mockResolvedValue({ data: [] })
+    // Fix round 1 (item 5): o waitFor de baixo, sem esperar a promise do
+    // fetch resolver antes, rodava antes de api.get terminar — o componente
+    // ainda estava null por não ter montado o efeito, então o teste passava
+    // mesmo que o mock devolvesse Pix solto de verdade. Aguardar a própria
+    // promise garante que a resposta ([]) já foi aplicada ao estado antes
+    // de afirmar a ausência.
+    const resposta = Promise.resolve({ data: [] })
+    api.get.mockReturnValue(resposta)
     const { container } = render(<PixSemCompra fornecedorId="f1" pedidos={PEDIDOS} aoMudar={() => {}} />)
+    await act(async () => { await resposta })
     await waitFor(() => expect(container.textContent).not.toMatch(/Amarrar/))
   })
 
@@ -59,6 +67,41 @@ describe('Pix sem compra', () => {
     ))
   })
 
+  it('preserva o valor editado à mão quando marca outra compra depois (fix round 1, item 3)', async () => {
+    render(<PixSemCompra fornecedorId="f1" pedidos={PEDIDOS} aoMudar={() => {}} />)
+    fireEvent.click(await screen.findByLabelText(/pedido 10/))
+    fireEvent.change(screen.getByLabelText(/valor amarrado ao pedido 10/), { target: { value: '20000' } })
+    fireEvent.click(screen.getByLabelText(/pedido 11/))
+    // O campo do pedido 10 continua com o valor digitado (20.000), não volta
+    // sozinho para os 30.000 que a redistribuição automática propunha antes.
+    expect(screen.getByLabelText(/valor amarrado ao pedido 10/).value).toBe('20000')
+    fireEvent.click(screen.getByRole('button', { name: /Amarrar/ }))
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      '/api/fornecedores/f1/pagamentos/pg-1/pedidos',
+      { itens: [{ pedido_id: 'a', valor: 20000 }, { pedido_id: 'b', valor: 19310 }] },
+    ))
+  })
+
+  it('não propõe amarrar de novo o que outro Pix já cobriu (fix round 1, item 8)', async () => {
+    const pedidosComAmarracao = [
+      { id: 'a', data_pedido: '2026-08-10', valor_total: 30000, numero_pedido: '10', pago_em: null, amarrado: 12000 },
+      { id: 'b', data_pedido: '2026-08-11', valor_total: 19310, numero_pedido: '11', pago_em: null, amarrado: 0 },
+    ]
+    render(<PixSemCompra fornecedorId="f1" pedidos={pedidosComAmarracao} aoMudar={() => {}} />)
+    fireEvent.click(await screen.findByLabelText(/pedido 10/))
+    // Disponível do pedido 10 é 30.000 - 12.000 = 18.000, não os 30.000 cheios.
+    expect(screen.getByLabelText(/valor amarrado ao pedido 10/).value).toBe('18000')
+  })
+
+  it('trava o botão Amarrar com o motivo quando um valor marcado é apagado (fix round 1, item 4)', async () => {
+    render(<PixSemCompra fornecedorId="f1" pedidos={PEDIDOS} aoMudar={() => {}} />)
+    fireEvent.click(await screen.findByLabelText(/pedido 10/))
+    fireEvent.change(screen.getByLabelText(/valor amarrado ao pedido 10/), { target: { value: '' } })
+    expect(screen.getByRole('button', { name: /Amarrar/ })).toBeDisabled()
+    expect(await screen.findByText(/Preencha o valor de todas as compras marcadas/)).toBeInTheDocument()
+    expect(api.post).not.toHaveBeenCalled()
+  })
+
   it('avisa que amarrar é opcional', async () => {
     render(<PixSemCompra fornecedorId="f1" pedidos={PEDIDOS} aoMudar={() => {}} />)
     expect(await screen.findByText(/opcional/)).toBeInTheDocument()
@@ -72,5 +115,14 @@ describe('Pix sem compra', () => {
     fireEvent.click(screen.getByRole('button', { name: /Amarrar/ }))
     await waitFor(() => expect(aoMudar).toHaveBeenCalled())
     await waitFor(() => expect(screen.queryByText(/49.310,00/)).not.toBeInTheDocument())
+  })
+
+  it('busca os soltos de novo quando a lista de pedidos da tela recarrega (fix round 1, item 9)', async () => {
+    const { rerender } = render(<PixSemCompra fornecedorId="f1" pedidos={PEDIDOS} aoMudar={() => {}} />)
+    await screen.findByText(/49.310,00/)
+    expect(api.get).toHaveBeenCalledTimes(1)
+    const pedidosRecarregados = [...PEDIDOS]
+    rerender(<PixSemCompra fornecedorId="f1" pedidos={pedidosRecarregados} aoMudar={() => {}} />)
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2))
   })
 })
