@@ -7,6 +7,7 @@ import ItensPedidoForm, { ITEM_VAZIO } from '../components/ItensPedidoForm'
 import UploadPedidoCompra from '../components/UploadPedidoCompra'
 import CaixinhaPago from '../components/CaixinhaPago'
 import PixSemCompra from '../components/PixSemCompra'
+import BaixarMes from '../components/BaixarMes'
 import { abrirAnexo, TIPOS, validarArquivo, mensagemDe } from '../components/upload/comum'
 
 const inputStyle = { display: 'block', width: '100%', padding: 8, marginTop: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', boxSizing: 'border-box' }
@@ -935,14 +936,17 @@ export default function Fornecedores() {
 
   return (
     <Layout>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
         <h1 style={{ margin: 0 }}>Fornecedores</h1>
-        {finRole === 'fin_admin' && (
-          <button onClick={() => setModalNovo(true)}
-            style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
-            + Novo Fornecedor
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+          <BaixarMes />
+          {finRole === 'fin_admin' && (
+            <button onClick={() => setModalNovo(true)}
+              style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+              + Novo Fornecedor
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 32 }}>
