@@ -6,7 +6,9 @@ import { useAuth } from '../contexts/AuthContext'
 import ItensPedidoForm, { ITEM_VAZIO } from '../components/ItensPedidoForm'
 import UploadPedidoCompra from '../components/UploadPedidoCompra'
 import CaixinhaPago from '../components/CaixinhaPago'
-import { abrirAnexo } from '../components/upload/comum'
+import PixSemCompra from '../components/PixSemCompra'
+import BaixarMes from '../components/BaixarMes'
+import { abrirAnexo, TIPOS, validarArquivo, mensagemDe } from '../components/upload/comum'
 
 const inputStyle = { display: 'block', width: '100%', padding: 8, marginTop: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', boxSizing: 'border-box' }
 
@@ -281,7 +283,7 @@ function ModalFornecedor({ titulo, inicial, onSalvar, onFechar }) {
   )
 }
 
-function LinhaPagamento({ pagamento, onEditar, onExcluir, onAbrirAnexo }) {
+function LinhaPagamento({ pagamento, onEditar, onExcluir, onAbrirAnexo, onDesamarrar }) {
   const [editando, setEditando] = useState(false)
   const [valor, setValor] = useState(pagamento.valor)
   const [data, setData] = useState(paraDataInput(pagamento.data_pagamento))
@@ -313,6 +315,21 @@ function LinhaPagamento({ pagamento, onEditar, onExcluir, onAbrirAnexo }) {
     }
   }
 
+  // Fix round 1 (item 1, CRITICAL): "Desfazer é um clique" — antes disto, a
+  // única saída pra corrigir uma amarração errada era apagar o pagamento
+  // inteiro e relançar, perdendo data e comprovante.
+  async function desamarrar() {
+    if (!confirm('Desamarrar este Pix das compras? Ele volta a aparecer em "Pix sem compra".')) return
+    setErro(null)
+    setLoading(true)
+    try {
+      await onDesamarrar(pagamento.id)
+    } catch (err) {
+      setErro(err.response?.data?.error || 'Erro ao desamarrar.')
+      setLoading(false)
+    }
+  }
+
   if (editando) {
     return (
       <div style={{ padding: '8px 10px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
@@ -335,31 +352,58 @@ function LinhaPagamento({ pagamento, onEditar, onExcluir, onAbrirAnexo }) {
     )
   }
 
+  const temAmarracao = pagamento.amarracoes && pagamento.amarracoes.length > 0
+
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '6px 10px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
-      <span>{formatData(pagamento.data_pagamento)}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontWeight: 600 }}>{formatMoeda(pagamento.valor)}</span>
-        {pagamento.arquivo_path && onAbrirAnexo && (
-          <button onClick={onAbrirAnexo} title="Ver comprovante"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.7, padding: 2 }}>
-            📎
+    <div style={{ padding: '6px 10px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
+        <span>{formatData(pagamento.data_pagamento)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontWeight: 600 }}>{formatMoeda(pagamento.valor)}</span>
+          {pagamento.arquivo_path && onAbrirAnexo && (
+            <button onClick={onAbrirAnexo} title="Ver comprovante"
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.7, padding: 2 }}>
+              📎
+            </button>
+          )}
+          <button onClick={() => setEditando(true)} title="Editar" disabled={loading}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>
+            ✏️
           </button>
-        )}
-        <button onClick={() => setEditando(true)} title="Editar" disabled={loading}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>
-          ✏️
-        </button>
-        <button onClick={excluir} title="Excluir" disabled={loading}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>
-          🗑️
-        </button>
+          <button onClick={excluir} title="Excluir" disabled={loading}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>
+            🗑️
+          </button>
+        </div>
       </div>
+
+      {temAmarracao && (
+        <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px dashed var(--color-border)', fontSize: 12, color: 'var(--color-text-muted)' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+            <span>Amarrado a:</span>
+            {pagamento.amarracoes.map(a => (
+              <span key={a.pedido_id} style={{
+                background: 'var(--color-row)', borderRadius: 'var(--radius-sm)', padding: '2px 8px',
+              }}>
+                {`pedido ${a.numero_pedido || 'sem número'} · ${formatData(a.data_pedido)} · ${formatMoeda(a.valor)}`}
+              </span>
+            ))}
+            {onDesamarrar && (
+              <button onClick={desamarrar} disabled={loading}
+                style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text)', borderRadius: 'var(--radius-sm)', padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}>
+                Desamarrar
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {erro && <p style={{ color: 'var(--color-danger)', fontSize: 11, margin: '4px 0 0' }}>{erro}</p>}
     </div>
   )
 }
 
-function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto, podeEditar, onRegistrar, onEditar, onExcluir, onAbrirAnexo }) {
+function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto, podeEditar, onRegistrar, onEditar, onExcluir, onAbrirAnexo, onDesamarrar }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [valor, setValor] = useState('')
   const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().split('T')[0])
@@ -397,7 +441,8 @@ function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
           {pagamentos.map(pg => (
             <LinhaPagamento key={pg.id} pagamento={pg} onEditar={onEditar} onExcluir={onExcluir}
-              onAbrirAnexo={onAbrirAnexo ? () => onAbrirAnexo(pg) : null} />
+              onAbrirAnexo={onAbrirAnexo ? () => onAbrirAnexo(pg) : null}
+              onDesamarrar={podeEditar ? onDesamarrar : null} />
           ))}
         </div>
       ) : (
@@ -799,6 +844,15 @@ export default function Fornecedores() {
     await recarregarDados()
   }
 
+  // Fix round 1 (item 1, CRITICAL): "Desfazer é um clique" — desamarra o Pix
+  // das compras sem apagar o pagamento. Ele volta a aparecer em "Pix sem
+  // compra" porque recarregarDados busca a lista de novo (PixSemCompra
+  // refaz o fetch quando a lista de pedidos muda de referência).
+  async function desamarrarPagamentoFornecedor(pagamentoId) {
+    await api.delete(`/api/fornecedores/${fornecedorSel.id}/pagamentos/${pagamentoId}/pedidos`)
+    await recarregarDados()
+  }
+
   async function editarItem(pedidoId, itemId, produto, quantidade, valorUnitario) {
     await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/itens/${itemId}`, {
       produto, quantidade, valor_unitario: valorUnitario
@@ -839,6 +893,25 @@ export default function Fornecedores() {
     await recarregarDados()
   }
 
+  // Anexar nota fiscal nunca é obrigatório para salvar o pedido — é só um
+  // upload à parte, igual ao clipe do pedido de compra que já existe.
+  async function subirNota(pedido, arquivo) {
+    if (!arquivo) return
+    const invalido = validarArquivo(arquivo)
+    if (invalido) { setErro(invalido); return }
+    if (pedido.nf_path && !confirm('Já tem nota fiscal nesta compra. Substituir?')) return
+    setErro(null)
+    const corpo = new FormData()
+    corpo.append('arquivo', arquivo)
+    try {
+      await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedido.id}/nf`, corpo,
+        { headers: { 'Content-Type': 'multipart/form-data' } })
+      await recarregarDados()
+    } catch (err) {
+      setErro(mensagemDe(err, 'Não consegui guardar a nota fiscal.'))
+    }
+  }
+
   async function salvarNovoFornecedor(dados) {
     await api.post('/api/fornecedores', dados)
     await carregarFornecedores()
@@ -863,14 +936,17 @@ export default function Fornecedores() {
 
   return (
     <Layout>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
         <h1 style={{ margin: 0 }}>Fornecedores</h1>
-        {finRole === 'fin_admin' && (
-          <button onClick={() => setModalNovo(true)}
-            style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
-            + Novo Fornecedor
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+          <BaixarMes />
+          {finRole === 'fin_admin' && (
+            <button onClick={() => setModalNovo(true)}
+              style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+              + Novo Fornecedor
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 32 }}>
@@ -1016,6 +1092,25 @@ export default function Fornecedores() {
                               📎
                             </button>
                           )}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                            <label style={{ cursor: 'pointer', fontSize: 12.5, opacity: p.nf_path ? 1 : 0.6, whiteSpace: 'nowrap' }}
+                              title={p.nf_path ? 'Substituir nota fiscal' : 'Anexar nota fiscal'}>
+                              🧾 {p.nf_path ? 'Nota fiscal' : 'Nota fiscal (sem)'}
+                              <input
+                                type="file"
+                                data-testid={`nf-${p.id}`}
+                                accept={TIPOS}
+                                style={{ display: 'none' }}
+                                onChange={e => { const arquivo = e.target.files[0]; e.target.value = ''; subirNota(p, arquivo) }}
+                              />
+                            </label>
+                            {p.nf_path && (
+                              <button onClick={() => abrirAnexo(`/api/fornecedores/${fornecedorSel.id}/pedidos/${p.id}/nf`)} title="Ver nota fiscal"
+                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.7, padding: 0 }}>
+                                👁️
+                              </button>
+                            )}
+                          </span>
                         </div>
                         <div style={{ marginTop: 6 }}>
                           <CaixinhaPago fornecedorId={fornecedorSel.id} pedido={p}
@@ -1087,9 +1182,20 @@ export default function Fornecedores() {
                 onEditar={editarPagamentoFornecedor}
                 onExcluir={excluirPagamentoFornecedor}
                 onAbrirAnexo={pg => abrirAnexo(`/api/fornecedores/${fornecedorSel.id}/pagamentos/${pg.id}/anexo`)}
+                onDesamarrar={desamarrarPagamentoFornecedor}
               />
             </div>
           </div>
+
+          {finRole === 'fin_admin' && (
+            <div style={{ marginTop: 24 }}>
+              <PixSemCompra
+                fornecedorId={fornecedorSel.id}
+                pedidos={pedidos}
+                aoMudar={recarregarDados}
+              />
+            </div>
+          )}
         </>
       )}
 

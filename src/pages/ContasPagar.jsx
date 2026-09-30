@@ -24,6 +24,7 @@ import SecaoCard from '../components/SecaoCard'
 import AlertaBadge from '../components/AlertaBadge'
 import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { TIPOS, validarArquivo, mensagemDe, abrirAnexo } from '../components/upload/comum'
 
 const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 // O Flask manda "Mon, 14 Sep 2026 00:00:00 GMT"; somar 'T00:00:00' nisso dava
@@ -65,6 +66,7 @@ export default function ContasPagar() {
   const [periodo, setPeriodo] = useState('semana')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ descricao: '', categoria: 'IMPOSTO_DAS', valor: '', vencimento: '', marca: 'GERAL', observacao: '' })
+  const [erro, setErro] = useState(null)
 
   async function carregar() {
     const params = periodo === 'todos' ? '' : `?periodo=${periodo}`
@@ -86,6 +88,26 @@ export default function ContasPagar() {
     const hoje = new Date().toISOString().split('T')[0]
     await api.put(`/api/contas/${id}`, { status: 'pago', data_pagamento: hoje })
     carregar()
+  }
+
+  // Nota fiscal e comprovante nunca são obrigatórios: é só um upload à parte,
+  // no mesmo padrão do clipe de nota fiscal da compra do fornecedor (Task 6).
+  async function subirAnexoConta(conta, tipo, arquivo) {
+    if (!arquivo) return
+    const invalido = validarArquivo(arquivo)
+    if (invalido) { setErro(invalido); return }
+    const jaTem = tipo === 'nf' ? conta.nf_path : conta.comprovante_path
+    if (jaTem && !confirm('Já tem arquivo aqui. Substituir?')) return
+    setErro(null)
+    const corpo = new FormData()
+    corpo.append('arquivo', arquivo)
+    try {
+      await api.post(`/api/contas/${conta.id}/anexo/${tipo}`, corpo,
+        { headers: { 'Content-Type': 'multipart/form-data' } })
+      await carregar()
+    } catch (err) {
+      setErro(mensagemDe(err, 'Não consegui guardar o arquivo.'))
+    }
   }
 
   // Somas da lista que já está na tela. O servidor não devolve totais e não
@@ -198,6 +220,13 @@ export default function ContasPagar() {
         </form>
       )}
 
+      {erro && (
+        <p style={{
+          margin: '0 0 14px', padding: '8px 12px', borderRadius: 'var(--radius-sm)',
+          border: '1px solid var(--color-danger)', color: 'var(--color-danger)', fontSize: 13,
+        }}>{erro}</p>
+      )}
+
       <SecaoCard
         titulo="Lançamentos"
         subtitulo="Da mais próxima do vencimento para a mais distante."
@@ -250,6 +279,46 @@ export default function ContasPagar() {
                 : c.status === 'pago' ? 'ok'
                 : c.status === 'a_confirmar' ? 'info' : 'warning'}
             />
+
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              <label style={{ cursor: 'pointer', fontSize: 12.5, opacity: c.nf_path ? 1 : 0.6, whiteSpace: 'nowrap' }}
+                title={c.nf_path ? 'Substituir nota fiscal' : 'Anexar nota fiscal'}>
+                🧾 {c.nf_path ? 'Nota fiscal' : 'Nota fiscal (sem)'}
+                <input
+                  type="file"
+                  data-testid={`nf-${c.id}`}
+                  accept={TIPOS}
+                  style={{ display: 'none' }}
+                  onChange={e => { const arquivo = e.target.files[0]; e.target.value = ''; subirAnexoConta(c, 'nf', arquivo) }}
+                />
+              </label>
+              {c.nf_path && (
+                <button onClick={() => abrirAnexo(`/api/contas/${c.id}/anexo/nf`)} title="Ver nota fiscal"
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.7, padding: 0 }}>
+                  👁️
+                </button>
+              )}
+            </span>
+
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              <label style={{ cursor: 'pointer', fontSize: 12.5, opacity: c.comprovante_path ? 1 : 0.6, whiteSpace: 'nowrap' }}
+                title={c.comprovante_path ? 'Substituir comprovante' : 'Anexar comprovante'}>
+                📄 {c.comprovante_path ? 'Comprovante' : 'Comprovante (sem)'}
+                <input
+                  type="file"
+                  data-testid={`comprovante-${c.id}`}
+                  accept={TIPOS}
+                  style={{ display: 'none' }}
+                  onChange={e => { const arquivo = e.target.files[0]; e.target.value = ''; subirAnexoConta(c, 'comprovante', arquivo) }}
+                />
+              </label>
+              {c.comprovante_path && (
+                <button onClick={() => abrirAnexo(`/api/contas/${c.id}/anexo/comprovante`)} title="Ver comprovante"
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.7, padding: 0 }}>
+                  👁️
+                </button>
+              )}
+            </span>
 
             {ehAdmin && c.status !== 'pago' && (
               <button onClick={() => marcarPago(c.id)} style={{
