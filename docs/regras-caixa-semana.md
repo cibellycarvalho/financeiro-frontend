@@ -169,3 +169,22 @@ adicionar. Um lançamento errado é definitivo, e isso já vale hoje.
 Enquanto não existir, qualquer botão que lance repasse de uma vez precisa travar
 depois do primeiro uso da semana, porque colar duas vezes somaria sem ter como
 desfazer. Código dos endpoints em `docs/endpoints-editar-apagar-repasse.md`.
+
+## O pacote do mês é do mês da COMPRA
+
+Pedido dela em 23/09/2026, publicado em 30/09/2026. O botão "Baixar mês" (em
+Fornecedores) devolve um .zip com uma pasta por compra: nota fiscal, pedido e
+os comprovantes dos Pix que a pagaram, mais um `resumo.xlsx`.
+
+A pasta é do **mês da compra, não do Pix**: a Flávia tem 30 dias de prazo, então
+a compra de 17/08 paga em setembro fica na pasta de agosto, com o comprovante
+de setembro dentro. Um Pix que pagou duas compras aparece nas duas pastas, com
+o valor que coube a cada uma no nome do arquivo.
+
+**Nota, comprovante e amarração nunca são obrigatórios** — regra dela: "às vezes
+não vou ter eles em mãos". O que falta aparece no `resumo.xlsx` ("sem nota",
+"Marcada como paga" com Pago = 0), nunca como impedimento de salvar.
+
+Compra marcada por "Pix já lançado" não tem pagamento amarrado: no resumo ela
+aparece como **marcada como paga**, com Pago = 0, em vez de somar dinheiro que
+não tem comprovante — senão o mesmo valor contaria duas vezes.
