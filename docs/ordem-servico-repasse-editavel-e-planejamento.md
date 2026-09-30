@@ -1,7 +1,12 @@
 # Ordem de serviço — repasse editável e planejamento da semana no banco
 
-Duas mudanças no `financeiro-backend`. São independentes; a **parte 1 é a mais
-urgente**, porque o problema dela já existe hoje.
+Duas mudanças no `financeiro-backend`. São independentes.
+
+**Situação em 30/09/2026:** a parte 2 está no ar desde 17/09. A **parte 1 saiu
+da fila** — a Cibelly disse que não usa a tela Repasses ML e não lança repasse
+na mão: *"não uso repasses ml, deixa pra depois"*. O risco que ela conserta
+(valor errado que não dá para corrigir) continua existindo, mas não encosta em
+ninguém enquanto a tela não for usada. Fica aqui pronta para quando encostar.
 
 O frontend eu faço depois que estiver no ar — não precisa mexer em
 `financeiro-frontend`.
