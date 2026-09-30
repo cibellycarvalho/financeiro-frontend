@@ -164,6 +164,23 @@ export function lerLiberacoes(texto) {
     const v = numeroBR(m[4])
     porDia[Number(m[2])] = (m[3] === '-' || m[3] === '−') ? -v : v
   }
+
+  // Escrever a data também vale: "30/09/2026 R$ 7.363,38", "01/10 +R$ 19.139,97",
+  // "02-10" com o valor na linha de baixo. Pedido dela em 30/09/2026 — a agenda
+  // do Mercado Pago é colada inteira, mas quando ela digita à mão pensa em data,
+  // não em "segunda-feira". Só o dia importa: a semana na tela já diz o mês, e
+  // dia que não cai nela é descartado por quem chama.
+  //
+  // Sem R$, o valor precisa ter centavos. Senão "30/09" seguido de "01/10" na
+  // linha de baixo leria o 01 como valor do dia 30, calado. O olhar-para-trás
+  // impede que o "09/2026" de dentro de uma data já lida vire outra data.
+  // Separador só / ou -: o ponto é separador de milhar aqui ("2.280,51" viraria
+  // dia 2, mês 280), e nenhuma data digitada à mão perde nada por isso.
+  const reData = /(?<![\d,./-])(\d{1,2})\s*[/-]\s*(\d{1,2})(?!\d)(?:\s*[/-]\s*\d{2,4})?\s*([+\-−]?)\s*(?:R\$\s*([\d.]*\d(?:\s*,\s*\d{2})?)|([\d.]*\d\s*,\s*\d{2}))/g
+  while ((m = reData.exec(texto)) !== null) {
+    const v = numeroBR(m[4] !== undefined ? m[4] : m[5])
+    porDia[Number(m[1])] = (m[3] === '-' || m[3] === '−') ? -v : v
+  }
   return porDia
 }
 
@@ -910,12 +927,12 @@ export default function CaixaSemana() {
                     onChange={e => setRascunho(e.target.value)}
                     spellCheck={false}
                     autoFocus
-                    placeholder={'Cole aqui, do jeito que o Mercado Pago mostra:\n\nSegunda-feira, 14+R$2.280,51\nTerça-feira, 15+R$16.398,00'} />
+                    placeholder={'Cole do jeito que o Mercado Pago mostra:\n\nSegunda-feira, 14+R$2.280,51\nTerça-feira, 15+R$16.398,00\n\nOu escreva por data:\n\n30/09/2026 R$ 7.363,38\n01/10 R$ 19.139,97'} />
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
                     <button type="button" style={botao} onClick={() => {
                       const n = guardarColagem(rascunho)
                       if (n === 0) {
-                        setAvisoColagem('Não achei nenhum dia desta semana nesse texto. Confira se copiou as linhas com o nome do dia.')
+                        setAvisoColagem('Não achei nenhum dia desta semana nesse texto. Cada linha precisa do nome do dia ("Terça-feira, 15") ou da data ("15/09") com o valor do dia.')
                         return
                       }
                       setRascunho('')

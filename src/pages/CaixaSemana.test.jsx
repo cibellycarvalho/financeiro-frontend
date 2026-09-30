@@ -142,6 +142,39 @@ Terça-feira, 15+R$16.407,92`)
     expect(porDia).toEqual({ 14: 5809.88, 15: 16407.92 })
   })
 
+  it('lê a agenda escrita por data, não só por nome do dia', () => {
+    // Pedido dela em 30/09/2026: "só deixa se eu colocar segunda-feira, terça;
+    // eu quero digitar 30/09/2026, 01/10 e assim por diante".
+    const porDia = lerLiberacoes(`30/09/2026 R$ 7.363,38
+01/10/2026 +R$ 19.139,97
+02/10 R$ 21.335,71
+03-10 -R$ 1.000,00`)
+    expect(porDia).toEqual({ 30: 7363.38, 1: 19139.97, 2: 21335.71, 3: -1000 })
+  })
+
+  it('lê a data mesmo sem R$ e com o valor na linha de baixo', () => {
+    const porDia = lerLiberacoes(`30/09
+7.363,38
+01/10
+19.139,97`)
+    expect(porDia).toEqual({ 30: 7363.38, 1: 19139.97 })
+  })
+
+  it('não confunde hora nem número solto com data da agenda', () => {
+    const porDia = lerLiberacoes(`Segunda-feira, 14+R$5.809,88
+
+* Liberação de dinheiro
+13h00
+2.280,51`)
+    expect(porDia).toEqual({ 14: 5809.88 })
+  })
+
+  it('as duas formas convivem no mesmo texto colado', () => {
+    const porDia = lerLiberacoes(`Segunda-feira, 14+R$5.809,88
+15/09 R$ 16.407,92`)
+    expect(porDia).toEqual({ 14: 5809.88, 15: 16407.92 })
+  })
+
   it('lê valor em dinheiro do jeito que se escreve aqui', () => {
     // O campo era type="number": "5.922,92" virava campo inválido, que o
     // navegador entrega como string vazia, e o saldo virava zero calado.
