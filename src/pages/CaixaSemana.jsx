@@ -548,9 +548,12 @@ export default function CaixaSemana() {
         )
         if (!f) { setFlavia({ ausente: true }); return }
 
-        const [rPedidos, rPagamentos] = await Promise.all([
+        const [rPedidos, rPagamentos, rDevolucoes] = await Promise.all([
           api.get(`/api/fornecedores/${f.id}/pedidos`),
           api.get(`/api/fornecedores/${f.id}/pagamentos`),
+          // Devolução abate a dívida como um pagamento, mas não é caixa. Se a
+          // API ainda não tem a rota, a Caixa segue sem ela em vez de quebrar.
+          api.get(`/api/fornecedores/${f.id}/devolucoes`).catch(() => ({ data: [] })),
         ])
         if (!vivo) return
         setFlavia({
@@ -558,6 +561,7 @@ export default function CaixaSemana() {
           nome: f.apelido ? `${f.nome} (${f.apelido})` : f.nome,
           pedidos: rPedidos.data,
           totalPago: rPagamentos.data.reduce((s, p) => s + Number(p.valor || 0), 0),
+          totalDevolvido: rDevolucoes.data.reduce((s, d) => s + Number(d.valor || 0), 0),
         })
       } catch {
         if (vivo) setErro('Não consegui carregar os dados. Tente recarregar a página.')
@@ -611,7 +615,7 @@ export default function CaixaSemana() {
 
   // ---- Flávia -------------------------------------------------------------
   const dividas = flavia && !flavia.ausente
-    ? dividaPorPedido(flavia.pedidos, flavia.totalPago, hoje)
+    ? dividaPorPedido(flavia.pedidos, flavia.totalPago + (flavia.totalDevolvido || 0), hoje)
     : []
   const pendentes = dividas.filter(d => !d.quitado)
   const devidos = pendentes.filter(d => d.estado === 'vencido' || d.estado === 'anterior')
@@ -621,6 +625,7 @@ export default function CaixaSemana() {
   // diferenca entre o que a tela calcula e o que ela tem na cabeca.
   const partido = pendentes.find(d => d.abatido > 0)
   const totalPagoFL = flavia && !flavia.ausente ? Number(flavia.totalPago || 0) : 0
+  const totalDevolvidoFL = flavia && !flavia.ausente ? Number(flavia.totalDevolvido || 0) : 0
   const totalFlavia = devidos.reduce((s, d) => s + d.restante, 0)
   const totalFlaviaAVencer = aVencer.reduce((s, d) => s + d.restante, 0)
 
@@ -1087,12 +1092,12 @@ export default function CaixaSemana() {
                     invisivel, e foi o que deixou uma diferenca de R$ 400,00
                     inexplicavel em 14/09/2026: nao dava para ver em qual pedido
                     o dinheiro tinha entrado. */}
-                {totalPagoFL > 0 && (
+                {(totalPagoFL > 0 || totalDevolvidoFL > 0) && (
                   <details style={{ marginTop: 12 }}>
                     <summary style={{
                       fontSize: 12.5, color: 'var(--color-text-muted)', cursor: 'pointer',
                     }}>
-                      {brl(totalPagoFL)} já pagos — ver em que pedidos entraram
+                      {brl(totalPagoFL)} já pagos{totalDevolvidoFL > 0 ? ` + ${brl(totalDevolvidoFL)} devolvidos` : ''} — ver em que pedidos entraram
                     </summary>
                     <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
                       {quitados.map(d => (
@@ -1111,7 +1116,7 @@ export default function CaixaSemana() {
                         />
                       )}
                       <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
-                        Os pagamentos não são amarrados a pedido: entram do mais
+                        Pagamentos e devoluções não são amarrados a pedido: entram do mais
                         antigo para o mais novo, e o que sobra de um desce para o
                         seguinte. Se algum pedido aqui não deveria estar coberto,
                         é sinal de pagamento lançado a mais ou de pedido faltando.
