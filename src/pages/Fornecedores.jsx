@@ -7,6 +7,7 @@ import ItensPedidoForm, { ITEM_VAZIO } from '../components/ItensPedidoForm'
 import UploadPedidoCompra from '../components/UploadPedidoCompra'
 import CaixinhaPago from '../components/CaixinhaPago'
 import BaixarMes from '../components/BaixarMes'
+import DevolucoesFornecedor from '../components/DevolucoesFornecedor'
 import { abrirAnexo, TIPOS, validarArquivo, mensagemDe } from '../components/upload/comum'
 
 const inputStyle = { display: 'block', width: '100%', padding: 8, marginTop: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', boxSizing: 'border-box' }
@@ -1135,6 +1136,16 @@ export default function Fornecedores() {
                 onAbrirAnexo={pg => abrirAnexo(`/api/fornecedores/${fornecedorSel.id}/pagamentos/${pg.id}/anexo`)}
               />
             </div>
+          </div>
+
+          <div style={{ marginTop: 32 }}>
+            <h2 style={{ marginBottom: 16 }}>Devoluções — {fornecedorSel.nome}</h2>
+            <DevolucoesFornecedor
+              fornecedorId={fornecedorSel.id}
+              pedidos={pedidos}
+              podeEditar={finRole === 'fin_admin'}
+              aoMudar={recarregarDados}
+            />
           </div>
         </>
       )}
