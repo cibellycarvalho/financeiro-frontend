@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext'
 import ItensPedidoForm, { ITEM_VAZIO } from '../components/ItensPedidoForm'
 import UploadPedidoCompra from '../components/UploadPedidoCompra'
 import CaixinhaPago from '../components/CaixinhaPago'
-import PixSemCompra from '../components/PixSemCompra'
 import BaixarMes from '../components/BaixarMes'
 import { abrirAnexo, TIPOS, validarArquivo, mensagemDe } from '../components/upload/comum'
 
@@ -283,7 +282,7 @@ function ModalFornecedor({ titulo, inicial, onSalvar, onFechar }) {
   )
 }
 
-function LinhaPagamento({ pagamento, onEditar, onExcluir, onAbrirAnexo, onDesamarrar }) {
+function LinhaPagamento({ pagamento, onEditar, onExcluir, onAbrirAnexo }) {
   const [editando, setEditando] = useState(false)
   const [valor, setValor] = useState(pagamento.valor)
   const [data, setData] = useState(paraDataInput(pagamento.data_pagamento))
@@ -315,21 +314,6 @@ function LinhaPagamento({ pagamento, onEditar, onExcluir, onAbrirAnexo, onDesama
     }
   }
 
-  // Fix round 1 (item 1, CRITICAL): "Desfazer é um clique" — antes disto, a
-  // única saída pra corrigir uma amarração errada era apagar o pagamento
-  // inteiro e relançar, perdendo data e comprovante.
-  async function desamarrar() {
-    if (!confirm('Desamarrar este Pix das compras? Ele volta a aparecer em "Pix sem compra".')) return
-    setErro(null)
-    setLoading(true)
-    try {
-      await onDesamarrar(pagamento.id)
-    } catch (err) {
-      setErro(err.response?.data?.error || 'Erro ao desamarrar.')
-      setLoading(false)
-    }
-  }
-
   if (editando) {
     return (
       <div style={{ padding: '8px 10px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
@@ -351,8 +335,6 @@ function LinhaPagamento({ pagamento, onEditar, onExcluir, onAbrirAnexo, onDesama
       </div>
     )
   }
-
-  const temAmarracao = pagamento.amarracoes && pagamento.amarracoes.length > 0
 
   return (
     <div style={{ padding: '6px 10px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)' }}>
@@ -377,33 +359,12 @@ function LinhaPagamento({ pagamento, onEditar, onExcluir, onAbrirAnexo, onDesama
         </div>
       </div>
 
-      {temAmarracao && (
-        <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px dashed var(--color-border)', fontSize: 12, color: 'var(--color-text-muted)' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-            <span>Amarrado a:</span>
-            {pagamento.amarracoes.map(a => (
-              <span key={a.pedido_id} style={{
-                background: 'var(--color-row)', borderRadius: 'var(--radius-sm)', padding: '2px 8px',
-              }}>
-                {`pedido ${a.numero_pedido || 'sem número'} · ${formatData(a.data_pedido)} · ${formatMoeda(a.valor)}`}
-              </span>
-            ))}
-            {onDesamarrar && (
-              <button onClick={desamarrar} disabled={loading}
-                style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text)', borderRadius: 'var(--radius-sm)', padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}>
-                Desamarrar
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       {erro && <p style={{ color: 'var(--color-danger)', fontSize: 11, margin: '4px 0 0' }}>{erro}</p>}
     </div>
   )
 }
 
-function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto, podeEditar, onRegistrar, onEditar, onExcluir, onAbrirAnexo, onDesamarrar }) {
+function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto, podeEditar, onRegistrar, onEditar, onExcluir, onAbrirAnexo }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [valor, setValor] = useState('')
   const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().split('T')[0])
@@ -441,8 +402,7 @@ function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
           {pagamentos.map(pg => (
             <LinhaPagamento key={pg.id} pagamento={pg} onEditar={onEditar} onExcluir={onExcluir}
-              onAbrirAnexo={onAbrirAnexo ? () => onAbrirAnexo(pg) : null}
-              onDesamarrar={podeEditar ? onDesamarrar : null} />
+              onAbrirAnexo={onAbrirAnexo ? () => onAbrirAnexo(pg) : null} />
           ))}
         </div>
       ) : (
@@ -844,15 +804,6 @@ export default function Fornecedores() {
     await recarregarDados()
   }
 
-  // Fix round 1 (item 1, CRITICAL): "Desfazer é um clique" — desamarra o Pix
-  // das compras sem apagar o pagamento. Ele volta a aparecer em "Pix sem
-  // compra" porque recarregarDados busca a lista de novo (PixSemCompra
-  // refaz o fetch quando a lista de pedidos muda de referência).
-  async function desamarrarPagamentoFornecedor(pagamentoId) {
-    await api.delete(`/api/fornecedores/${fornecedorSel.id}/pagamentos/${pagamentoId}/pedidos`)
-    await recarregarDados()
-  }
-
   async function editarItem(pedidoId, itemId, produto, quantidade, valorUnitario) {
     await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/itens/${itemId}`, {
       produto, quantidade, valor_unitario: valorUnitario
@@ -1182,20 +1133,9 @@ export default function Fornecedores() {
                 onEditar={editarPagamentoFornecedor}
                 onExcluir={excluirPagamentoFornecedor}
                 onAbrirAnexo={pg => abrirAnexo(`/api/fornecedores/${fornecedorSel.id}/pagamentos/${pg.id}/anexo`)}
-                onDesamarrar={desamarrarPagamentoFornecedor}
               />
             </div>
           </div>
-
-          {finRole === 'fin_admin' && (
-            <div style={{ marginTop: 24 }}>
-              <PixSemCompra
-                fornecedorId={fornecedorSel.id}
-                pedidos={pedidos}
-                aoMudar={recarregarDados}
-              />
-            </div>
-          )}
         </>
       )}
 

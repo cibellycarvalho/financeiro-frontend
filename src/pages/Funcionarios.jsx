@@ -12,6 +12,9 @@ import UploadDocumentoFuncionario from '../components/UploadDocumentoFuncionario
 import { abrirAnexo, botaoPrimario, botaoSecundario, inputStyle, formatData, formatMoeda, mensagemDe } from '../components/upload/comum'
 import { mesAtual, mesDe, rotuloMes } from '../lib/meses'
 
+// Histórico anterior a julho/2026 não é mais mostrado (pedido dela, 05/10/2026).
+const MES_INICIAL = '2026-07'
+
 const ROTULO_FALTA = { pagamento: 'pagamento', das: 'DAS', nf: 'NF' }
 
 /** "falta: DAS, NF" / "DAS em aberto, vence 20/10" / "mês completo ✓" */
@@ -177,7 +180,7 @@ export default function Funcionarios() {
               <span style={{ fontWeight: 400, fontSize: 14, color: 'var(--color-text-muted)', marginLeft: 10 }}>{resumoTexto(resumoDoMes)}</span>
             </h2>
             <label style={{ fontSize: 12, color: 'var(--color-text-muted)', marginLeft: 'auto' }}>Mês<br />
-              <input type="month" value={mes} onChange={e => { setMes(e.target.value); setCartao(null) }} style={{ ...inputStyle, width: 170 }} />
+              <input type="month" min={MES_INICIAL} value={mes} onChange={e => { setMes(e.target.value); setCartao(null) }} style={{ ...inputStyle, width: 170 }} />
             </label>
           </div>
 
@@ -198,9 +201,9 @@ export default function Funcionarios() {
           ))}
 
           <section style={{ marginTop: 24 }}>
-            <h3 style={{ fontSize: 14, color: 'var(--color-text-muted)', margin: '0 0 8px' }}>Últimos 12 meses</h3>
+            <h3 style={{ fontSize: 14, color: 'var(--color-text-muted)', margin: '0 0 8px' }}>Histórico (a partir de julho/2026)</h3>
             <div style={{ display: 'grid', gap: 4 }}>
-              {meses.map(m => {
+              {meses.filter(m => mesDe(m.competencia) >= MES_INICIAL).map(m => {
                 const chave = mesDe(m.competencia)
                 return (
                   <button key={chave} type="button" onClick={() => { setMes(chave); setCartao(null) }}
