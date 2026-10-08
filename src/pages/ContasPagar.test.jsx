@@ -6,7 +6,7 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
-import ContasPagar from './ContasPagar'
+import ContasPagar, { lerValor } from './ContasPagar'
 
 vi.mock('../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }))
 vi.mock('../components/Layout', () => ({ default: ({ children }) => <div>{children}</div> }))
@@ -103,7 +103,7 @@ describe('Contas a Pagar — editar conta', () => {
     render(<MemoryRouter><ContasPagar /></MemoryRouter>)
     fireEvent.click(await screen.findByRole('button', { name: 'Editar' }))
     expect(screen.getByDisplayValue('Meli +')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('98.90')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('98,90')).toBeInTheDocument()
     expect(screen.getByDisplayValue('2026-09-14')).toBeInTheDocument()
     expect(screen.getByDisplayValue('boleto')).toBeInTheDocument()
   })
@@ -113,10 +113,10 @@ describe('Contas a Pagar — editar conta', () => {
     api.put.mockResolvedValue({ data: {} })
     render(<MemoryRouter><ContasPagar /></MemoryRouter>)
     fireEvent.click(await screen.findByRole('button', { name: 'Editar' }))
-    fireEvent.change(screen.getByDisplayValue('98.90'), { target: { value: '120.50' } })
+    fireEvent.change(screen.getByDisplayValue('98,90'), { target: { value: '54.520,00' } })
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
     await waitFor(() => expect(api.put).toHaveBeenCalledWith(
-      '/api/contas/c1', expect.objectContaining({ descricao: 'Meli +', valor: 120.5, vencimento: '2026-09-14' }),
+      '/api/contas/c1', expect.objectContaining({ descricao: 'Meli +', valor: 54520, vencimento: '2026-09-14' }),
     ))
     expect(api.post).not.toHaveBeenCalled()
   })
@@ -129,5 +129,34 @@ describe('Contas a Pagar — editar conta', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
     expect(await screen.findByText(/valor inválido|Não consegui salvar/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Salvar' })).toBeInTheDocument()
+  })
+})
+
+describe('Contas a Pagar — valor no formato brasileiro', () => {
+  beforeEach(() => { api.put.mockReset(); window.scrollTo = vi.fn() })
+  it('lê ponto de milhar e vírgula decimal', () => {
+    expect(lerValor('54.520,00')).toBe(54520)
+    expect(lerValor('1.234,5')).toBe(1234.5)
+    expect(lerValor('54,52')).toBe(54.52)
+    expect(lerValor('R$ 1.000,00')).toBe(1000)
+  })
+  it('continua lendo o formato com ponto decimal e inteiros', () => {
+    expect(lerValor('54.52')).toBe(54.52)
+    expect(lerValor('54520')).toBe(54520)
+    expect(lerValor('54.520')).toBe(54520)
+  })
+  it('recusa o que não é número', () => {
+    expect(lerValor('')).toBeNull()
+    expect(lerValor('abc')).toBeNull()
+    expect(lerValor('1,2,3')).toBeNull()
+  })
+  it('valor inválido mostra aviso e não envia nada', async () => {
+    api.get.mockResolvedValue({ data: [conta('2026-09-14', { status: 'pendente' })] })
+    render(<MemoryRouter><ContasPagar /></MemoryRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }))
+    fireEvent.change(screen.getByDisplayValue('98,90'), { target: { value: 'abc' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(await screen.findByText(/Valor inválido/)).toBeInTheDocument()
+    expect(api.put).not.toHaveBeenCalled()
   })
 })

@@ -59,6 +59,23 @@ const paraInputData = d => {
   return Number.isNaN(data.getTime()) ? '' : data.toISOString().slice(0, 10)
 }
 
+// O campo de valor é texto de propósito: <input type="number"> não entende
+// "54.520,00" e mandava o valor antigo sem avisar (08/10/2026). Aceita o jeito
+// brasileiro (ponto de milhar, vírgula decimal) e também "54.52" / "54520.5".
+export function lerValor(texto) {
+  const t = String(texto ?? '').replace(/R\$|\s/g, '')
+  if (!t) return null
+  let n
+  if (t.includes(',')) n = t.replace(/\./g, '').replace(',', '.')
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) n = t.replace(/\./g, '')
+  else n = t
+  if (!/^\d+(\.\d+)?$/.test(n)) return null
+  return Number(n)
+}
+
+const valorParaCampo = v => (v === null || v === undefined || v === '')
+  ? '' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
 const botao = (destaque = false) => ({
   padding: '7px 16px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 13,
   border: destaque ? 'none' : '1px solid var(--color-border)',
@@ -106,7 +123,7 @@ export default function ContasPagar() {
   function editar(c) {
     setEditandoId(c.id)
     setForm({
-      descricao: c.descricao || '', categoria: c.categoria, valor: String(c.valor ?? ''),
+      descricao: c.descricao || '', categoria: c.categoria, valor: valorParaCampo(c.valor),
       vencimento: paraInputData(c.vencimento), marca: c.marca, observacao: c.observacao || '',
     })
     setErro(null)
@@ -117,7 +134,9 @@ export default function ContasPagar() {
   async function handleSubmit(e) {
     e.preventDefault()
     setErro(null)
-    const corpo = { ...form, valor: parseFloat(form.valor) }
+    const valor = lerValor(form.valor)
+    if (valor === null) { setErro('Valor inválido. Digite assim: 54.520,00'); return }
+    const corpo = { ...form, valor }
     try {
       if (editandoId) await api.put(`/api/contas/${editandoId}`, corpo)
       else await api.post('/api/contas', corpo)
@@ -241,7 +260,7 @@ export default function ContasPagar() {
             </select>
           </label>
           <label style={{ fontSize: 13 }}>Valor (R$)<br />
-            <input required type="number" step="0.01" value={form.valor}
+            <input required type="text" inputMode="decimal" placeholder="0,00" value={form.valor}
                    onChange={e => setForm({ ...form, valor: e.target.value })} style={entrada} />
           </label>
           <label style={{ fontSize: 13 }}>Vencimento<br />
