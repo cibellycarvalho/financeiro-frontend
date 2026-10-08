@@ -47,6 +47,18 @@ const entrada = {
   border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: 13,
 }
 
+const FORM_VAZIO = { descricao: '', categoria: 'IMPOSTO_DAS', valor: '', vencimento: '', marca: 'GERAL', observacao: '' }
+
+// O Flask manda a data como "Mon, 14 Sep 2026 00:00:00 GMT"; o campo de data só
+// aceita ano-mês-dia. Lido em UTC pelo mesmo motivo de `dia` acima.
+const paraInputData = d => {
+  if (!d) return ''
+  const s = String(d)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+  const data = new Date(s)
+  return Number.isNaN(data.getTime()) ? '' : data.toISOString().slice(0, 10)
+}
+
 const botao = (destaque = false) => ({
   padding: '7px 16px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 13,
   border: destaque ? 'none' : '1px solid var(--color-border)',
@@ -65,7 +77,8 @@ export default function ContasPagar() {
   const [contas, setContas] = useState([])
   const [periodo, setPeriodo] = useState('semana')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ descricao: '', categoria: 'IMPOSTO_DAS', valor: '', vencimento: '', marca: 'GERAL', observacao: '' })
+  const [form, setForm] = useState(FORM_VAZIO)
+  const [editandoId, setEditandoId] = useState(null)
   const [erro, setErro] = useState(null)
 
   async function carregar() {
@@ -76,11 +89,43 @@ export default function ContasPagar() {
 
   useEffect(() => { carregar() }, [periodo])
 
+  function fecharForm() {
+    setShowForm(false)
+    setEditandoId(null)
+    setForm(FORM_VAZIO)
+  }
+
+  function abrirNova() {
+    if (showForm && !editandoId) { fecharForm(); return }
+    setEditandoId(null)
+    setForm(FORM_VAZIO)
+    setErro(null)
+    setShowForm(true)
+  }
+
+  function editar(c) {
+    setEditandoId(c.id)
+    setForm({
+      descricao: c.descricao || '', categoria: c.categoria, valor: String(c.valor ?? ''),
+      vencimento: paraInputData(c.vencimento), marca: c.marca, observacao: c.observacao || '',
+    })
+    setErro(null)
+    setShowForm(true)
+    window.scrollTo?.({ top: 0, behavior: 'smooth' })
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
-    await api.post('/api/contas', { ...form, valor: parseFloat(form.valor) })
-    setShowForm(false)
-    setForm({ descricao: '', categoria: 'IMPOSTO_DAS', valor: '', vencimento: '', marca: 'GERAL', observacao: '' })
+    setErro(null)
+    const corpo = { ...form, valor: parseFloat(form.valor) }
+    try {
+      if (editandoId) await api.put(`/api/contas/${editandoId}`, corpo)
+      else await api.post('/api/contas', corpo)
+    } catch (err) {
+      setErro(mensagemDe(err, 'Não consegui salvar a conta.'))
+      return
+    }
+    fecharForm()
     carregar()
   }
 
@@ -127,7 +172,7 @@ export default function ContasPagar() {
         subtitulo="O que vence, o que já venceu e o que já foi pago."
         acao={ehAdmin && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={() => setShowForm(!showForm)} style={botao(true)}>
+            <button onClick={abrirNova} style={botao(true)}>
               + Nova conta
             </button>
           </div>
@@ -213,8 +258,11 @@ export default function ContasPagar() {
             <input value={form.observacao}
                    onChange={e => setForm({ ...form, observacao: e.target.value })} style={entrada} />
           </label>
+          {editandoId && (
+            <p style={{ gridColumn: '1 / -1', margin: 0, fontSize: 13, fontWeight: 600 }}>Editando conta</p>
+          )}
           <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button type="button" onClick={() => setShowForm(false)} style={botao()}>Cancelar</button>
+            <button type="button" onClick={fecharForm} style={botao()}>Cancelar</button>
             <button type="submit" style={botao(true)}>Salvar</button>
           </div>
         </form>
@@ -319,6 +367,12 @@ export default function ContasPagar() {
                 </button>
               )}
             </span>
+
+            {ehAdmin && (
+              <button onClick={() => editar(c)} title="Editar esta conta" style={{
+                ...botao(), padding: '4px 12px', fontSize: 12,
+              }}>Editar</button>
+            )}
 
             {ehAdmin && c.status !== 'pago' && (
               <button onClick={() => marcarPago(c.id)} style={{

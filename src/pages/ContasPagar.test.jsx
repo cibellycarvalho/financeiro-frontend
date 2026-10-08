@@ -94,3 +94,40 @@ describe('Contas a Pagar — anexos de nota fiscal e comprovante', () => {
     expect(botaoMarcarPago).not.toBeDisabled()
   })
 })
+
+describe('Contas a Pagar — editar conta', () => {
+  beforeEach(() => { api.put.mockReset(); window.scrollTo = vi.fn() })
+
+  it('Editar abre o formulário já preenchido, com a data no formato do campo', async () => {
+    api.get.mockResolvedValue({ data: [conta('Mon, 14 Sep 2026 00:00:00 GMT', { status: 'pendente', observacao: 'boleto' })] })
+    render(<MemoryRouter><ContasPagar /></MemoryRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }))
+    expect(screen.getByDisplayValue('Meli +')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('98.90')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('2026-09-14')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('boleto')).toBeInTheDocument()
+  })
+
+  it('salvar manda um PUT para a conta (e nunca cria outra)', async () => {
+    api.get.mockResolvedValue({ data: [conta('2026-09-14', { status: 'pendente' })] })
+    api.put.mockResolvedValue({ data: {} })
+    render(<MemoryRouter><ContasPagar /></MemoryRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }))
+    fireEvent.change(screen.getByDisplayValue('98.90'), { target: { value: '120.50' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith(
+      '/api/contas/c1', expect.objectContaining({ descricao: 'Meli +', valor: 120.5, vencimento: '2026-09-14' }),
+    ))
+    expect(api.post).not.toHaveBeenCalled()
+  })
+
+  it('mostra o erro do servidor e mantém o formulário aberto se não salvar', async () => {
+    api.get.mockResolvedValue({ data: [conta('2026-09-14', { status: 'pendente' })] })
+    api.put.mockRejectedValue({ response: { data: { error: 'valor inválido' } } })
+    render(<MemoryRouter><ContasPagar /></MemoryRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(await screen.findByText(/valor inválido|Não consegui salvar/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Salvar' })).toBeInTheDocument()
+  })
+})
