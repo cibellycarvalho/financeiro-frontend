@@ -148,6 +148,22 @@ export default function ContasPagar() {
     carregar()
   }
 
+  // Exclusão é definitiva (o servidor apaga a linha), por isso pede confirmação
+  // mostrando qual conta é. Se a conta estava aberta no formulário de edição,
+  // o formulário fecha junto para não salvar em cima de uma conta que não existe.
+  async function excluir(c) {
+    if (!confirm(`Excluir "${c.descricao}" (${brl(c.valor)}, vence ${dia(c.vencimento)})? Isso não pode ser desfeito.`)) return
+    setErro(null)
+    try {
+      await api.delete(`/api/contas/${c.id}`)
+    } catch (err) {
+      setErro(mensagemDe(err, 'Não consegui excluir a conta.'))
+      return
+    }
+    if (editandoId === c.id) fecharForm()
+    carregar()
+  }
+
   async function marcarPago(id) {
     const hoje = new Date().toISOString().split('T')[0]
     await api.put(`/api/contas/${id}`, { status: 'pago', data_pagamento: hoje })
@@ -399,6 +415,13 @@ export default function ContasPagar() {
                 background: 'var(--color-success-solid)', color: 'var(--color-on-success)',
                 border: 'none',
               }}>Marcar pago</button>
+            )}
+
+            {ehAdmin && (
+              <button onClick={() => excluir(c)} title="Excluir esta conta" style={{
+                ...botao(), padding: '4px 12px', fontSize: 12,
+                color: 'var(--color-danger)', borderColor: 'var(--color-danger)',
+              }}>Excluir</button>
             )}
           </div>
         ))}
