@@ -160,3 +160,39 @@ describe('Contas a Pagar — valor no formato brasileiro', () => {
     expect(api.put).not.toHaveBeenCalled()
   })
 })
+
+describe('Contas a Pagar — excluir conta', () => {
+  beforeEach(() => { api.delete.mockReset(); api.get.mockReset() })
+
+  it('pede confirmação mostrando a conta e só então exclui', async () => {
+    api.get.mockResolvedValue({ data: [conta('2026-09-14', { status: 'pendente' })] })
+    api.delete.mockResolvedValue({})
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<MemoryRouter><ContasPagar /></MemoryRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: 'Excluir' }))
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/Meli \+/)
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/contas/c1'))
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2))
+    confirmSpy.mockRestore()
+  })
+
+  it('se ela recusar a confirmação, não exclui nada', async () => {
+    api.get.mockResolvedValue({ data: [conta('2026-09-14')] })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<MemoryRouter><ContasPagar /></MemoryRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: 'Excluir' }))
+    expect(api.delete).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('mostra erro e não recarrega a lista se o servidor falhar', async () => {
+    api.get.mockResolvedValue({ data: [conta('2026-09-14')] })
+    api.delete.mockRejectedValue({ response: { data: { error: 'falhou' } } })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<MemoryRouter><ContasPagar /></MemoryRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: 'Excluir' }))
+    expect(await screen.findByText(/falhou|Não consegui excluir/)).toBeInTheDocument()
+    expect(api.get).toHaveBeenCalledTimes(1)
+    confirmSpy.mockRestore()
+  })
+})
