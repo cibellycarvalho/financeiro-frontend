@@ -408,6 +408,7 @@ export default function CaixaSemana() {
   const [avisoColagem, setAvisoColagem] = useState(null)
   const [pagamentos, setPagamentos] = useState(null)
   const [pagosFuncionarios, setPagosFuncionarios] = useState(null)
+  const [devolucoesDinheiro, setDevolucoesDinheiro] = useState(null)
   const [recarga, setRecarga] = useState(0)
 
   const segunda = refSemana
@@ -524,18 +525,22 @@ export default function CaixaSemana() {
     async function carregar() {
       setErro(null)
       try {
-        const [rContas, rFornecedores, rPagosSemana, rPagosFunc] = await Promise.all([
+        const [rContas, rFornecedores, rPagosSemana, rPagosFunc, rReembolsos] = await Promise.all([
           api.get('/api/contas'),
           api.get('/api/fornecedores'),
           api.get(`/api/fornecedores/pagamentos?de=${iso(segunda)}&ate=${iso(domingo)}`),
           // Tolerante: se este endpoint falhar, a Caixa abre sem a linha, em
           // vez de cair inteira por causa da parte mais nova.
           api.get(`/api/funcionarios/pagamentos?de=${iso(segunda)}&ate=${iso(domingo)}`).catch(() => ({ data: [] })),
+          // Devolução que voltou em dinheiro (Pix) de qualquer fornecedor: entra
+          // no caixa. Mesma tolerância: sem a rota, a Caixa abre sem a linha.
+          api.get(`/api/fornecedores/devolucoes?de=${iso(segunda)}&ate=${iso(domingo)}`).catch(() => ({ data: [] })),
         ])
         if (!vivo) return
         setContas(rContas.data)
         setPagamentos(rPagosSemana.data)
         setPagosFuncionarios(rPagosFunc.data)
+        setDevolucoesDinheiro(rReembolsos.data)
 
         // A semana pode atravessar a virada do mês, e o endpoint filtra por mês.
         const meses = [...new Set([segunda, domingo].map(d => iso(d).slice(0, 7)))]
@@ -571,7 +576,7 @@ export default function CaixaSemana() {
     return () => { vivo = false }
   }, [chaveSemana, recarga])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const carregando = !contas || !repasses || !flavia || !pagamentos || !pagosFuncionarios
+  const carregando = !contas || !repasses || !flavia || !pagamentos || !pagosFuncionarios || !devolucoesDinheiro
 
   // ---- boletos ------------------------------------------------------------
   const naSemana = c => {
@@ -681,8 +686,15 @@ export default function CaixaSemana() {
     .reduce((s, [, v]) => s + v, 0)
   const aCair = totalColado - jaCaiu
 
+  // Devolução em dinheiro (fornecedor devolveu por Pix) é dinheiro que volta à
+  // conta: entra na semana em que caiu. Devolução em crédito não passa por aqui.
+  const reembolsos = (devolucoesDinheiro || [])
+    .map(d => ({ ...d, data: comoData(d.data_devolucao), valor: Number(d.valor || 0) }))
+    .filter(d => d.data && iso(d.data) >= iso(segunda) && iso(d.data) <= iso(domingo))
+  const totalReembolsos = reembolsos.reduce((s, d) => s + d.valor, 0)
+
   // A Flavia vencida NAO entra em nada: e informativo.
-  const sobra = totalRepasse - totalBoletos - totalPagoFornecedor - totalPagoFuncionarios
+  const sobra = totalRepasse + totalReembolsos - totalBoletos - totalPagoFornecedor - totalPagoFuncionarios
 
   // Depois de alguns dias a data do saldo aparece junto do numero, discreta.
   // Nao vira quadro de aviso: repetir de volta o que ela digitou, toda semana,
@@ -694,7 +706,8 @@ export default function CaixaSemana() {
     let acumulado = 0   // fluxo da semana: começa do zero, não do saldo
     return Array.from({ length: 7 }, (_, i) => {
       const data = somaDias(segunda, i)
-      const entra = liberacoes[data.getDate()] || 0
+      const reembolsosDoDia = reembolsos.filter(d => iso(d.data) === iso(data))
+      const entra = (liberacoes[data.getDate()] || 0) + reembolsosDoDia.reduce((s, d) => s + d.valor, 0)
       const saiBoletos = [...boletosAbertosSemana, ...pagosDaSemana].filter(
         c => diaDaConta(c) === iso(data)
       )
@@ -704,9 +717,9 @@ export default function CaixaSemana() {
         saiPagos.reduce((s, p) => s + p.valor, 0) +
         saiFuncionarios.reduce((s, p) => s + p.valor, 0)
       acumulado += entra - sai
-      return { data, nome: NOMES_DIA[i], entra, saiBoletos, saiPagos, saiFuncionarios, acumulado }
+      return { data, nome: NOMES_DIA[i], entra, reembolsosDoDia, saiBoletos, saiPagos, saiFuncionarios, acumulado }
     })
-  }, [liberacoes, contas, pagamentos, pagosFuncionarios, daSemana.ajustesPagamento, chaveSemana])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [liberacoes, contas, pagamentos, pagosFuncionarios, devolucoesDinheiro, daSemana.ajustesPagamento, chaveSemana])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const diaFlavia = dias.find(d => d.acumulado >= totalFlavia)
   const indiceFlavia = diaFlavia ? dias.indexOf(diaFlavia) : -1
@@ -759,6 +772,14 @@ export default function CaixaSemana() {
                   ? `${brl(totalGravado)} de repasses já lançados`
                   : 'Nada informado — cole a agenda do Mercado Pago'}
             />
+            {totalReembolsos > 0 && (
+              <Indicador
+                rotulo="Devolução em dinheiro"
+                valor={totalReembolsos}
+                tom="neutro"
+                composicao={reembolsos.map(d => `${d.fornecedor_apelido || d.fornecedor_nome} ${brl(d.valor)}`).join(' · ')}
+              />
+            )}
             <Indicador
               rotulo="Flávia (FL) — vencido"
               valor={totalFlavia}
@@ -815,7 +836,9 @@ export default function CaixaSemana() {
               rotulo="Sobra para comprar"
               valor={sobra}
               tom="auto"
-              composicao={`${brl(totalRepasse)} − ${brl(totalBoletos)} de boletos − ${brl(totalPagoFornecedor)} pagos` +
+              composicao={`${brl(totalRepasse)}` +
+                (totalReembolsos > 0 ? ` + ${brl(totalReembolsos)} de devoluções em dinheiro` : '') +
+                ` − ${brl(totalBoletos)} de boletos − ${brl(totalPagoFornecedor)} pagos` +
                 (totalPagoFuncionarios > 0 ? ` − ${brl(totalPagoFuncionarios)} a funcionários` : '') +
                 (retirada > 0
                   ? (sobra < 0
@@ -973,7 +996,9 @@ export default function CaixaSemana() {
                     const ehHoje = iso(d.data) === iso(hoje)
                     const ehMarco = i === indiceFlavia && totalFlavia > 0
                     const notas = []
-                    if (d.entra) notas.push(`entra ${brl(d.entra)}`)
+                    const entraMP = d.entra - d.reembolsosDoDia.reduce((s, r) => s + r.valor, 0)
+                    if (entraMP) notas.push(`entra ${brl(entraMP)}`)
+                    d.reembolsosDoDia.forEach(r => notas.push(`+ devolução ${r.fornecedor_apelido || r.fornecedor_nome} ${brl(r.valor)}`))
                     d.saiBoletos.forEach(c => notas.push(`− ${c.descricao} ${brl(c.valor)}`))
                     d.saiPagos.forEach(p => notas.push(`− ${p.fornecedor_apelido || p.fornecedor_nome} ${brl(p.valor)}`))
                     d.saiFuncionarios.forEach(p => notas.push(`− ${nomeFuncionario(p)} ${brl(p.valor)}`))

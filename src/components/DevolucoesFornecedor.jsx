@@ -1,17 +1,26 @@
 /**
  * Devoluções ao fornecedor (05/10/2026): abatem o "Ainda devo" sem ser pagamento —
- * não sai dinheiro, então não entram em "Pago no mês" nem na Caixa da Semana.
- * Pode apontar para um pedido (opcional) e levar uma descrição.
+ * não entram em "Pago no mês". Pode apontar para um pedido (opcional) e levar
+ * uma descrição.
+ *
+ * "Como voltou" (13/10/2026): 'dinheiro' = o fornecedor devolveu por Pix, então
+ * o valor entra na Caixa da Semana; 'credito' (padrão, e como tudo já era antes)
+ * só abate o "Ainda devo".
  */
 import { useEffect, useState } from 'react'
 import api from '../services/api'
+import { lerValor } from '../pages/ContasPagar'
 import { botaoPrimario, botaoSecundario, inputStyle, formatData, formatMoeda, mensagemDe } from './upload/comum'
 
 const hoje = () => new Date().toISOString().slice(0, 10)
+const FORMAS = { dinheiro: '💸 Dinheiro de volta', credito: '🏷️ Crédito' }
+const paraTexto = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export default function DevolucoesFornecedor({ fornecedorId, pedidos = [], podeEditar, aoMudar }) {
   const [lista, setLista] = useState([])
   const [aberto, setAberto] = useState(false)
+  const [editandoId, setEditandoId] = useState(null)
+  const [forma, setForma] = useState('credito')
   const [valor, setValor] = useState('')
   const [data, setData] = useState(hoje())
   const [pedidoId, setPedidoId] = useState('')
@@ -30,18 +39,25 @@ export default function DevolucoesFornecedor({ fornecedorId, pedidos = [], podeE
   useEffect(() => { carregar() }, [fornecedorId])  // eslint-disable-line react-hooks/exhaustive-deps
 
   function fechar() {
-    setAberto(false); setValor(''); setData(hoje()); setPedidoId(''); setDescricao(''); setErro(null)
+    setAberto(false); setEditandoId(null); setForma('credito')
+    setValor(''); setData(hoje()); setPedidoId(''); setDescricao(''); setErro(null)
+  }
+
+  function editar(d) {
+    setEditandoId(d.id); setForma(d.forma || 'credito'); setValor(paraTexto(d.valor))
+    setData(String(d.data_devolucao).slice(0, 10)); setPedidoId(d.pedido_id || ''); setDescricao(d.descricao || '')
+    setErro(null); setAberto(true)
   }
 
   async function salvar() {
     setErro(null)
-    const v = parseFloat(String(valor).replace(',', '.'))
+    const v = lerValor(valor)
     if (!(v > 0)) { setErro('Informe o valor da devolução.'); return }
     setSalvando(true)
     try {
-      await api.post(`/api/fornecedores/${fornecedorId}/devolucoes`, {
-        valor: v, data_devolucao: data, pedido_id: pedidoId || null, descricao,
-      })
+      const corpo = { valor: v, data_devolucao: data, pedido_id: pedidoId || null, descricao, forma }
+      if (editandoId) await api.put(`/api/fornecedores/${fornecedorId}/devolucoes/${editandoId}`, corpo)
+      else await api.post(`/api/fornecedores/${fornecedorId}/devolucoes`, corpo)
       fechar()
       await carregar()
       if (aoMudar) await aoMudar()
@@ -63,16 +79,22 @@ export default function DevolucoesFornecedor({ fornecedorId, pedidos = [], podeE
     }
   }
 
-  const total = lista.reduce((s, d) => s + Number(d.valor || 0), 0)
+  const somar = f => lista.filter(d => (d.forma || 'credito') === f).reduce((s, d) => s + Number(d.valor || 0), 0)
+  const totalDinheiro = somar('dinheiro')
+  const totalCredito = somar('credito')
   if (lista.length === 0 && !podeEditar) return null
 
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-          Abatem o "Ainda devo". Não são pagamento: não entram no caixa.
+          Abatem o "Ainda devo". Só a devolução em dinheiro entra no caixa; o crédito não.
         </span>
-        <span style={{ fontSize: 13 }}>Total devolvido: <strong>{formatMoeda(total)}</strong></span>
+        <span style={{ fontSize: 13 }}>
+          <span>Voltou em dinheiro: <strong>{formatMoeda(totalDinheiro)}</strong></span>
+          {' · '}
+          <span>Virou crédito: <strong>{formatMoeda(totalCredito)}</strong></span>
+        </span>
       </div>
 
       {lista.length > 0 ? (
@@ -81,11 +103,16 @@ export default function DevolucoesFornecedor({ fornecedorId, pedidos = [], podeE
             <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>
               <span>
                 {formatData(d.data_devolucao)}
+                {' · '}<span>{FORMAS[d.forma || 'credito']}</span>
                 {d.numero_pedido ? ` · pedido ${d.numero_pedido}` : ''}
                 {d.descricao ? ` · ${d.descricao}` : ''}
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <strong>− {formatMoeda(d.valor)}</strong>
+                {podeEditar && (
+                  <button onClick={() => editar(d)} title="Editar"
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>✏️</button>
+                )}
                 {podeEditar && (
                   <button onClick={() => excluir(d)} title="Excluir"
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>🗑️</button>
@@ -106,8 +133,14 @@ export default function DevolucoesFornecedor({ fornecedorId, pedidos = [], podeE
 
       {podeEditar && aberto && (
         <div style={{ display: 'grid', gap: 8, maxWidth: 420 }}>
+          <label style={{ fontSize: 12 }}>Como voltou
+            <select value={forma} onChange={e => setForma(e.target.value)} style={inputStyle}>
+              <option value="dinheiro">Dinheiro de volta (Pix/transferência) — entra no caixa</option>
+              <option value="credito">Crédito para a próxima compra — só abate o "Ainda devo"</option>
+            </select>
+          </label>
           <label style={{ fontSize: 12 }}>Valor devolvido (R$)
-            <input type="number" step="0.01" min="0" value={valor} onChange={e => setValor(e.target.value)} style={inputStyle} />
+            <input type="text" inputMode="decimal" placeholder="0,00" value={valor} onChange={e => setValor(e.target.value)} style={inputStyle} />
           </label>
           <label style={{ fontSize: 12 }}>Data
             <input type="date" value={data} onChange={e => setData(e.target.value)} style={inputStyle} />

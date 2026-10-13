@@ -30,11 +30,13 @@ const FORNECEDORES = [
 
 const SEM_PLANEJAMENTO = { saldo_conta: null, saldo_em: null, reserva_aplicada: null, agenda: {}, ajustes_pagamento: {}, updated_at: null }
 
-function respostas({ pedidos = [], pagamentos = [], contas = [], repasses = [], pagosSemana = [], pagosFuncionarios = [], planejamento = SEM_PLANEJAMENTO }) {
+function respostas({ pedidos = [], pagamentos = [], contas = [], repasses = [], pagosSemana = [], pagosFuncionarios = [], devolucoes = [], devolucoesDinheiro = [], planejamento = SEM_PLANEJAMENTO }) {
   api.get.mockImplementation(url => {
     if (url.startsWith('/api/planejamento/')) return Promise.resolve({ data: planejamento })
     if (url.startsWith('/api/funcionarios/pagamentos?')) return Promise.resolve({ data: pagosFuncionarios })
     if (url.startsWith('/api/fornecedores/pagamentos?')) return Promise.resolve({ data: pagosSemana })
+    if (url.startsWith('/api/fornecedores/devolucoes?')) return Promise.resolve({ data: devolucoesDinheiro })
+    if (url.endsWith('/devolucoes')) return Promise.resolve({ data: devolucoes })
     if (url === '/api/contas') return Promise.resolve({ data: contas })
     if (url === '/api/fornecedores') return Promise.resolve({ data: FORNECEDORES })
     if (url.includes('/pedidos')) return Promise.resolve({ data: pedidos })
@@ -529,5 +531,34 @@ describe('A conta da semana (ditada em 17/09/2026)', () => {
     // "Nenhum pagamento na semana" aparece duas vezes: o card de fornecedor
     // (nenhum pagosSemana neste teste) e o de funcionários (endpoint falhou).
     expect(screen.getAllByText('Nenhum pagamento na semana')).toHaveLength(2)
+  })
+})
+
+
+describe('Devolução em dinheiro entra no caixa', () => {
+  const hojeIso = new Date().toLocaleDateString('sv')   // AAAA-MM-DD local: sempre cai na semana aberta
+  const REEMBOLSO = { id: 'd1', valor: 300, data_devolucao: hojeIso, forma: 'dinheiro', fornecedor_nome: 'Tânia', fornecedor_apelido: null }
+
+  it('soma o reembolso em dinheiro da semana à entrada e à sobra', async () => {
+    respostas({ devolucoesDinheiro: [REEMBOLSO] })
+    montar()
+    await waitFor(() => expect(screen.getByText('Devolução em dinheiro')).toBeInTheDocument())
+    expect(screen.getByText(/Tânia R\$\s*300,00/)).toBeInTheDocument()
+    expect(screen.getByText(/\+ R\$\s*300,00 de devoluções em dinheiro/)).toBeInTheDocument()
+  })
+
+  it('sem reembolso em dinheiro o card não aparece', async () => {
+    respostas({})
+    montar()
+    await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
+    expect(screen.queryByText('Devolução em dinheiro')).not.toBeInTheDocument()
+  })
+
+  it('a Caixa abre mesmo se o endpoint de devoluções do período falhar', async () => {
+    respostas({})
+    const original = api.get.getMockImplementation()
+    api.get.mockImplementation(url => url.startsWith('/api/fornecedores/devolucoes?') ? Promise.reject(new Error('404')) : original(url))
+    montar()
+    await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
   })
 })
