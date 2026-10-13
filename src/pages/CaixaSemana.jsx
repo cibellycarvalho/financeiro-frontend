@@ -566,7 +566,9 @@ export default function CaixaSemana() {
           nome: f.apelido ? `${f.nome} (${f.apelido})` : f.nome,
           pedidos: rPedidos.data,
           totalPago: rPagamentos.data.reduce((s, p) => s + Number(p.valor || 0), 0),
-          totalDevolvido: rDevolucoes.data.reduce((s, d) => s + Number(d.valor || 0), 0),
+          // Só crédito abate a dívida; dinheiro de volta desfaz um pagamento.
+          totalDevolvido: rDevolucoes.data.filter(d => (d.forma || 'credito') === 'credito')
+            .reduce((s, d) => s + Number(d.valor || 0), 0),
         })
       } catch {
         if (vivo) setErro('Não consegui carregar os dados. Tente recarregar a página.')
