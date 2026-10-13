@@ -25,7 +25,7 @@ describe('Devoluções ao fornecedor', () => {
   it('mostra o selo de cada forma e separa os totais', async () => {
     montar()
     await waitFor(() => expect(screen.getByText(/Peças em falta/)).toBeInTheDocument())
-    expect(screen.getByText(/Dinheiro de volta/, { selector: 'span' })).toBeInTheDocument()
+    expect(screen.getByText('💸 Dinheiro de volta')).toBeInTheDocument()
     expect(screen.getByText(/Voltou em dinheiro:/)).toHaveTextContent('300,00')
     expect(screen.getByText(/Virou crédito:/)).toHaveTextContent('100,00')
   })

@@ -4,8 +4,8 @@
  * uma descrição.
  *
  * "Como voltou" (13/10/2026): 'dinheiro' = o fornecedor devolveu por Pix, então
- * o valor entra na Caixa da Semana; 'credito' (padrão, e como tudo já era antes)
- * só abate o "Ainda devo".
+ * o valor entra na Caixa da Semana e NÃO abate o "Ainda devo" (é um pagamento
+ * que voltou); 'credito' (padrão, e como tudo já era antes) abate o "Ainda devo".
  */
 import { useEffect, useState } from 'react'
 import api from '../services/api'
@@ -69,7 +69,7 @@ export default function DevolucoesFornecedor({ fornecedorId, pedidos = [], podeE
   }
 
   async function excluir(d) {
-    if (!confirm(`Apagar a devolução de ${formatMoeda(d.valor)}? O "Ainda devo" volta a subir esse valor.`)) return
+    if (!confirm(`Apagar a devolução de ${formatMoeda(d.valor)}? ${d.forma === 'dinheiro' ? 'O caixa deixa de contar esse valor.' : 'O "Ainda devo" volta a subir esse valor.'}`)) return
     try {
       await api.delete(`/api/fornecedores/${fornecedorId}/devolucoes/${d.id}`)
       await carregar()
@@ -88,7 +88,7 @@ export default function DevolucoesFornecedor({ fornecedorId, pedidos = [], podeE
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-          Abatem o "Ainda devo". Só a devolução em dinheiro entra no caixa; o crédito não.
+          Crédito abate o "Ainda devo". Dinheiro de volta entra no caixa e não mexe no "Ainda devo": é o pagamento que voltou.
         </span>
         <span style={{ fontSize: 13 }}>
           <span>Voltou em dinheiro: <strong>{formatMoeda(totalDinheiro)}</strong></span>
@@ -135,8 +135,8 @@ export default function DevolucoesFornecedor({ fornecedorId, pedidos = [], podeE
         <div style={{ display: 'grid', gap: 8, maxWidth: 420 }}>
           <label style={{ fontSize: 12 }}>Como voltou
             <select value={forma} onChange={e => setForma(e.target.value)} style={inputStyle}>
-              <option value="dinheiro">Dinheiro de volta (Pix/transferência) — entra no caixa</option>
-              <option value="credito">Crédito para a próxima compra — só abate o "Ainda devo"</option>
+              <option value="dinheiro">Dinheiro de volta (Pix/transferência) — entra no caixa, não mexe no "Ainda devo"</option>
+              <option value="credito">Crédito para a próxima compra — abate o "Ainda devo"</option>
             </select>
           </label>
           <label style={{ fontSize: 12 }}>Valor devolvido (R$)
