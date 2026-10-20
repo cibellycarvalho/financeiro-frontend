@@ -778,6 +778,7 @@ export default function CaixaSemana() {
         <>
           <ComprasDaSemana segunda={segunda} contas={contas}
             pendentes={totalBoletosAPagar}
+            retirada={retirada}
             concluidos={totalBoletosPagos + totalPagoFornecedor + totalPagoFuncionarios} />
 
           <div style={{
