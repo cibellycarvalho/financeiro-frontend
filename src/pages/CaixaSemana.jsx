@@ -197,7 +197,7 @@ export function lerLiberacoes(texto) {
 export function dividaPorPedido(pedidos, totalPago, hoje) {
   const limite = somaDias(hoje, -DIAS_DE_PRAZO)
   const marcados = pedidos.filter(p => p.pago_em)
-  let credito = Math.max(0, totalPago - marcados.reduce((s, p) => s + Number(p.valor_total || 0), 0))
+  let credito = Math.max(0, totalPago - marcados.reduce((s, p) => s + Number(p.valor_total || 0) - Number(p.desconto || 0), 0))
   const linhas = []
 
   // Pedido sem data vai para o fim da fila: não se sabe onde ele entra na
@@ -209,7 +209,8 @@ export function dividaPorPedido(pedidos, totalPago, hoje) {
   })
 
   for (const p of ordenados) {
-    const valor = Number(p.valor_total || 0)
+    // O que se deve do pedido: valor menos o desconto que o fornecedor deu.
+    const valor = Number(p.valor_total || 0) - Number(p.desconto || 0)
     const abatido = p.pago_em ? valor : Math.min(credito, valor)
     if (!p.pago_em) credito -= abatido
     const restante = Number((valor - abatido).toFixed(2))
