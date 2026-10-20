@@ -8,7 +8,15 @@
  * atrasado de antes da semana não entra (é pendência de hoje, não da semana).
  */
 
-const dia = v => (v ? String(v).slice(0, 10) : null)
+/** O backend manda data como "2026-10-14" ou como "Mon, 14 Oct 2026 00:00:00 GMT"
+    (jsonify de date); ler só o começo da string errava o segundo formato. */
+const dia = v => {
+  if (!v) return null
+  const s = String(v)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+  const d = new Date(s)
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+}
 const dentro = (v, de, ate) => { const d = dia(v); return d !== null && d >= de && d <= ate }
 const soma = l => l.reduce((s, x) => s + Number(x.valor || 0), 0)
 
