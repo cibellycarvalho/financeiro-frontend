@@ -81,7 +81,7 @@ export default function ComprasDaSemana({ segunda, contas, pendentes, concluidos
         <Indicador rotulo="Pagamentos da semana" tom="divida" valor={c ? c.pagamentosSemana : concluidos + pendentes}
           composicao="boletos, fornecedor e funcionários (concluídos + pendentes)" />
         <Indicador rotulo="Pagamentos concluídos" tom="neutro" valor={concluidos} composicao="já pagos nesta semana" />
-        <Indicador rotulo="Pagamentos pendentes" tom="divida" valor={pendentes} composicao="boletos em aberto da semana e atrasados" />
+        <Indicador rotulo="Pagamentos pendentes" tom="divida" valor={pendentes} composicao="boletos ainda não pagos" />
         <Indicador rotulo="Sobra no caixa" tom="auto" valor={c ? c.sobraNoCaixa : 0}
           composicao="disponível − reposição necessária − pendentes" />
       </div>

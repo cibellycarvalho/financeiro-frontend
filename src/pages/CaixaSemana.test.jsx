@@ -23,6 +23,9 @@ vi.mock('../components/Layout', () => ({
 
 import api from '../services/api'
 
+// Texto do card pelo rótulo: rótulo e valor ficam no mesmo bloco.
+const textoDoCard = rotulo => screen.getByText(rotulo).closest('div').textContent
+
 const FORNECEDORES = [
   { id: 'f1', nome: 'Flávia', apelido: 'FL', saldo_aberto: 300 },
   { id: 'f2', nome: 'Luana', apelido: 'LUANA', saldo_aberto: 0 },
@@ -62,7 +65,7 @@ describe('Caixa da Semana', () => {
   it('monta sem dado nenhum, em vez de deixar a tela em branco', async () => {
     respostas({})
     montar()
-    await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Disponível para comprar')).toBeInTheDocument())
   })
 
   it('conta o saldo sem data como dívida vencida, não como dúvida', async () => {
@@ -88,7 +91,7 @@ describe('Caixa da Semana', () => {
       pagamentos: [],
     })
     montar()
-    await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Disponível para comprar')).toBeInTheDocument())
   })
 
   it('consome os pedidos do mais antigo para o mais novo, e mostra onde o dinheiro entrou', async () => {
@@ -228,8 +231,8 @@ R$
   it('a Flávia vencida é informativa: não sai da sobra para comprar', async () => {
     respostas({ pedidos: [{ id: 'p0', data_pedido: null, valor_total: 400 }] })
     montar()
-    await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
-    expect(screen.getByText(/R\$ 0,00 − R\$ 0,00 de boletos − R\$ 0,00 pagos/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Disponível para comprar')).toBeInTheDocument())
+    expect(textoDoCard('Pagamentos concluídos')).toMatch(/R\$\s0,00/)
   })
 
   it('pagamento a fornecedor da semana sai da sobra e aparece na lista', async () => {
@@ -241,7 +244,7 @@ R$
     })
     montar()
     await waitFor(() => expect(screen.getByText('Luana (LUANA)')).toBeInTheDocument())
-    expect(screen.getByText(/− R\$ 1\.200,00 pagos/)).toBeInTheDocument()
+    expect(textoDoCard('Pagamentos concluídos')).toMatch(/R\$\s1\.200,00/)
   })
 
   it('a caixinha Pago do pedido lança o pagamento amarrado a ele', async () => {
@@ -369,7 +372,7 @@ describe('Planejamento da semana no banco', () => {
     respostas({ planejamento: { ...SEM_PLANEJAMENTO, saldo_conta: '5000.00', updated_at: new Date().toUTCString() } })
     montar()
     await waitFor(() => expect(screen.getByDisplayValue('5.000,00')).toBeInTheDocument())
-    expect(screen.getByText(/R\$\s?0,00 − R\$\s?0,00 de boletos − R\$\s?0,00 pagos/)).toBeInTheDocument()
+    expect(textoDoCard('Pagamentos concluídos')).toMatch(/R\$\s0,00/)   // o saldo digitado não vira pagamento
   })
 
   it('digitar o saldo grava no banco, para aparecer em qualquer aparelho', async () => {
@@ -442,7 +445,9 @@ describe('A conta da semana (ditada em 17/09/2026)', () => {
                       data_pagamento: ymd(hoje), created_at: hoje.toUTCString() }],
     })
     montar()
-    await waitFor(() => expect(screen.getByText(/R\$\s?1\.000,00 − R\$\s?100,00 de boletos − R\$\s?200,00 pagos/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Pagamentos concluídos')).toBeInTheDocument())
+    // boleto 100 + fornecedor 200; o saldo de 99.999 não entra em nada
+    expect(textoDoCard('Pagamentos concluídos')).toMatch(/R\$\s?300,00/)
     expect(screen.getByText('Meli +')).toBeInTheDocument()
     expect(screen.getByText(/Pago em .* vencia/)).toBeInTheDocument()
   })
@@ -475,8 +480,9 @@ describe('A conta da semana (ditada em 17/09/2026)', () => {
     expect(screen.getByText(/R\$\s?50,00 vencem na semana/)).toBeInTheDocument()
     expect(screen.getByText(/^Meli \+ R\$\s?100,00$/)).toBeInTheDocument()
     expect(screen.getByText(/FY R\$\s?200,00 · Embalagens R\$\s?1\.103,00/)).toBeInTheDocument()
-    // a sobra desconta cada um uma vez só: 5.000 − 150 − 1.303 = 3.547
-    expect(screen.getByText(/R\$\s?5\.000,00 − R\$\s?150,00 de boletos − R\$\s?1\.303,00 pagos/)).toBeInTheDocument()
+    // cada um conta uma vez só: concluídos 100 + 1.303 = 1.403; pendente 50
+    expect(textoDoCard('Pagamentos concluídos')).toMatch(/R\$\s?1\.403,00/)
+    expect(textoDoCard('Pagamentos pendentes')).toMatch(/R\$\s?50,00/)
   })
 
   it('conta paga antes do vencimento sai na semana em que foi paga', async () => {
@@ -496,15 +502,15 @@ describe('A conta da semana (ditada em 17/09/2026)', () => {
     montar()
     await waitFor(() => expect(screen.getByText('Retirado da reserva')).toBeInTheDocument())
     expect(screen.getAllByText('R$ 40.797,00').length).toBeGreaterThan(0)   // card + seção Reserva
-    // sobra = 1.000 − 0 − 6.000 = −5.000: a reserva não entrou na conta, só explica o buraco
-    expect(screen.getByText(/R\$\s?1\.000,00 − R\$\s?0,00 de boletos − R\$\s?6\.000,00 pagos · os R\$\s?5\.000,00 que faltaram saíram da reserva/)).toBeInTheDocument()
+    // a reserva é só informação: o pago a fornecedor segue em concluídos
+    expect(textoDoCard('Pagamentos concluídos')).toMatch(/R\$\s?6\.000,00/)
   })
 
   it('boleto de outra semana já pago não entra', async () => {
     respostas({ contas: [{ id: 'c2', descricao: 'Antigo pago', valor: 900, vencimento: '2026-01-11',
                            status: 'pago', data_pagamento: '2026-01-11', categoria: 'OUTRO' }] })
     montar()
-    await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Disponível para comprar')).toBeInTheDocument())
     expect(screen.queryByText('Antigo pago')).not.toBeInTheDocument()
   })
 
@@ -519,7 +525,7 @@ describe('A conta da semana (ditada em 17/09/2026)', () => {
     montar()
     await waitFor(() => expect(screen.getByText('Pago a funcionários')).toBeInTheDocument())
     expect(screen.getByText(/Josie R\$\s?300,00 · DAS Josie R\$\s?75,90/)).toBeInTheDocument()
-    expect(screen.getByText(/− R\$\s?375,90 a funcionários/)).toBeInTheDocument()
+    expect(textoDoCard('Pagamentos concluídos')).toMatch(/R\$\s?375,90/)
   })
 
   it('a Caixa abre mesmo se o endpoint de funcionários falhar', async () => {
@@ -544,13 +550,12 @@ describe('Devolução em dinheiro entra no caixa', () => {
     montar()
     await waitFor(() => expect(screen.getByText('Devolução em dinheiro')).toBeInTheDocument())
     expect(screen.getByText(/Tânia R\$\s*300,00/)).toBeInTheDocument()
-    expect(screen.getByText(/\+ R\$\s*300,00 de devoluções em dinheiro/)).toBeInTheDocument()
   })
 
   it('sem reembolso em dinheiro o card não aparece', async () => {
     respostas({})
     montar()
-    await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Disponível para comprar')).toBeInTheDocument())
     expect(screen.queryByText('Devolução em dinheiro')).not.toBeInTheDocument()
   })
 
@@ -559,6 +564,6 @@ describe('Devolução em dinheiro entra no caixa', () => {
     const original = api.get.getMockImplementation()
     api.get.mockImplementation(url => url.startsWith('/api/fornecedores/devolucoes?') ? Promise.reject(new Error('404')) : original(url))
     montar()
-    await waitFor(() => expect(screen.getByText('Sobra para comprar')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Disponível para comprar')).toBeInTheDocument())
   })
 })
