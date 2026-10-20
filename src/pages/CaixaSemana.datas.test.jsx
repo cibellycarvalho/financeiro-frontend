@@ -49,20 +49,20 @@ beforeEach(() => {
 describe('Caixa da Semana — datas no formato que o backend manda', () => {
   it('abre sem quebrar com datas do jsonify do Flask', async () => {
     render(<MemoryRouter><CaixaSemana /></MemoryRouter>)
-    expect(await screen.findByText('Sobra para comprar')).toBeInTheDocument()
+    expect(await screen.findByText('Disponível para comprar')).toBeInTheDocument()
   })
 
   it('boleto que vence hoje entra na semana — o filtro não compara texto cortado', async () => {
     // Antes o crash escondia outro erro: "Tue, 15 Se" >= "2026-09-14" compara
     // letra com número, e o boleto sumia da semana sem aviso.
     render(<MemoryRouter><CaixaSemana /></MemoryRouter>)
-    await screen.findByText('Sobra para comprar')
+    await screen.findByText('Disponível para comprar')
     expect(screen.getByText(/900,00 vencem na semana/)).toBeInTheDocument()
   })
 
   it('pedido com mais de 30 dias conta como vencido', async () => {
     render(<MemoryRouter><CaixaSemana /></MemoryRouter>)
-    await screen.findByText('Sobra para comprar')
+    await screen.findByText('Disponível para comprar')
     expect(screen.getByText('1 lançamento passados dos 30 dias · informativo, não sai da sobra')).toBeInTheDocument()
   })
 })

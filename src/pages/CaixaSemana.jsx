@@ -712,8 +712,6 @@ export default function CaixaSemana() {
   const totalReembolsos = reembolsos.reduce((s, d) => s + d.valor, 0)
 
   // A Flavia vencida NAO entra em nada: e informativo.
-  const sobra = totalRepasse + totalReembolsos - totalBoletos - totalPagoFornecedor - totalPagoFuncionarios
-
   // Depois de alguns dias a data do saldo aparece junto do numero, discreta.
   // Nao vira quadro de aviso: repetir de volta o que ela digitou, toda semana,
   // e a tela falando com ela sem ter nada novo a dizer.
@@ -853,20 +851,6 @@ export default function CaixaSemana() {
               composicao={funcDescontados.length
                 ? funcDescontados.map(p => `${nomeFuncionario(p)} ${brl(p.valor)}`).join(' · ')
                 : 'Nenhum pagamento na semana'}
-            />
-            <Indicador
-              rotulo="Sobra para comprar"
-              valor={sobra}
-              tom="auto"
-              composicao={`${brl(totalRepasse)}` +
-                (totalReembolsos > 0 ? ` + ${brl(totalReembolsos)} de devoluções em dinheiro` : '') +
-                ` − ${brl(totalBoletos)} de boletos − ${brl(totalPagoFornecedor)} pagos` +
-                (totalPagoFuncionarios > 0 ? ` − ${brl(totalPagoFuncionarios)} a funcionários` : '') +
-                (retirada > 0
-                  ? (sobra < 0
-                    ? ` · os ${brl(-sobra)} que faltaram saíram da reserva`
-                    : ` · sem contar os ${brl(retirada)} tirados da reserva`)
-                  : '')}
             />
           </div>
 
