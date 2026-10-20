@@ -34,7 +34,7 @@ export default function CaixaParaRepor({ sobra, semanaAtual }) {
   return (
     <SecaoCard
       titulo="Caixa para repor"
-      subtitulo={`Quanto ter em caixa para repor antes da ruptura (${dados?.lead_time_dias ?? 10} dias da compra até o estoque no Full). Só produtos enviados ao Full nos últimos 60 dias.`}
+      subtitulo={`Quanto ter em caixa para repor antes da ruptura (${dados?.lead_time_dias ?? 10} dias da compra até o estoque no Full).`}
     >
       {erro && <p role="alert" style={{ margin: 0, fontSize: 13, color: 'var(--color-danger)' }}>{erro}</p>}
       {!erro && !dados && <p style={{ margin: 0, fontSize: 13 }}>Calculando…</p>}
