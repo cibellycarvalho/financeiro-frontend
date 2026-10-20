@@ -18,7 +18,7 @@ export function resumoSemana(semana, disponivel) {
   return { falta: falta !== null && falta > 0 ? falta : 0, cobre: falta !== null && falta <= 0 }
 }
 
-export default function CaixaParaRepor({ sobra, semanaAtual }) {
+export default function CaixaParaRepor({ sobra, semanaAtual, onDados }) {
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState(null)
 
@@ -26,7 +26,7 @@ export default function CaixaParaRepor({ sobra, semanaAtual }) {
     if (!crmConfigurado()) { setErro('Endereço do CRM não configurado.'); return }
     let vivo = true
     crmApi.get('/api/reposicao/caixa-necessario?conta_ml=YUSO,M12')
-      .then(r => { if (vivo) setDados(r.data) })
+      .then(r => { if (vivo) { setDados(r.data); if (onDados) onDados(r.data) } })
       .catch(() => { if (vivo) setErro('Não foi possível calcular a reposição agora.') })
     return () => { vivo = false }
   }, [])

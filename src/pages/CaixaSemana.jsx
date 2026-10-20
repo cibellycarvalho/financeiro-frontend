@@ -47,7 +47,7 @@ import Layout from '../components/Layout'
 import PaginaHeader from '../components/PaginaHeader'
 import Indicador from '../components/Indicador'
 import SecaoCard from '../components/SecaoCard'
-import CaixaParaRepor from '../components/CaixaParaRepor'
+import ComprasDaSemana from '../components/ComprasDaSemana'
 import api from '../services/api'
 import CaixinhaPago from '../components/CaixinhaPago'
 
@@ -778,6 +778,10 @@ export default function CaixaSemana() {
 
       {!carregando && (
         <>
+          <ComprasDaSemana segunda={segunda} contas={contas}
+            pendentes={totalBoletosAPagar}
+            concluidos={totalBoletosPagos + totalPagoFornecedor + totalPagoFuncionarios} />
+
           <div style={{
             display: 'grid', gap: 12, marginBottom: 20,
             gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
@@ -787,7 +791,7 @@ export default function CaixaSemana() {
               valor={totalRepasse}
               tom="neutro"
               composicao={colou
-                ? `${brl(jaCaiu)} já caíram + ${brl(aCair)} a cair · repasses do Mercado Pago`
+                ? `${brl(jaCaiu)} já caíram + ${brl(aCair)} a cair · repasses do Mercado Pago · só compra na semana que vem`
                 : totalGravado > 0
                   ? `${brl(totalGravado)} de repasses já lançados`
                   : 'Nada informado — cole a agenda do Mercado Pago'}
@@ -867,8 +871,6 @@ export default function CaixaSemana() {
                   : '')}
             />
           </div>
-
-          <CaixaParaRepor sobra={sobra} semanaAtual={chaveSemana} />
 
           {/* Aqui em cima de proposito: estes campos sao a ENTRADA de tudo que
               a tela mostra. Estavam no fim da pagina, depois de Flavia e
