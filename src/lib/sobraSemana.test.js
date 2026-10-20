@@ -38,6 +38,16 @@ describe('sobraDaSemana', () => {
     expect(r).toMatchObject({ boletos: 150, fornecedor: 270, funcionarios: 60, reembolsos: 25, sobra: 545 })
   })
 
+  it('lê datas no formato HTTP que o backend devolve', () => {
+    const r = sobraDaSemana({ ...base,
+      agenda: { '2026-10-13': 1000 },
+      contas: [{ valor: '3202.57', vencimento: 'Sat, 10 Oct 2026 00:00:00 GMT', status: 'pago',
+        data_pagamento: 'Wed, 14 Oct 2026 00:00:00 GMT', categoria: 'OUTRO' }],
+      pagamentos: [{ id: 'a', valor: '100', data_pagamento: 'Thu, 15 Oct 2026 00:00:00 GMT' }],
+    })
+    expect(r).toMatchObject({ boletos: 3202.57, fornecedor: 100, sobra: 1000 - 3202.57 - 100 })
+  })
+
   it('semana vazia dá zero', () => {
     expect(sobraDaSemana(base).sobra).toBe(0)
   })
