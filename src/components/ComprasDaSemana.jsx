@@ -19,16 +19,23 @@ const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')
 const somaDias = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x }
 const semVazio = p => p.catch(() => ({ data: [] }))
 
-export function montarCards({ disponivel, reposicao, pendentes, concluidos }) {
-  const sobraNoCaixa = disponivel - reposicao - pendentes
+/**
+ * Regra dela (20/10/2026): cada semana paga com o que caiu na anterior.
+ * Disponível = o que caiu semana passada + o que saiu da reserva nesta semana
+ * − o que já foi pago e o que ainda vai pagar nesta semana.
+ * Sobra no caixa = disponível − reposição necessária.
+ */
+export function montarCards({ caiu, retirada, reposicao, pendentes, concluidos }) {
+  const disponivel = caiu + retirada - concluidos - pendentes
   return {
-    sobraNoCaixa,
+    disponivel,
+    sobraNoCaixa: disponivel - reposicao,
     reposicaoFalta: Math.max(reposicao - disponivel, 0),
     pagamentosSemana: concluidos + pendentes,
   }
 }
 
-export default function ComprasDaSemana({ segunda, contas, pendentes, concluidos }) {
+export default function ComprasDaSemana({ segunda, contas, pendentes, concluidos, retirada = 0 }) {
   const [passada, setPassada] = useState(null)
   const [erro, setErro] = useState(null)
   const [reposicao, setReposicao] = useState(null)   // total da semana atual, do CRM
@@ -62,9 +69,10 @@ export default function ComprasDaSemana({ segunda, contas, pendentes, concluidos
     return () => { vivo = false }
   }, [de, ate, contas])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const disponivel = passada ? passada.sobra : null
-  const c = disponivel === null ? null
-    : montarCards({ disponivel, reposicao: reposicao ?? 0, pendentes, concluidos })
+  const caiu = passada ? passada.entra + passada.reembolsos : null
+  const c = caiu === null ? null
+    : montarCards({ caiu, retirada, reposicao: reposicao ?? 0, pendentes, concluidos })
+  const disponivel = c ? c.disponivel : null
 
   return (
     <>
@@ -72,7 +80,9 @@ export default function ComprasDaSemana({ segunda, contas, pendentes, concluidos
       <div style={{ display: 'grid', gap: 12, marginBottom: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
         <Indicador rotulo="Disponível para comprar" tom="auto" valor={disponivel ?? 0}
           composicao={passada
-            ? `sobra da semana passada (${de.slice(8)}/${de.slice(5, 7)} a ${ate.slice(8)}/${ate.slice(5, 7)}): ${brl(passada.entra + passada.reembolsos)} que caíram − ${brl(passada.boletos + passada.fornecedor + passada.funcionarios)} pagos`
+            ? `${brl(caiu)} que caíram na semana passada (${de.slice(8)}/${de.slice(5, 7)} a ${ate.slice(8)}/${ate.slice(5, 7)})` +
+              (retirada > 0 ? ` + ${brl(retirada)} da reserva` : '') +
+              ` − ${brl(concluidos + pendentes)} de pagamentos desta semana`
             : 'calculando…'} />
         <Indicador rotulo="Reposição necessária" tom="divida" valor={reposicao ?? 0}
           composicao={reposicao === null ? 'calculando…'
@@ -83,7 +93,7 @@ export default function ComprasDaSemana({ segunda, contas, pendentes, concluidos
         <Indicador rotulo="Pagamentos concluídos" tom="neutro" valor={concluidos} composicao="já pagos nesta semana" />
         <Indicador rotulo="Pagamentos pendentes" tom="divida" valor={pendentes} composicao="boletos ainda não pagos" />
         <Indicador rotulo="Sobra no caixa" tom="auto" valor={c ? c.sobraNoCaixa : 0}
-          composicao="disponível − reposição necessária − pendentes" />
+          composicao="disponível para comprar − reposição necessária" />
       </div>
       <CaixaParaRepor sobra={disponivel} semanaAtual={chaveSemana}
         onDados={d => setReposicao((d.semanas.find(s => s.semana === chaveSemana) || { total: 0 }).total)} />
