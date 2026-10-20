@@ -298,6 +298,7 @@ export function planoDoBanco(linha) {
   if (num(linha.saldo_conta) !== undefined) d.saldo = emReais(num(linha.saldo_conta))
   if (num(linha.reserva_aplicada) !== undefined) d.reserva = emReais(num(linha.reserva_aplicada))
   if (num(linha.retirada_reserva) !== undefined) d.retirada = emReais(num(linha.retirada_reserva))
+  if (num(linha.entradas_extras) !== undefined) d.entradas = emReais(num(linha.entradas_extras))
   if (linha.saldo_em) {
     const quando = new Date(linha.saldo_em)
     if (!Number.isNaN(quando.getTime())) d.saldoEm = quando.toISOString()
@@ -334,6 +335,7 @@ export function planoParaBanco(d, segunda) {
     saldo_em: (d && d.saldoEm) || null,
     reserva_aplicada: num(d && d.reserva),
     retirada_reserva: num(d && d.retirada),
+    entradas_extras: num(d && d.entradas),
     agenda,
     ajustes_pagamento: (d && d.ajustesPagamento) || {},
   }
@@ -688,6 +690,8 @@ export default function CaixaSemana() {
   // Quanto saiu da reserva nesta semana. Informação, não entra na sobra
   // (escolha dela em 17/09/2026 entre mostrar e somar: mostrar).
   const retirada = numeroBR(daSemana.retirada)
+  // Entrou fora do Mercado Pago (ex.: empréstimo do ML). Soma ao disponível.
+  const entradasExtras = numeroBR(daSemana.entradas)
   const ajustesPagamento = daSemana.ajustesPagamento || {}
   const pagosSemana = pagamentosDaSemana(pagamentos, segunda, domingo, ajustesPagamento)
   const pagosDescontados = pagosSemana.filter(p => !p.jaFora)
@@ -778,7 +782,7 @@ export default function CaixaSemana() {
         <>
           <ComprasDaSemana segunda={segunda} contas={contas}
             pendentes={totalBoletosAPagar}
-            retirada={retirada}
+            retirada={retirada} entradasExtras={entradasExtras}
             concluidos={totalBoletosPagos + totalPagoFornecedor + totalPagoFuncionarios} />
 
           <div style={{
@@ -899,6 +903,15 @@ export default function CaixaSemana() {
                        onChange={e => salvar({ retirada: e.target.value })}
                        placeholder="0,00" />
                 <Lido valor={daSemana.retirada} />
+              </label>
+              <label>
+                <span style={rotulo}>Entradas extras na semana <small style={{ fontWeight: 400 }}>· ex.: empréstimo do Mercado Livre; soma ao disponível</small></span>
+                <input type="text" inputMode="decimal" style={entrada}
+                       value={daSemana.entradas ?? ''}
+                       disabled={!planoCarregado}
+                       onChange={e => salvar({ entradas: e.target.value })}
+                       placeholder="0,00" />
+                <Lido valor={daSemana.entradas} />
               </label>
             </div>
 

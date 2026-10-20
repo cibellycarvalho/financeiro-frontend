@@ -359,8 +359,13 @@ describe('Planejamento da semana no banco', () => {
     }, SEGUNDA)
     expect(corpo).toEqual({
       saldo_conta: 5922.92, saldo_em: '2026-09-15T13:20:00.000Z', reserva_aplicada: null, retirada_reserva: 40797,
-      agenda: { '2026-09-14': 2280.51 }, ajustes_pagamento: { pg1: false },
+      entradas_extras: null, agenda: { '2026-09-14': 2280.51 }, ajustes_pagamento: { pg1: false },
     })
+  })
+
+  it('entradas extras viram texto em reais e voltam como número', () => {
+    expect(planoDoBanco({ entradas_extras: '20000.00' }).entradas).toBe('20.000,00')
+    expect(planoParaBanco({ entradas: '20.000,00' }, SEGUNDA).entradas_extras).toBe(20000)
   })
 
   it('não aceita resposta estranha do banco como planejamento', () => {
