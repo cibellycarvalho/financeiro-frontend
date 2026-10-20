@@ -25,7 +25,7 @@ export default function CaixaParaRepor({ sobra, semanaAtual }) {
   useEffect(() => {
     if (!crmConfigurado()) { setErro('Endereço do CRM não configurado.'); return }
     let vivo = true
-    crmApi.get('/api/reposicao/caixa-necessario')
+    crmApi.get('/api/reposicao/caixa-necessario?conta_ml=YUSO,M12')
       .then(r => { if (vivo) setDados(r.data) })
       .catch(() => { if (vivo) setErro('Não foi possível calcular a reposição agora.') })
     return () => { vivo = false }

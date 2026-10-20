@@ -17,6 +17,8 @@ describe('CaixaParaRepor', () => {
     crmApi.get.mockResolvedValue({ data: DADOS })
     render(<CaixaParaRepor sobra={500} semanaAtual="2026-10-19" />)
     await waitFor(() => expect(screen.getByText(/ter R\$\s*750,00 em caixa/)).toBeTruthy())
+    // sem conta_ml o CRM responde 400 (visto em produção 20/10/2026)
+    expect(crmApi.get.mock.calls[0][0]).toContain('conta_ml=YUSO,M12')
     expect(screen.getByText(/FV0073/)).toBeTruthy()
     expect(screen.getByText(/faltam R\$\s*250,00/)).toBeTruthy()
     expect(screen.getByText(/Sem custo cadastrado.*ZZ/)).toBeTruthy()
