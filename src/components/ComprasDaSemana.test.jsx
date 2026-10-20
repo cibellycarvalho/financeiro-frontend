@@ -8,6 +8,11 @@ describe('montarCards (regra de 20/10/2026)', () => {
     expect(c.pagamentosSemana).toBeCloseTo(13087.5, 2)
   })
 
+  it('entradas extras (empréstimo) somam ao disponível', () => {
+    const c = montarCards({ caiu: 1000, retirada: 0, entradas: 20000, reposicao: 0, pendentes: 0, concluidos: 500 })
+    expect(c.disponivel).toBe(20500)
+  })
+
   it('sobra no caixa desconta a reposição, e mostra quanto falta quando não cobre', () => {
     const c = montarCards({ caiu: 1000, retirada: 0, reposicao: 1500, pendentes: 200, concluidos: 100 })
     expect(c.disponivel).toBe(700)

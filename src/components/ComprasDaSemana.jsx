@@ -22,11 +22,12 @@ const semVazio = p => p.catch(() => ({ data: [] }))
 /**
  * Regra dela (20/10/2026): cada semana paga com o que caiu na anterior.
  * Disponível = o que caiu semana passada + o que saiu da reserva nesta semana
+ * + entradas extras (ex.: empréstimo do ML)
  * − o que já foi pago e o que ainda vai pagar nesta semana.
  * Sobra no caixa = disponível − reposição necessária.
  */
-export function montarCards({ caiu, retirada, reposicao, pendentes, concluidos }) {
-  const disponivel = caiu + retirada - concluidos - pendentes
+export function montarCards({ caiu, retirada, entradas = 0, reposicao, pendentes, concluidos }) {
+  const disponivel = caiu + retirada + entradas - concluidos - pendentes
   return {
     disponivel,
     sobraNoCaixa: disponivel - reposicao,
@@ -35,7 +36,7 @@ export function montarCards({ caiu, retirada, reposicao, pendentes, concluidos }
   }
 }
 
-export default function ComprasDaSemana({ segunda, contas, pendentes, concluidos, retirada = 0 }) {
+export default function ComprasDaSemana({ segunda, contas, pendentes, concluidos, retirada = 0, entradasExtras = 0 }) {
   const [passada, setPassada] = useState(null)
   const [erro, setErro] = useState(null)
   const [reposicao, setReposicao] = useState(null)   // total da semana atual, do CRM
@@ -71,7 +72,7 @@ export default function ComprasDaSemana({ segunda, contas, pendentes, concluidos
 
   const caiu = passada ? passada.entra + passada.reembolsos : null
   const c = caiu === null ? null
-    : montarCards({ caiu, retirada, reposicao: reposicao ?? 0, pendentes, concluidos })
+    : montarCards({ caiu, retirada, entradas: entradasExtras, reposicao: reposicao ?? 0, pendentes, concluidos })
   const disponivel = c ? c.disponivel : null
 
   return (
@@ -82,6 +83,7 @@ export default function ComprasDaSemana({ segunda, contas, pendentes, concluidos
           composicao={passada
             ? `${brl(caiu)} que caíram na semana passada (${de.slice(8)}/${de.slice(5, 7)} a ${ate.slice(8)}/${ate.slice(5, 7)})` +
               (retirada > 0 ? ` + ${brl(retirada)} da reserva` : '') +
+              (entradasExtras > 0 ? ` + ${brl(entradasExtras)} de entradas extras` : '') +
               ` − ${brl(concluidos + pendentes)} de pagamentos desta semana`
             : 'calculando…'} />
         <Indicador rotulo="Reposição necessária" tom="divida" valor={reposicao ?? 0}
