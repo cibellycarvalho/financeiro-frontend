@@ -47,6 +47,7 @@ import Layout from '../components/Layout'
 import PaginaHeader from '../components/PaginaHeader'
 import Indicador from '../components/Indicador'
 import SecaoCard from '../components/SecaoCard'
+import CaixaParaRepor from '../components/CaixaParaRepor'
 import api from '../services/api'
 import CaixinhaPago from '../components/CaixinhaPago'
 
@@ -513,6 +514,23 @@ export default function CaixaSemana() {
     return n
   }, [chaveSemana, diasDaSemana, plano, salvar])
 
+  /** Busca no Mercado Pago (por API) o que libera na semana e grava como agenda. */
+  const puxarAgendaMP = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/api/repasses/a-liberar?de=${iso(segunda)}&ate=${iso(domingo)}`)
+      const nova = {}
+      Object.entries(data.por_dia || {}).forEach(([d, v]) => {
+        nova[Number(d.slice(8, 10))] = Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      })
+      salvar({ agenda: nova, textoMP: undefined })
+      setAvisoColagem(Object.keys(nova).length
+        ? `Puxado do Mercado Pago: ${Object.keys(nova).length} dia(s).`
+        : 'O Mercado Pago não tem liberações nesta semana.')
+    } catch {
+      setAvisoColagem('Não consegui falar com o Mercado Pago. Cole a agenda à mão.')
+    }
+  }, [segunda, domingo, salvar])
+
   // Quem ja tinha colado antes desta mudanca nao perde a semana: o texto
   // guardado vira lista de dias uma vez, e some.
   useEffect(() => {
@@ -850,6 +868,8 @@ export default function CaixaSemana() {
             />
           </div>
 
+          <CaixaParaRepor sobra={sobra} semanaAtual={chaveSemana} />
+
           {/* Aqui em cima de proposito: estes campos sao a ENTRADA de tudo que
               a tela mostra. Estavam no fim da pagina, depois de Flavia e
               Boletos, e em 14/09/2026 ela simplesmente nao os encontrou. Pedir
@@ -940,6 +960,10 @@ export default function CaixaSemana() {
                 <button type="button" style={botao} disabled={!planoCarregado}
                         onClick={() => { setColando(v => !v); setAvisoColagem(null) }}>
                   {colando ? 'Cancelar' : colou ? 'Colar agenda de novo' : 'Colar agenda do Mercado Pago'}
+                </button>
+                <button type="button" style={botao} disabled={!planoCarregado}
+                        onClick={puxarAgendaMP}>
+                  Puxar do Mercado Pago
                 </button>
                 {colou && (
                   <span style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>
