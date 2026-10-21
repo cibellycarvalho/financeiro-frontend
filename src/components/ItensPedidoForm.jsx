@@ -2,7 +2,7 @@
 // Tabela de itens de um pedido — usada pelo "Novo pedido" e pelo upload do
 // pedido de compra. Um lugar só para manter aparência e validação.
 
-export const ITEM_VAZIO = { produto: '', quantidade: '', valor_unitario: '' }
+export const ITEM_VAZIO = { produto: '', sku: '', quantidade: '', valor_unitario: '' }
 
 const inputStyle = { display: 'block', width: '100%', padding: 8, marginTop: 4, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', boxSizing: 'border-box' }
 
@@ -36,9 +36,13 @@ export default function ItensPedidoForm({ itens, onChange }) {
       </div>
 
       {itens.map((item, i) => (
-        <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
+        <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
           <label style={{ fontSize: 12 }}>Produto<br />
             <input required value={item.produto} onChange={e => atualizar(i, 'produto', e.target.value)} style={inputStyle} />
+          </label>
+          <label style={{ fontSize: 12 }}>SKU <span style={{ color: 'var(--color-text-muted)' }}>(opcional)</span><br />
+            <input value={item.sku || ''} placeholder="FV0073" aria-label={`SKU do item ${i + 1}`}
+              onChange={e => atualizar(i, 'sku', e.target.value)} style={inputStyle} />
           </label>
           <label style={{ fontSize: 12 }}>Quantidade<br />
             <input required type="number" step="0.01" min="0.01" value={item.quantidade} onChange={e => atualizar(i, 'quantidade', e.target.value)} style={inputStyle} />

@@ -111,7 +111,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
         const r = await api.post(`/api/fornecedores/${fornecedorId}/pedidos`, {
           data_pedido: dataPedido,
           numero_pedido: numeroPedido || null,
-          itens: itens.map(i => ({ produto: i.produto, quantidade: parseFloat(i.quantidade), valor_unitario: parseFloat(i.valor_unitario) })),
+          itens: itens.map(i => ({ produto: i.produto, sku: (i.sku || '').trim() || undefined, quantidade: parseFloat(i.quantidade), valor_unitario: parseFloat(i.valor_unitario) })),
           arquivo_token: leitura?.arquivo_token || null,
           alias_vendedor: leitura?.texto_vendedor || null,
         })
