@@ -87,6 +87,7 @@ export default function CaixaParaRepor({ sobra, semanaAtual, onDados }) {
                     {k.sku || k.titulo} — {k.quantidade_repor} un · {brl(k.valor)} · ruptura em {dia(k.ruptura_em)}
                     {k.atrasado ? ' · ATRASADO, comprar já' : ` · pagar até ${dia(k.pagar_ate)}`}
                     {k.em_transito > 0 ? ` · ${k.em_transito} un a caminho` : ''}
+                    {k.comprado_nao_enviado > 0 ? ` · ${k.comprado_nao_enviado} un já compradas, falta enviar` : ''}
                   </li>
                 ))}
               </ul>
