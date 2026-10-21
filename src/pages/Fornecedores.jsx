@@ -451,6 +451,7 @@ function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto
 function ItemCells({ item, onEditar, onExcluir }) {
   const [editando, setEditando] = useState(false)
   const [produto, setProduto] = useState(item.produto)
+  const [sku, setSku] = useState(item.sku || '')
   const [quantidade, setQuantidade] = useState(item.quantidade)
   const [valorUnitario, setValorUnitario] = useState(item.valor_unitario)
   const [loading, setLoading] = useState(false)
@@ -460,7 +461,7 @@ function ItemCells({ item, onEditar, onExcluir }) {
     setErro(null)
     setLoading(true)
     try {
-      await onEditar(produto, parseFloat(quantidade), parseFloat(valorUnitario))
+      await onEditar(produto, parseFloat(quantidade), parseFloat(valorUnitario), sku.trim() || null)
       setEditando(false)
     } catch (err) {
       setErro(err.response?.data?.error || 'Erro ao editar produto.')
@@ -485,6 +486,8 @@ function ItemCells({ item, onEditar, onExcluir }) {
       <>
         <td style={{ padding: '10px 16px' }}>
           <input value={produto} onChange={e => setProduto(e.target.value)} style={{ ...inputStyle, marginTop: 0 }} />
+          <input value={sku} placeholder="SKU (ex.: FV0073)" aria-label="SKU do produto" onChange={e => setSku(e.target.value)}
+            style={{ ...inputStyle, marginTop: 6, fontSize: 12 }} />
         </td>
         <td style={{ padding: '10px 16px' }}>
           <input type="number" step="0.01" min="0.01" value={quantidade} onChange={e => setQuantidade(e.target.value)} style={{ ...inputStyle, marginTop: 0 }} />
@@ -514,7 +517,10 @@ function ItemCells({ item, onEditar, onExcluir }) {
 
   return (
     <>
-      <td style={{ padding: '10px 16px' }}>{item.produto}</td>
+      <td style={{ padding: '10px 16px' }}>
+        {item.produto}
+        {item.sku && <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>SKU {item.sku}</div>}
+      </td>
       <td style={{ padding: '10px 16px' }}>{Number(item.quantidade).toLocaleString('pt-BR')}</td>
       <td style={{ padding: '10px 16px' }}>{formatMoeda(item.valor_unitario)}</td>
       <td style={{ padding: '10px 16px', fontWeight: 600 }}>{formatMoeda(item.valor_total)}</td>
@@ -645,6 +651,7 @@ function DataEditavel({ pedido, onEditar }) {
 function AdicionarItemForm({ onAdicionar }) {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [produto, setProduto] = useState('')
+  const [sku, setSku] = useState('')
   const [quantidade, setQuantidade] = useState('')
   const [valorUnitario, setValorUnitario] = useState('')
   const [loading, setLoading] = useState(false)
@@ -655,8 +662,9 @@ function AdicionarItemForm({ onAdicionar }) {
     setErro(null)
     setLoading(true)
     try {
-      await onAdicionar(produto, parseFloat(quantidade), parseFloat(valorUnitario))
+      await onAdicionar(produto, parseFloat(quantidade), parseFloat(valorUnitario), sku.trim() || undefined)
       setProduto('')
+      setSku('')
       setQuantidade('')
       setValorUnitario('')
       setMostrarForm(false)
@@ -681,6 +689,10 @@ function AdicionarItemForm({ onAdicionar }) {
       <label style={{ fontSize: 12 }}>Produto<br />
         <input required value={produto} onChange={e => setProduto(e.target.value)}
           style={{ ...inputStyle, marginTop: 4, width: 180 }} />
+      </label>
+      <label style={{ fontSize: 12 }}>SKU (opcional)<br />
+        <input value={sku} placeholder="FV0073" onChange={e => setSku(e.target.value)}
+          style={{ ...inputStyle, marginTop: 4, width: 110 }} />
       </label>
       <label style={{ fontSize: 12 }}>Quantidade<br />
         <input required type="number" step="0.01" min="0.01" value={quantidade} onChange={e => setQuantidade(e.target.value)}
@@ -766,7 +778,8 @@ export default function Fornecedores() {
       const itens = form.itens.map(item => ({
         produto: item.produto,
         quantidade: parseFloat(item.quantidade),
-        valor_unitario: parseFloat(item.valor_unitario)
+        valor_unitario: parseFloat(item.valor_unitario),
+        sku: (item.sku || '').trim() || undefined
       }))
       await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos`, { data_pedido: form.data_pedido, itens })
       irParaOMesDe(form.data_pedido)
@@ -806,9 +819,10 @@ export default function Fornecedores() {
     await recarregarDados()
   }
 
-  async function editarItem(pedidoId, itemId, produto, quantidade, valorUnitario) {
+  async function editarItem(pedidoId, itemId, produto, quantidade, valorUnitario, sku) {
     await api.put(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/itens/${itemId}`, {
-      produto, quantidade, valor_unitario: valorUnitario
+      produto, quantidade, valor_unitario: valorUnitario,
+      ...(sku !== undefined ? { sku } : {})
     })
     await recarregarDados()
   }
@@ -833,9 +847,10 @@ export default function Fornecedores() {
     }
   }
 
-  async function adicionarProdutoAoPedido(pedidoId, produto, quantidade, valorUnitario) {
+  async function adicionarProdutoAoPedido(pedidoId, produto, quantidade, valorUnitario, sku) {
     await api.post(`/api/fornecedores/${fornecedorSel.id}/pedidos/${pedidoId}/itens`, {
-      produto, quantidade, valor_unitario: valorUnitario
+      produto, quantidade, valor_unitario: valorUnitario,
+      ...(sku !== undefined ? { sku } : {})
     })
     await recarregarDados()
   }
@@ -1077,7 +1092,7 @@ export default function Fornecedores() {
                     )}
                     {item ? (
                       <ItemCells item={item}
-                        onEditar={finRole === 'fin_admin' ? (produto, quantidade, valorUnitario) => editarItem(p.id, item.id, produto, quantidade, valorUnitario) : null}
+                        onEditar={finRole === 'fin_admin' ? (produto, quantidade, valorUnitario, sku) => editarItem(p.id, item.id, produto, quantidade, valorUnitario, sku) : null}
                         onExcluir={finRole === 'fin_admin' ? () => excluirItem(p.id, item.id) : null} />
                     ) : (
                       <>
@@ -1103,7 +1118,7 @@ export default function Fornecedores() {
                     <tr key={`${p.id}-add-item`} style={{ borderTop: '1px solid var(--color-border)' }}>
                       <td colSpan={6} style={{ padding: '8px 16px' }}>
                         <AdicionarItemForm
-                          onAdicionar={(produto, quantidade, valorUnitario) => adicionarProdutoAoPedido(p.id, produto, quantidade, valorUnitario)} />
+                          onAdicionar={(produto, quantidade, valorUnitario, sku) => adicionarProdutoAoPedido(p.id, produto, quantidade, valorUnitario, sku)} />
                       </td>
                     </tr>
                   )
