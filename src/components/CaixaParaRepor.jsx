@@ -13,6 +13,14 @@ import crmApi, { crmConfigurado } from '../services/crmApi'
 const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const dia = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
+/** "19/10 a 25/10" a partir da segunda-feira da semana. */
+export function periodoDaSemana(segundaIso) {
+  const d = new Date(`${segundaIso}T12:00:00`)
+  d.setDate(d.getDate() + 6)
+  const fim = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+  return `${dia(segundaIso)} a ${fim}`
+}
+
 export function resumoSemana(semana, disponivel) {
   const falta = disponivel === null || disponivel === undefined ? null : semana.total - disponivel
   return { falta: falta !== null && falta > 0 ? falta : 0, cobre: falta !== null && falta <= 0 }
@@ -21,6 +29,8 @@ export function resumoSemana(semana, disponivel) {
 export default function CaixaParaRepor({ sobra, semanaAtual, onDados }) {
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState(null)
+  const [abertas, setAbertas] = useState(() => new Set())
+  const alternar = chave => setAbertas(a => { const n = new Set(a); if (n.has(chave)) n.delete(chave); else n.add(chave); return n })
 
   useEffect(() => {
     if (!crmConfigurado()) { setErro('Endereço do CRM não configurado.'); return }
@@ -44,24 +54,43 @@ export default function CaixaParaRepor({ sobra, semanaAtual, onDados }) {
       {dados && dados.semanas.map(s => {
         const atual = s.semana === semanaAtual
         const { falta, cobre } = resumoSemana(s, atual ? sobra : null)
+        const aberta = abertas.has(s.semana)
+        const atrasados = s.skus.filter(k => k.atrasado).length
         return (
-          <div key={s.semana} style={{ marginBottom: 14 }}>
-            <strong style={{ fontSize: 14 }}>
-              Semana de {dia(s.semana)}: ter {brl(s.total)} em caixa
-            </strong>
-            {atual && (
-              <span style={{ marginLeft: 8, fontSize: 12.5, color: cobre ? 'var(--color-success, inherit)' : 'var(--color-danger)' }}>
-                {cobre ? `sobra cobre (${brl(sobra)})` : `faltam ${brl(falta)} (sobra ${brl(sobra)})`}
+          <div key={s.semana} style={{ marginBottom: 8 }}>
+            {/* Uma linha por semana; a lista de produtos só abre no clique, para
+                não poluir a tela inicial da Caixa (pedido dela, 20/10/2026). */}
+            <button type="button" aria-expanded={aberta} onClick={() => alternar(s.semana)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                textAlign: 'left', cursor: 'pointer', fontSize: 14,
+                background: atrasados ? 'var(--color-danger-bg, transparent)' : 'transparent',
+                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '9px 12px',
+              }}>
+              <span aria-hidden="true">{aberta ? '▾' : '▸'}</span>
+              <strong>Semana {periodoDaSemana(s.semana)}: ter {brl(s.total)} em caixa</strong>
+              <span style={{ fontSize: 12.5, color: 'var(--color-text-muted)' }}>
+                {s.skus.length} {s.skus.length === 1 ? 'produto' : 'produtos'}
+                {atrasados > 0 && <strong style={{ color: 'var(--color-danger)' }}> · {atrasados} {atrasados === 1 ? 'atrasado' : 'atrasados'}</strong>}
               </span>
+              {atual && (
+                <span style={{ fontSize: 12.5, color: cobre ? 'var(--color-success, inherit)' : 'var(--color-danger)' }}>
+                  {cobre ? `disponível cobre (${brl(sobra)})` : `faltam ${brl(falta)} (disponível ${brl(sobra)})`}
+                </span>
+              )}
+            </button>
+            {aberta && (
+              <ul style={{ margin: '6px 0 0', padding: '8px 12px 8px 30px', fontSize: 13,
+                           border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+                {s.skus.map(k => (
+                  <li key={k.sku || k.titulo}>
+                    {k.sku || k.titulo} — {k.quantidade_repor} un · {brl(k.valor)} · ruptura em {dia(k.ruptura_em)}
+                    {k.atrasado ? ' · ATRASADO, comprar já' : ` · pagar até ${dia(k.pagar_ate)}`}
+                    {k.em_transito > 0 ? ` · ${k.em_transito} un a caminho` : ''}
+                  </li>
+                ))}
+              </ul>
             )}
-            <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13 }}>
-              {s.skus.map(k => (
-                <li key={k.sku || k.titulo}>
-                  {k.sku || k.titulo} — {k.quantidade_repor} un · {brl(k.valor)} · ruptura em {dia(k.ruptura_em)}
-                  {k.atrasado ? ' · ATRASADO, comprar já' : ` · pagar até ${dia(k.pagar_ate)}`}
-                </li>
-              ))}
-            </ul>
           </div>
         )
       })}
