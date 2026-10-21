@@ -36,7 +36,7 @@ describe('CaixaParaRepor', () => {
 
   it('semana com atrasado mostra quantos, e abrir mostra o que está a caminho', async () => {
     const dados = { lead_time_dias: 10, sem_custo: [], semanas: [{ semana: '2026-10-19', total: 100, skus: [
-      { sku: 'A', quantidade_repor: 5, valor: 100, ruptura_em: '2026-10-20', pagar_ate: '2026-10-10', atrasado: true, em_transito: 30 },
+      { sku: 'A', quantidade_repor: 5, valor: 100, ruptura_em: '2026-10-20', pagar_ate: '2026-10-10', atrasado: true, em_transito: 30, comprado_nao_enviado: 120 },
     ] }] }
     crmApi.get.mockResolvedValue({ data: dados })
     render(<CaixaParaRepor sobra={0} semanaAtual="2026-10-26" />)
@@ -44,6 +44,7 @@ describe('CaixaParaRepor', () => {
     fireEvent.click(screen.getByRole('button'))
     expect(screen.getByText(/ATRASADO, comprar já/)).toBeTruthy()
     expect(screen.getByText(/30 un a caminho/)).toBeTruthy()
+    expect(screen.getByText(/120 un já compradas, falta enviar/)).toBeTruthy()
   })
 
   it('periodoDaSemana vai de segunda a domingo', () => {
