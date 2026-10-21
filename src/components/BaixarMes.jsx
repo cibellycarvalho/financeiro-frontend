@@ -1,6 +1,7 @@
 /**
  * Baixa o pacote do mês: um .zip com uma pasta por compra, com nota, pedido e
  * comprovantes — o que o backend monta em `GET /api/pacote/compras/<AAAA-MM>`.
+ * Com "Até" num mês posterior, vira período: `?ate=<AAAA-MM>` (máx. 12 meses).
  *
  * A chamada usa `responseType: 'blob'` porque a resposta de sucesso é o
  * próprio arquivo. Isso tem um efeito colateral: quando o backend responde
@@ -60,6 +61,9 @@ const botaoStyle = {
 
 export default function BaixarMes() {
   const [mes, setMes] = useState(mesAtual())
+  // Fim do período: igual ao início = um mês só (o caso de sempre).
+  const [ate, setAte] = useState(mesAtual())
+  const periodo = ate !== mes
   const [erro, setErro] = useState(null)
   const [baixando, setBaixando] = useState(false)
 
@@ -68,11 +72,12 @@ export default function BaixarMes() {
     setErro(null)
     setBaixando(true)
     try {
-      const { data } = await api.get(`/api/pacote/compras/${mes}`, { responseType: 'blob' })
+      const rota = periodo ? `/api/pacote/compras/${mes}?ate=${ate}` : `/api/pacote/compras/${mes}`
+      const { data } = await api.get(rota, { responseType: 'blob' })
       const url = URL.createObjectURL(data)
       const link = document.createElement('a')
       link.href = url
-      link.download = `compras-${mes}.zip`
+      link.download = periodo ? `compras-${mes}_a_${ate}.zip` : `compras-${mes}.zip`
       // Precisa estar na árvore do DOM para o .click() disparar o download em
       // navegadores mais antigos, e é removido logo depois — não fica visível.
       document.body.appendChild(link)
@@ -97,13 +102,28 @@ export default function BaixarMes() {
         <input
           type="month"
           value={mes}
-          onChange={e => setMes(e.target.value)}
+          onChange={e => {
+            // Trocar o início volta para um mês só; o período abre no "Até".
+            setMes(e.target.value)
+            setAte(e.target.value)
+          }}
+          disabled={baixando}
+          style={{ ...campoStyle, marginTop: 4 }}
+        />
+      </label>
+      <label style={{ display: 'flex', flexDirection: 'column', fontSize: 12, color: 'var(--color-text-muted)' }}>
+        Até
+        <input
+          type="month"
+          value={ate}
+          min={mes}
+          onChange={e => setAte(e.target.value < mes ? mes : e.target.value)}
           disabled={baixando}
           style={{ ...campoStyle, marginTop: 4 }}
         />
       </label>
       <button onClick={baixar} disabled={baixando} style={botaoStyle}>
-        {baixando ? 'Montando…' : 'Baixar mês'}
+        {baixando ? 'Montando…' : periodo ? 'Baixar período' : 'Baixar mês'}
       </button>
       {erro && (
         <p role="alert" style={{ margin: 0, width: '100%', fontSize: 12, color: 'var(--color-danger)' }}>

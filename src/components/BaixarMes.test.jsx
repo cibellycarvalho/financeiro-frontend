@@ -129,4 +129,18 @@ describe('Baixar mês', () => {
     await waitFor(() => expect(screen.getByRole('button')).toHaveTextContent('Baixar mês'))
     expect(screen.getByRole('button')).not.toBeDisabled()
   })
+
+  it('com Até num mês depois, pede o período e baixa com o nome do período', async () => {
+    api.get.mockResolvedValue({ data: new Blob(['zip']) })
+    render(<BaixarMes />)
+    fireEvent.change(screen.getByLabelText(/Mês/), { target: { value: '2026-07' } })
+    fireEvent.change(screen.getByLabelText(/Até/), { target: { value: '2026-09' } })
+    fireEvent.click(screen.getByRole('button', { name: /Baixar período/ }))
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith(
+      '/api/pacote/compras/2026-07?ate=2026-09', { responseType: 'blob' },
+    ))
+    await waitFor(() => expect(cliques).toHaveLength(1))
+    expect(cliques[0].el.download).toBe('compras-2026-07_a_2026-09.zip')
+  })
 })
