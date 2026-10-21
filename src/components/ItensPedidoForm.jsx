@@ -18,7 +18,8 @@ export function totalDosItens(itens) {
   return itens.reduce((soma, item) => soma + totalDoItem(item), 0)
 }
 
-export default function ItensPedidoForm({ itens, onChange }) {
+// skus: lista do CRM ({ sku, titulo }) para sugerir no campo SKU. Opcional.
+export default function ItensPedidoForm({ itens, onChange, skus = [] }) {
   function atualizar(index, campo, valor) {
     onChange(itens.map((item, i) => i === index ? { ...item, [campo]: valor } : item))
   }
@@ -41,7 +42,7 @@ export default function ItensPedidoForm({ itens, onChange }) {
             <input required value={item.produto} onChange={e => atualizar(i, 'produto', e.target.value)} style={inputStyle} />
           </label>
           <label style={{ fontSize: 12 }}>SKU <span style={{ color: 'var(--color-text-muted)' }}>(opcional)</span><br />
-            <input value={item.sku || ''} placeholder="FV0073" aria-label={`SKU do item ${i + 1}`}
+            <input value={item.sku || ''} placeholder="FV0073" aria-label={`SKU do item ${i + 1}`} list={skus.length ? 'skus-crm' : undefined}
               onChange={e => atualizar(i, 'sku', e.target.value)} style={inputStyle} />
           </label>
           <label style={{ fontSize: 12 }}>Quantidade<br />
@@ -59,6 +60,12 @@ export default function ItensPedidoForm({ itens, onChange }) {
           </button>
         </div>
       ))}
+
+      {skus.length > 0 && (
+        <datalist id="skus-crm">
+          {skus.map(s => <option key={s.sku} value={s.sku}>{s.titulo}</option>)}
+        </datalist>
+      )}
 
       <div style={{ textAlign: 'right', fontWeight: 700, marginTop: 8, fontSize: 15 }}>
         Total do pedido: {formatMoeda(totalDosItens(itens))}
