@@ -2,7 +2,7 @@
 // Sobe um pedido de compra (PDF/foto) → a IA lê → ela confere → "já foi pago?"
 // → sobe o comprovante → salva pedido (+ pagamento) com os anexos.
 // A IA só lê; gravar é sempre no botão Salvar.
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import api from '../services/api'
 import ItensPedidoForm, { ITEM_VAZIO, totalDosItens } from './ItensPedidoForm'
 import { TIPOS, inputStyle, botaoPrimario, botaoSecundario, formatMoeda, formatData, Faixa, validarArquivo, mensagemDe, PreviewArquivo } from './upload/comum'
@@ -31,6 +31,15 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
   // true quando o pedido já está salvo e não há mais nada a tentar de novo:
   // o card só mostra "Fechar" (ex.: 409 de comprovante duplicado, 400 de valor recusado).
   const [somenteFechar, setSomenteFechar] = useState(false)
+  // O que o último pedido salvo fez nos custos do CRM. Sobrevive ao reiniciar
+  // de propósito: o card fecha ao salvar e ela ainda precisa ver o resultado.
+  const [resumoCustos, setResumoCustos] = useState(null)
+  const [skus, setSkus] = useState([])
+
+  useEffect(() => {
+    if (etapa !== 'conferindo' || skus.length) return
+    api.get('/api/fornecedores/skus').then(r => setSkus(r.data || [])).catch(() => {})
+  }, [etapa, skus.length])
 
   const totalItens = totalDosItens(itens)
   const somaDifere = leitura?.total_documento != null && Math.abs(totalItens - leitura.total_documento) > 0.05
@@ -51,7 +60,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
   async function lerPedido(arquivo) {
     const invalido = validarArquivo(arquivo)
     if (invalido) { setErro(invalido); return }
-    setErro(null); setEtapa('lendoPedido')
+    setErro(null); setResumoCustos(null); setEtapa('lendoPedido')
     const form = new FormData()
     form.append('arquivo', arquivo)
     try {
@@ -117,6 +126,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
         })
         setPedidoSalvoId(r.data.id)
         idDoPedido = r.data.id
+        setResumoCustos(r.data.custos?.length ? r.data.custos : null)
       } catch (err) {
         setErro(mensagemDe(err, 'Erro ao salvar o pedido.'))
         setEtapa('conferindo')
@@ -185,6 +195,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
           {etapa === 'lendoPedido' ? 'Lendo o pedido…' : '📎 Subir pedido de compra'}
         </button>
         {erro && <p style={{ color: 'var(--color-danger)', fontSize: 13, margin: '6px 0 0' }}>{erro}</p>}
+        {resumoCustos && <ResumoCustos custos={resumoCustos} />}
       </>
     )
   }
@@ -217,7 +228,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
           <Faixa>Esse pedido (nº {leitura.numero_pedido}) já está lançado em {formatData(leitura.pedido_existente.data_pedido)}. Lançar de novo?</Faixa>
         )}
 
-        <ItensPedidoForm itens={itens} onChange={setItens} />
+        <ItensPedidoForm itens={itens} onChange={setItens} skus={skus} />
 
         {somaDifere && (
           <Faixa>A soma dos itens ({formatMoeda(totalItens)}) não bate com o total do documento ({formatMoeda(leitura.total_documento)}). Confira.</Faixa>
@@ -289,5 +300,33 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
 
       <PreviewArquivo url={previewUrl} tipo={previewTipo} alt="Pedido enviado" />
     </form>
+  )
+}
+
+// O que precisa de atenção (SKU que não existe, erro) vem antes do que deu certo.
+export function ResumoCustos({ custos }) {
+  const problemas = custos.filter(c => c.status === 'sku_desconhecido' || c.status === 'erro')
+  const ok = custos.filter(c => c.status === 'atualizado')
+  const antigos = custos.filter(c => c.status === 'pedido_mais_novo')
+  return (
+    <div style={{ fontSize: 13, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {problemas.map(c => (
+        <p key={c.sku} style={{ color: 'var(--color-danger)', margin: 0 }}>
+          {c.status === 'erro'
+            ? `${c.sku}: não consegui atualizar o custo no CRM. Tente salvar o item de novo.`
+            : `${c.sku}: esse SKU não existe no CRM, então o custo não foi atualizado.`}
+        </p>
+      ))}
+      {ok.length > 0 && (
+        <p style={{ color: 'var(--color-success, var(--color-text))', margin: 0 }}>
+          Custo atualizado no CRM: {ok.map(c => `${c.sku} ${formatMoeda(c.custo)}`).join(' · ')}
+        </p>
+      )}
+      {antigos.length > 0 && (
+        <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>
+          Sem mudar o custo (já existe pedido mais novo): {antigos.map(c => c.sku).join(', ')}
+        </p>
+      )}
+    </div>
   )
 }
