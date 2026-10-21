@@ -48,8 +48,13 @@ function mesAtual() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+// Período vem como 'AAAA-MM_a_AAAA-MM' (ver `periodo` na página).
 function rotuloMes(mes) {
   if (!mes) return 'todos os meses'
+  if (mes.includes('_a_')) {
+    const [de, ate] = mes.split('_a_')
+    return `${rotuloMes(de)} a ${rotuloMes(ate)}`
+  }
   const [ano, m] = mes.split('-')
   return new Date(Number(ano), Number(m) - 1, 1)
     .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
@@ -226,8 +231,8 @@ function gerarResumoPDF(fornecedor, pedidos, pagamentos, mes) {
     ? Number(fornecedor.saldo_aberto)
     : totalComprado - totalPago
 
-  caixaResumo(marginX, mes ? 'COMPRADO NO MÊS' : 'TOTAL COMPRADO', totalComprado, PDF_COR_PENDENTE_FUNDO, PDF_COR_PENDENTE)
-  caixaResumo(marginX + boxW + gap, mes ? 'PAGO NO MÊS' : 'TOTAL PAGO', totalPago, PDF_COR_PAGO_FUNDO, PDF_COR_PAGO)
+  caixaResumo(marginX, mes ? `COMPRADO NO ${mes.includes('_a_') ? 'PERÍODO' : 'MÊS'}` : 'TOTAL COMPRADO', totalComprado, PDF_COR_PENDENTE_FUNDO, PDF_COR_PENDENTE)
+  caixaResumo(marginX + boxW + gap, mes ? `PAGO NO ${mes.includes('_a_') ? 'PERÍODO' : 'MÊS'}` : 'TOTAL PAGO', totalPago, PDF_COR_PAGO_FUNDO, PDF_COR_PAGO)
   caixaResumo(marginX + (boxW + gap) * 2, 'AINDA DEVO (TOTAL)', saldoDevedorTotal, PDF_COR_DEVEDOR_FUNDO, PDF_COR_DEVEDOR)
 
   const nomeArquivo = `resumo-${(fornecedor.apelido || fornecedor.nome).toLowerCase().replace(/\s+/g, '-')}${mes ? `-${mes}` : ''}.pdf`
@@ -395,7 +400,7 @@ function PainelPagamentosFornecedor({ pagamentos, mes, totalPeriodo, saldoAberto
           Pagamentos{pagamentos.length ? ` (${pagamentos.length})` : ''}
         </span>
         <span style={{ fontSize: 13, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          {mes && <span style={{ color: 'var(--color-text-muted)' }}>Pago no mês: <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(totalPeriodo)}</strong></span>}
+          {mes && <span style={{ color: 'var(--color-text-muted)' }}>Pago {mes.includes('_a_') ? 'no período' : 'no mês'}: <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(totalPeriodo)}</strong></span>}
           <span>Ainda devo (total): <strong>{formatMoeda(saldoAberto)}</strong></span>
         </span>
       </div>
@@ -727,12 +732,18 @@ export default function Fornecedores() {
   const [modalNovo, setModalNovo] = useState(false)
   const [modalEditar, setModalEditar] = useState(null)
   const [mesFiltro, setMesFiltro] = useState(mesAtual())
+  // Fim do período; vazio ou igual ao início = um mês só.
+  const [mesAte, setMesAte] = useState('')
+  const ateEfetivo = mesFiltro && mesAte > mesFiltro ? mesAte : mesFiltro
+  const periodo = ateEfetivo !== mesFiltro ? `${mesFiltro}_a_${ateEfetivo}` : mesFiltro
+  const noPeriodo = periodo?.includes('_a_') ? 'no período' : 'no mês'
+  const dentro = m => m >= mesFiltro && m <= ateEfetivo
 
   // Filtro só de exibição: pedidos e pagamentos continuam vindo inteiros do
   // backend, e o saldo em aberto do fornecedor segue acumulado (é dívida, não
   // fecha no mês).
-  const pedidosDoMes = mesFiltro ? pedidos.filter(p => mesDe(p.data_pedido) === mesFiltro) : pedidos
-  const pagamentosDoMes = mesFiltro ? pagamentos.filter(pg => mesDe(pg.data_pagamento) === mesFiltro) : pagamentos
+  const pedidosDoMes = mesFiltro ? pedidos.filter(p => dentro(mesDe(p.data_pedido))) : pedidos
+  const pagamentosDoMes = mesFiltro ? pagamentos.filter(pg => dentro(mesDe(pg.data_pagamento))) : pagamentos
   const totalCompradoNoMes = pedidosDoMes.reduce((soma, p) => soma + Number(p.valor_total || 0), 0)
   const totalPagoNoMes = pagamentosDoMes.reduce((soma, pg) => soma + Number(pg.valor || 0), 0)
   const mesesComMovimento = [...new Set([
@@ -795,7 +806,7 @@ export default function Fornecedores() {
   // some da vista — parece que não gravou.
   function irParaOMesDe(data) {
     const mes = mesDe(data)
-    if (mesFiltro && mes && mes !== mesFiltro) setMesFiltro(mes)
+    if (mesFiltro && mes && !dentro(mes)) { setMesFiltro(mes); setMesAte('') }
   }
 
   async function registrarPagamentoFornecedor(valor, dataPagamento) {
@@ -962,9 +973,9 @@ export default function Fornecedores() {
         <>
           {erro && <p style={{ color: 'var(--color-danger)', marginBottom: 12 }}>{erro}</p>}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2 style={{ margin: 0 }}>Pedidos — {fornecedorSel.nome}<span style={{ fontWeight: 400, fontSize: 15, color: 'var(--color-text-muted)' }}>{mesFiltro ? ` · ${rotuloMes(mesFiltro)}` : ' · todos os meses'}</span></h2>
+            <h2 style={{ margin: 0 }}>Pedidos — {fornecedorSel.nome}<span style={{ fontWeight: 400, fontSize: 15, color: 'var(--color-text-muted)' }}>{mesFiltro ? ` · ${rotuloMes(periodo)}` : ' · todos os meses'}</span></h2>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => gerarResumoPDF(fornecedorSel, pedidosDoMes, pagamentosDoMes, mesFiltro)}
+              <button onClick={() => gerarResumoPDF(fornecedorSel, pedidosDoMes, pagamentosDoMes, periodo)}
                 disabled={pedidosDoMes.length === 0 && pagamentosDoMes.length === 0}
                 style={{ padding: '8px 20px', background: 'transparent', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: (pedidosDoMes.length === 0 && pagamentosDoMes.length === 0) ? 'not-allowed' : 'pointer', opacity: (pedidosDoMes.length === 0 && pagamentosDoMes.length === 0) ? 0.5 : 1 }}>
                 📄 Baixar PDF
@@ -980,16 +991,21 @@ export default function Fornecedores() {
 
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap', marginBottom: 16, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 16px' }}>
             <label style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Mês<br />
-              <input type="month" value={mesFiltro} onChange={e => setMesFiltro(e.target.value)}
+              <input type="month" value={mesFiltro} onChange={e => { setMesFiltro(e.target.value); setMesAte('') }}
                 style={{ ...inputStyle, marginTop: 4, width: 170 }} />
             </label>
-            <button onClick={() => setMesFiltro(mesFiltro ? '' : mesAtual())}
+            <label style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Até<br />
+              <input type="month" value={mesFiltro ? ateEfetivo : ''} min={mesFiltro} disabled={!mesFiltro}
+                onChange={e => setMesAte(e.target.value)}
+                style={{ ...inputStyle, marginTop: 4, width: 170 }} />
+            </label>
+            <button onClick={() => { setMesFiltro(mesFiltro ? '' : mesAtual()); setMesAte('') }}
               style={{ padding: '8px 16px', fontSize: 13, background: mesFiltro ? 'transparent' : 'var(--color-accent-solid)', color: mesFiltro ? 'var(--color-text)' : 'var(--color-on-accent)', border: mesFiltro ? '1px solid var(--color-border)' : 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
               Todos os meses
             </button>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 13 }}>
-              <span>Comprado {mesFiltro ? 'no mês' : 'no total'}: <strong>{formatMoeda(totalCompradoNoMes)}</strong></span>
-              <span>Pago {mesFiltro ? 'no mês' : 'no total'}: <strong>{formatMoeda(totalPagoNoMes)}</strong></span>
+              <span>Comprado {mesFiltro ? noPeriodo : 'no total'}: <strong>{formatMoeda(totalCompradoNoMes)}</strong></span>
+              <span>Pago {mesFiltro ? noPeriodo : 'no total'}: <strong>{formatMoeda(totalPagoNoMes)}</strong></span>
               <span style={{ color: 'var(--color-text-muted)' }}>
                 Ainda devo (total): <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(fornecedorSel.saldo_aberto)}</strong>
               </span>
@@ -1128,7 +1144,7 @@ export default function Fornecedores() {
                 <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-muted)' }}>
                   {pedidos.length === 0 ? 'Nenhum pedido cadastrado.' : (
                     <>
-                      Nenhum pedido em {rotuloMes(mesFiltro)}.{' '}
+                      Nenhum pedido em {rotuloMes(periodo)}.{' '}
                       <button onClick={() => setMesFiltro('')}
                         style={{ background: 'transparent', border: 'none', padding: 0, color: 'var(--color-accent-solid)', cursor: 'pointer', textDecoration: 'underline', font: 'inherit' }}>
                         Ver todos os meses
@@ -1142,11 +1158,11 @@ export default function Fornecedores() {
           </table>
 
           <div style={{ marginTop: 32 }}>
-            <h2 style={{ marginBottom: 16 }}>Pagamentos — {fornecedorSel.nome}<span style={{ fontWeight: 400, fontSize: 15, color: 'var(--color-text-muted)' }}>{mesFiltro ? ` · ${rotuloMes(mesFiltro)}` : ' · todos os meses'}</span></h2>
+            <h2 style={{ marginBottom: 16 }}>Pagamentos — {fornecedorSel.nome}<span style={{ fontWeight: 400, fontSize: 15, color: 'var(--color-text-muted)' }}>{mesFiltro ? ` · ${rotuloMes(periodo)}` : ' · todos os meses'}</span></h2>
             <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
               <PainelPagamentosFornecedor
                 pagamentos={pagamentosDoMes}
-                mes={mesFiltro}
+                mes={periodo}
                 totalPeriodo={totalPagoNoMes}
                 saldoAberto={fornecedorSel.saldo_aberto}
                 podeEditar={finRole === 'fin_admin'}
