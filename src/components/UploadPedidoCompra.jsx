@@ -305,7 +305,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
 
 // O que precisa de atenção (SKU que não existe, erro) vem antes do que deu certo.
 export function ResumoCustos({ custos }) {
-  const problemas = custos.filter(c => c.status === 'sku_desconhecido' || c.status === 'erro')
+  const problemas = custos.filter(c => ['sku_desconhecido', 'erro', 'kit_nao_confirmado'].includes(c.status))
   const ok = custos.filter(c => c.status === 'atualizado')
   const antigos = custos.filter(c => c.status === 'pedido_mais_novo')
   return (
@@ -314,12 +314,14 @@ export function ResumoCustos({ custos }) {
         <p key={c.sku} style={{ color: 'var(--color-danger)', margin: 0 }}>
           {c.status === 'erro'
             ? `${c.sku}: não consegui atualizar o custo no CRM. Tente salvar o item de novo.`
+            : c.status === 'kit_nao_confirmado'
+            ? `${c.sku}: é kit e ainda não foi confirmado em Kits, então o custo não foi atualizado.`
             : `${c.sku}: esse SKU não existe no CRM, então o custo não foi atualizado.`}
         </p>
       ))}
       {ok.length > 0 && (
         <p style={{ color: 'var(--color-success, var(--color-text))', margin: 0 }}>
-          Custo atualizado no CRM: {ok.map(c => `${c.sku} ${formatMoeda(c.custo)}`).join(' · ')}
+          Custo atualizado no CRM: {ok.flatMap(c => [`${c.sku} ${formatMoeda(c.custo)}`, ...(c.kits || []).map(k => `${k.sku} ${formatMoeda(k.custo)}`)]).join(' · ')}
         </p>
       )}
       {antigos.length > 0 && (
