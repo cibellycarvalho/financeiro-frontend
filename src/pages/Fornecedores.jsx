@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import ItensPedidoForm, { ITEM_VAZIO } from '../components/ItensPedidoForm'
 import UploadPedidoCompra from '../components/UploadPedidoCompra'
 import CaixinhaPago from '../components/CaixinhaPago'
+import DescontoDoPedido from '../components/DescontoDoPedido'
 import BaixarMes from '../components/BaixarMes'
 import DevolucoesFornecedor from '../components/DevolucoesFornecedor'
 import { abrirAnexo, TIPOS, validarArquivo, mensagemDe } from '../components/upload/comum'
@@ -1066,6 +1067,10 @@ export default function Fornecedores() {
                         </div>
                         <div style={{ marginTop: 6 }}>
                           <CaixinhaPago fornecedorId={fornecedorSel.id} pedido={p}
+                            podeEditar={finRole === 'fin_admin'} onMudou={recarregarDados} />
+                        </div>
+                        <div style={{ marginTop: 6 }}>
+                          <DescontoDoPedido fornecedorId={fornecedorSel.id} pedido={p}
                             podeEditar={finRole === 'fin_admin'} onMudou={recarregarDados} />
                         </div>
                       </td>

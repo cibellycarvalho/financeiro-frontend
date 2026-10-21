@@ -272,6 +272,16 @@ R$
     expect(por.a10.quitado && por.a11.quitado).toBe(true)
   })
 
+  it('desconto do fornecedor abate a dívida do pedido (ALTOMEX, 20/10/2026)', () => {
+    // pedido 7.050, Pix 6.556,50, desconto 493,50: nada fica devendo
+    const hoje = new Date('2026-10-20T00:00:00')
+    const linhas = dividaPorPedido([
+      { id: 'p', data_pedido: '2026-10-20', valor_total: 7050, desconto: 493.5, pago_em: '2026-10-20' },
+    ], 6556.5, hoje)
+    expect(linhas[0].restante).toBe(0)
+    expect(linhas[0].quitado).toBe(true)
+  })
+
   it('todo pagamento da semana sai da sobra — o saldo em conta não muda isso', () => {
     const segunda = new Date('2026-09-14T00:00:00')
     const domingo = new Date('2026-09-20T00:00:00')
