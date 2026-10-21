@@ -5,7 +5,7 @@
  * O cálculo mora no CRM (GET /api/reposicao/caixa-necessario), que conhece o
  * estoque e as vendas. Aqui só se compara com a "sobra para comprar" da semana.
  */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import SecaoCard from './SecaoCard'
 import crmApi, { crmConfigurado } from '../services/crmApi'
@@ -26,20 +26,100 @@ export function resumoSemana(semana, disponivel) {
   return { falta: falta !== null && falta > 0 ? falta : 0, cobre: falta !== null && falta <= 0 }
 }
 
+export const MOTIVOS = ['sem verba', 'produto parado', 'aguardando fornecedor']
+
+const botaoMini = {
+  background: 'transparent', color: 'var(--color-text)', border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-sm)', padding: '1px 8px', fontSize: 12, cursor: 'pointer', marginLeft: 6,
+}
+
+/**
+ * Uma linha da lista com as marcas dela (20/10/2026): "Comprado" e "Adiar".
+ * Cada marca vai para o histórico do CRM; o produto continua na lista, riscado,
+ * para ela poder desfazer.
+ */
+function LinhaProduto({ k, onDecidir }) {
+  const [modo, setModo] = useState(null)            // null | 'comprado' | 'adiado'
+  const [quantidade, setQuantidade] = useState(String(k.quantidade_repor))
+  const [motivo, setMotivo] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  async function enviar(corpo) {
+    setOcupado(true); setErro(null)
+    try { await onDecidir(k, corpo); setModo(null) } catch (e) {
+      setErro(e?.response?.data?.erro || 'Não consegui salvar.')
+    } finally { setOcupado(false) }
+  }
+
+  const d = k.decisao
+  return (
+    <li style={d ? { opacity: 0.6 } : undefined}>
+      <span style={d ? { textDecoration: 'line-through' } : undefined}>
+        {k.sku || k.titulo} — {k.quantidade_repor} un · {brl(k.valor)} · ruptura em {dia(k.ruptura_em)}
+        {k.atrasado ? ' · ATRASADO, comprar já' : ` · pagar até ${dia(k.pagar_ate)}`}
+        {k.em_transito > 0 ? ` · ${k.em_transito} un a caminho` : ''}
+        {k.comprado_nao_enviado > 0 ? ` · ${k.comprado_nao_enviado} un já compradas, falta enviar` : ''}
+      </span>
+      {d ? (
+        <>
+          <strong style={{ marginLeft: 8 }}>
+            {d.status === 'comprado' ? `Comprado${d.quantidade ? ` ${d.quantidade} un` : ''}` : `Adiado${d.motivo ? ` — ${d.motivo}` : ''}`}
+          </strong>
+          <button type="button" style={botaoMini} disabled={ocupado} onClick={() => enviar({ status: 'limpar' })}>Desfazer</button>
+        </>
+      ) : modo === 'comprado' ? (
+        <span style={{ marginLeft: 8 }}>
+          <input aria-label={`Quantidade comprada ${k.sku}`} type="number" min="1" value={quantidade}
+                 onChange={e => setQuantidade(e.target.value)} style={{ width: 80, fontSize: 12 }} />
+          <button type="button" style={botaoMini} disabled={ocupado || !(Number(quantidade) > 0)}
+                  onClick={() => enviar({ status: 'comprado', quantidade: Number(quantidade) })}>OK</button>
+          <button type="button" style={botaoMini} onClick={() => setModo(null)}>Cancelar</button>
+        </span>
+      ) : modo === 'adiado' ? (
+        <span style={{ marginLeft: 8 }}>
+          <select aria-label={`Motivo ${k.sku}`} value={motivo} onChange={e => setMotivo(e.target.value)} style={{ fontSize: 12 }}>
+            <option value="">sem motivo</option>
+            {MOTIVOS.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <button type="button" style={botaoMini} disabled={ocupado}
+                  onClick={() => enviar({ status: 'adiado', ...(motivo ? { motivo } : {}) })}>OK</button>
+          <button type="button" style={botaoMini} onClick={() => setModo(null)}>Cancelar</button>
+        </span>
+      ) : (
+        <>
+          <button type="button" style={botaoMini} onClick={() => setModo('comprado')}>Comprado</button>
+          <button type="button" style={botaoMini} onClick={() => setModo('adiado')}>Adiar</button>
+        </>
+      )}
+      {erro && <span role="alert" style={{ color: 'var(--color-danger)', marginLeft: 8 }}>{erro}</span>}
+    </li>
+  )
+}
+
 export default function CaixaParaRepor({ sobra, semanaAtual, onDados }) {
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState(null)
   const [abertas, setAbertas] = useState(() => new Set())
   const alternar = chave => setAbertas(a => { const n = new Set(a); if (n.has(chave)) n.delete(chave); else n.add(chave); return n })
 
-  useEffect(() => {
-    if (!crmConfigurado()) { setErro('Endereço do CRM não configurado.'); return }
+  const carregar = useCallback(() => {
+    if (!crmConfigurado()) { setErro('Endereço do CRM não configurado.'); return () => {} }
     let vivo = true
     crmApi.get('/api/reposicao/caixa-necessario?conta_ml=YUSO,M12')
       .then(r => { if (vivo) { setDados(r.data); if (onDados) onDados(r.data) } })
       .catch(() => { if (vivo) setErro('Não foi possível calcular a reposição agora.') })
     return () => { vivo = false }
-  }, [])
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => carregar(), [carregar])
+
+  /** Grava a decisão no CRM (fica no histórico) e recalcula a lista. */
+  async function decidir(k, corpo) {
+    await crmApi.post(`/api/reposicao/decisoes?conta_ml=${encodeURIComponent(k.loja || 'YUSO')}`,
+      { sku: k.sku, sugerido: k.quantidade_repor, ...corpo })
+    carregar()
+  }
 
   return (
     <SecaoCard
@@ -82,14 +162,7 @@ export default function CaixaParaRepor({ sobra, semanaAtual, onDados }) {
             {aberta && (
               <ul style={{ margin: '6px 0 0', padding: '8px 12px 8px 30px', fontSize: 13,
                            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
-                {s.skus.map(k => (
-                  <li key={k.sku || k.titulo}>
-                    {k.sku || k.titulo} — {k.quantidade_repor} un · {brl(k.valor)} · ruptura em {dia(k.ruptura_em)}
-                    {k.atrasado ? ' · ATRASADO, comprar já' : ` · pagar até ${dia(k.pagar_ate)}`}
-                    {k.em_transito > 0 ? ` · ${k.em_transito} un a caminho` : ''}
-                    {k.comprado_nao_enviado > 0 ? ` · ${k.comprado_nao_enviado} un já compradas, falta enviar` : ''}
-                  </li>
-                ))}
+                {s.skus.map(k => <LinhaProduto key={k.sku || k.titulo} k={k} onDecidir={decidir} />)}
               </ul>
             )}
           </div>
