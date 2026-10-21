@@ -12,7 +12,12 @@ describe('SKU no item do pedido', () => {
     const itens = [{ ...ITEM_VAZIO, produto: 'Cabo A' }, { ...ITEM_VAZIO, produto: 'Cabo B' }]
     render(<ItensPedidoForm itens={itens} onChange={onChange} />)
     fireEvent.change(screen.getByLabelText('SKU do item 2'), { target: { value: 'FV0073' } })
-    expect(onChange).toHaveBeenCalledWith([itens[0], { ...itens[1], sku: 'FV0073' }])
+    expect(onChange).toHaveBeenCalledWith([itens[0], { ...itens[1], sku: 'FV0073', sku_origem: null }])
+  })
+
+  it('SKU sugerido pela leitura aparece marcado para conferir', () => {
+    render(<ItensPedidoForm itens={[{ ...ITEM_VAZIO, produto: 'Fonte', sku: '1017', sku_origem: 'sugerido' }]} onChange={() => {}} />)
+    expect(screen.getByText('sugerido, confira')).toBeInTheDocument()
   })
 
   it('o SKU é opcional: nenhum campo dele é obrigatório', () => {

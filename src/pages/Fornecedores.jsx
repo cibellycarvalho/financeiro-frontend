@@ -5,6 +5,7 @@ import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import ItensPedidoForm, { ITEM_VAZIO } from '../components/ItensPedidoForm'
 import UploadPedidoCompra from '../components/UploadPedidoCompra'
+import KitsSkus from '../components/KitsSkus'
 import CaixinhaPago from '../components/CaixinhaPago'
 import DescontoDoPedido from '../components/DescontoDoPedido'
 import BaixarMes from '../components/BaixarMes'
@@ -927,6 +928,8 @@ export default function Fornecedores() {
           )}
         </div>
       </div>
+
+      <KitsSkus podeEditar={finRole === 'fin_admin'} />
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 32 }}>
         {fornecedores.map(f => (

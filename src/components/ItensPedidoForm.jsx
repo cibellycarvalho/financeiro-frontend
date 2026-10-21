@@ -43,7 +43,9 @@ export default function ItensPedidoForm({ itens, onChange, skus = [] }) {
           </label>
           <label style={{ fontSize: 12 }}>SKU <span style={{ color: 'var(--color-text-muted)' }}>(opcional)</span><br />
             <input value={item.sku || ''} placeholder="FV0073" aria-label={`SKU do item ${i + 1}`} list={skus.length ? 'skus-crm' : undefined}
-              onChange={e => atualizar(i, 'sku', e.target.value)} style={inputStyle} />
+              onChange={e => onChange(itens.map((it, k) => k === i ? { ...it, sku: e.target.value, sku_origem: null } : it))}
+              style={{ ...inputStyle, ...(item.sku_origem === 'sugerido' ? { borderColor: 'var(--color-warning, #d97706)' } : {}) }} />
+            {item.sku_origem === 'sugerido' && <span style={{ fontSize: 11, color: 'var(--color-warning, #d97706)' }}>sugerido, confira</span>}
           </label>
           <label style={{ fontSize: 12 }}>Quantidade<br />
             <input required type="number" step="0.01" min="0.01" value={item.quantidade} onChange={e => atualizar(i, 'quantidade', e.target.value)} style={inputStyle} />
