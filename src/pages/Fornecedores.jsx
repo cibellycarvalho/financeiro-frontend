@@ -722,6 +722,10 @@ function AdicionarItemForm({ onAdicionar }) {
 
 export default function Fornecedores() {
   const { finRole } = useAuth()
+  // fin_compras (Valber): cadastra fornecedor e sobe/edita pedido; não vê pagamentos nem devoluções.
+  const ehAdmin = finRole === 'fin_admin'
+  const ehCompras = finRole === 'fin_compras'
+  const podePedido = ehAdmin || ehCompras
   const [fornecedores, setFornecedores] = useState([])
   const [pedidos, setPedidos] = useState([])
   const [pagamentos, setPagamentos] = useState([])
@@ -762,7 +766,7 @@ export default function Fornecedores() {
     setFornecedorSel(f)
     const [rPedidos, rPagamentos] = await Promise.all([
       api.get(`/api/fornecedores/${f.id}/pedidos`),
-      api.get(`/api/fornecedores/${f.id}/pagamentos`)
+      ehCompras ? Promise.resolve({ data: [] }) : api.get(`/api/fornecedores/${f.id}/pagamentos`)
     ])
     setPedidos(rPedidos.data)
     setPagamentos(rPagamentos.data)
@@ -772,7 +776,7 @@ export default function Fornecedores() {
   async function recarregarDados() {
     const [rPedidos, rPagamentos, rFornecedores] = await Promise.all([
       api.get(`/api/fornecedores/${fornecedorSel.id}/pedidos`),
-      api.get(`/api/fornecedores/${fornecedorSel.id}/pagamentos`),
+      ehCompras ? Promise.resolve({ data: [] }) : api.get(`/api/fornecedores/${fornecedorSel.id}/pagamentos`),
       api.get('/api/fornecedores')
     ])
     setPedidos(rPedidos.data)
@@ -918,8 +922,8 @@ export default function Fornecedores() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
         <h1 style={{ margin: 0 }}>Fornecedores</h1>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-          <BaixarMes />
-          {finRole === 'fin_admin' && (
+          {!ehCompras && <BaixarMes />}
+          {podePedido && (
             <button onClick={() => setModalNovo(true)}
               style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
               + Novo Fornecedor
@@ -941,7 +945,7 @@ export default function Fornecedores() {
                 {formatMoeda(f.saldo_aberto)} em aberto
               </div>
             </div>
-            {finRole === 'fin_admin' && (
+            {podePedido && (
               <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 2 }}>
                 <button
                   onClick={e => { e.stopPropagation(); setModalEditar(f) }}
@@ -953,7 +957,7 @@ export default function Fornecedores() {
                   }}>
                   ✏️
                 </button>
-                <button
+                {ehAdmin && <button
                   onClick={e => { e.stopPropagation(); excluirFornecedor(f) }}
                   title="Excluir fornecedor"
                   style={{
@@ -962,7 +966,7 @@ export default function Fornecedores() {
                     color: fornecedorSel?.id === f.id ? 'var(--color-on-accent)' : 'var(--color-text)'
                   }}>
                   🗑️
-                </button>
+                </button>}
               </div>
             )}
           </div>
@@ -975,12 +979,12 @@ export default function Fornecedores() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ margin: 0 }}>Pedidos — {fornecedorSel.nome}<span style={{ fontWeight: 400, fontSize: 15, color: 'var(--color-text-muted)' }}>{mesFiltro ? ` · ${rotuloMes(periodo)}` : ' · todos os meses'}</span></h2>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => gerarResumoPDF(fornecedorSel, pedidosDoMes, pagamentosDoMes, periodo)}
+              {!ehCompras && <button onClick={() => gerarResumoPDF(fornecedorSel, pedidosDoMes, pagamentosDoMes, periodo)}
                 disabled={pedidosDoMes.length === 0 && pagamentosDoMes.length === 0}
                 style={{ padding: '8px 20px', background: 'transparent', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: (pedidosDoMes.length === 0 && pagamentosDoMes.length === 0) ? 'not-allowed' : 'pointer', opacity: (pedidosDoMes.length === 0 && pagamentosDoMes.length === 0) ? 0.5 : 1 }}>
                 📄 Baixar PDF
-              </button>
-              {finRole === 'fin_admin' && (
+              </button>}
+              {podePedido && (
                 <button onClick={() => setShowForm(!showForm)}
                   style={{ padding: '8px 20px', background: 'var(--color-accent-solid)', color: 'var(--color-on-accent)', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
                   + Novo pedido
@@ -1005,16 +1009,17 @@ export default function Fornecedores() {
             </button>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 13 }}>
               <span>Comprado {mesFiltro ? noPeriodo : 'no total'}: <strong>{formatMoeda(totalCompradoNoMes)}</strong></span>
-              <span>Pago {mesFiltro ? noPeriodo : 'no total'}: <strong>{formatMoeda(totalPagoNoMes)}</strong></span>
+              {!ehCompras && <span>Pago {mesFiltro ? noPeriodo : 'no total'}: <strong>{formatMoeda(totalPagoNoMes)}</strong></span>}
               <span style={{ color: 'var(--color-text-muted)' }}>
                 Ainda devo (total): <strong style={{ color: 'var(--color-text)' }}>{formatMoeda(fornecedorSel.saldo_aberto)}</strong>
               </span>
             </div>
           </div>
 
-          {finRole === 'fin_admin' && (
+          {podePedido && (
             <div style={{ marginBottom: 16 }}>
               <UploadPedidoCompra
+                semPagamento={ehCompras}
                 fornecedores={fornecedores}
                 fornecedorSel={fornecedorSel}
                 onSalvo={async (idEscolhido, dataParaFiltro) => {
@@ -1033,7 +1038,7 @@ export default function Fornecedores() {
             </div>
           )}
 
-          {showForm && finRole === 'fin_admin' && (
+          {showForm && podePedido && (
             <form onSubmit={handleSubmit} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 24, marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
               <label style={{ maxWidth: 220 }}>Data do pedido<br /><input required type="date" value={form.data_pedido} onChange={e => setForm({ ...form, data_pedido: e.target.value })} style={inputStyle} /></label>
 
@@ -1063,8 +1068,8 @@ export default function Fornecedores() {
                       <td rowSpan={itens.length} style={{ padding: '10px 16px', verticalAlign: 'top' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <DataEditavel pedido={p}
-                            onEditar={finRole === 'fin_admin' ? (dataPedido) => editarDataPedido(p.id, dataPedido) : null} />
-                          {finRole === 'fin_admin' && (
+                            onEditar={podePedido ? (dataPedido) => editarDataPedido(p.id, dataPedido) : null} />
+                          {ehAdmin && (
                             <button onClick={() => excluirPedido(p.id)} title="Excluir pedido"
                               style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, opacity: 0.6, padding: 2 }}>
                               🗑️
@@ -1098,24 +1103,24 @@ export default function Fornecedores() {
                         </div>
                         <div style={{ marginTop: 6 }}>
                           <CaixinhaPago fornecedorId={fornecedorSel.id} pedido={p}
-                            podeEditar={finRole === 'fin_admin'} onMudou={recarregarDados} />
+                            podeEditar={ehAdmin} onMudou={recarregarDados} />
                         </div>
                         <div style={{ marginTop: 6 }}>
                           <DescontoDoPedido fornecedorId={fornecedorSel.id} pedido={p}
-                            podeEditar={finRole === 'fin_admin'} onMudou={recarregarDados} />
+                            podeEditar={podePedido} onMudou={recarregarDados} />
                         </div>
                       </td>
                     )}
                     {item ? (
                       <ItemCells item={item}
-                        onEditar={finRole === 'fin_admin' ? (produto, quantidade, valorUnitario, sku) => editarItem(p.id, item.id, produto, quantidade, valorUnitario, sku) : null}
-                        onExcluir={finRole === 'fin_admin' ? () => excluirItem(p.id, item.id) : null} />
+                        onEditar={podePedido ? (produto, quantidade, valorUnitario, sku) => editarItem(p.id, item.id, produto, quantidade, valorUnitario, sku) : null}
+                        onExcluir={podePedido ? () => excluirItem(p.id, item.id) : null} />
                     ) : (
                       <>
                         <td colSpan={3} style={{ padding: '10px 16px', color: 'var(--color-text-muted)' }}>{p.descricao_produtos || '—'}</td>
                         <td colSpan={2} style={{ padding: '10px 16px' }}>
                           <ValorTotalEditavel pedido={p}
-                            onEditar={finRole === 'fin_admin' ? (valorTotal) => editarValorTotal(p.id, valorTotal) : null} />
+                            onEditar={podePedido ? (valorTotal) => editarValorTotal(p.id, valorTotal) : null} />
                         </td>
                       </>
                     )}
@@ -1130,7 +1135,7 @@ export default function Fornecedores() {
                       <td />
                     </tr>
                   ),
-                  finRole === 'fin_admin' && (
+                  podePedido && (
                     <tr key={`${p.id}-add-item`} style={{ borderTop: '1px solid var(--color-border)' }}>
                       <td colSpan={6} style={{ padding: '8px 16px' }}>
                         <AdicionarItemForm
@@ -1157,6 +1162,7 @@ export default function Fornecedores() {
             </tbody>
           </table>
 
+          {!ehCompras && <>
           <div style={{ marginTop: 32 }}>
             <h2 style={{ marginBottom: 16 }}>Pagamentos — {fornecedorSel.nome}<span style={{ fontWeight: 400, fontSize: 15, color: 'var(--color-text-muted)' }}>{mesFiltro ? ` · ${rotuloMes(periodo)}` : ' · todos os meses'}</span></h2>
             <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 20 }}>
@@ -1183,6 +1189,7 @@ export default function Fornecedores() {
               aoMudar={recarregarDados}
             />
           </div>
+          </>}
         </>
       )}
 

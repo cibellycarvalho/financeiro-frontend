@@ -41,6 +41,7 @@ export default function Admin() {
           <label>Permissão<br />
             <select value={form.role} onChange={e => setForm({...form, role:e.target.value})} style={inputStyle}>
               <option value="fin_viewer">Visualizador (sócio)</option>
+              <option value="fin_compras">Compras (fornecedores e pedidos)</option>
               <option value="fin_admin">Administrador</option>
             </select>
           </label>
@@ -67,7 +68,7 @@ export default function Admin() {
                 <span style={{ padding:'2px 10px', borderRadius:99, fontSize:12, fontWeight:600,
                   background: u.role === 'fin_admin' ? 'color-mix(in srgb, var(--color-accent) 18%, transparent)' : 'var(--color-bg)',
                   color: u.role === 'fin_admin' ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
-                  {u.role === 'fin_admin' ? 'Admin' : 'Visualizador'}
+                  {u.role === 'fin_admin' ? 'Admin' : u.role === 'fin_compras' ? 'Compras' : 'Visualizador'}
                 </span>
               </td>
               <td style={{ padding:'10px 16px', fontSize:12, color:'var(--color-text-muted)' }}>
