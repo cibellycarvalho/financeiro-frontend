@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Login from './pages/Login'
 import CaixaSemana from './pages/CaixaSemana'
@@ -13,13 +13,16 @@ import ResetPassword from './pages/ResetPassword'
 import AvisoNovaVersao from './components/AvisoNovaVersao'
 
 function ProtectedRoute({ children }) {
-  const { user, loading, needsPasswordReset, semAcessoConfirmado } = useAuth()
+  const { user, finRole, loading, needsPasswordReset, semAcessoConfirmado } = useAuth()
+  const { pathname } = useLocation()
   if (loading) return <div>Carregando...</div>
   if (needsPasswordReset) return <Navigate to="/reset-password" replace />
   if (!user) return <Navigate to="/login" replace />
   // Só barra quando o servidor confirmou que a pessoa não tem acesso. Falha de
   // rede não barra ninguém — ver o comentário em SemAcesso e no AuthContext.
   if (semAcessoConfirmado) return <SemAcesso />
+  // Quem é só de compras cai sempre em Fornecedores (o resto o backend recusa).
+  if (finRole === 'fin_compras' && pathname !== '/fornecedores') return <Navigate to="/fornecedores" replace />
   return children
 }
 

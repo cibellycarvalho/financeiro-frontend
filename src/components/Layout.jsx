@@ -90,7 +90,9 @@ export default function Layout({ children }) {
       <div style={{ padding: '0 20px 24px' }}>
         <Logo titleSize={14} />
       </div>
-      {nav.map(({ path, label }) => itemDoMenu(path, label))}
+      {/* fin_compras só usa Fornecedores; a trava de verdade é o backend */}
+      {nav.filter(({ path }) => finRole !== 'fin_compras' || path === '/fornecedores')
+        .map(({ path, label }) => itemDoMenu(path, label))}
       {finRole === 'fin_admin' && itemDoMenu('/admin', 'Admin', { marginTop: 'auto' })}
       <div style={{ margin: '16px 20px 0', display: 'flex', gap: 8 }}>
         <ThemeToggle />

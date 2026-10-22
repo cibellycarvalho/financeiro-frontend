@@ -7,7 +7,8 @@ import api from '../services/api'
 import ItensPedidoForm, { ITEM_VAZIO, totalDosItens } from './ItensPedidoForm'
 import { TIPOS, inputStyle, botaoPrimario, botaoSecundario, formatMoeda, formatData, Faixa, validarArquivo, mensagemDe, PreviewArquivo } from './upload/comum'
 
-export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalvo }) {
+// semPagamento: quem é só de compras sobe o pedido; o pagamento fica com a Cibelly.
+export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalvo, semPagamento = false }) {
   const [etapa, setEtapa] = useState('ocioso')
   const [erro, setErro] = useState(null)
   const inputPedido = useRef(null)
@@ -24,7 +25,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
   const [pedidoSalvoId, setPedidoSalvoId] = useState(null)
 
   // pagamento
-  const [pago, setPago] = useState(null)         // null | false | true
+  const [pago, setPago] = useState(semPagamento ? false : null) // null | false | true
   const [comprovante, setComprovante] = useState(null) // resposta do /pagamentos/ler
   const [valorPix, setValorPix] = useState('')
   const [dataPix, setDataPix] = useState('')
@@ -53,7 +54,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
     setFornecedorId(fornecedorSel.id); setNumeroPedido(''); setDataPedido('')
     setItens([{ ...ITEM_VAZIO }]); setLeitura(null); setPreviewUrl(null); setPreviewTipo(null)
     setPedidoSalvoId(null)
-    setPago(null); setComprovante(null); setValorPix(''); setDataPix('')
+    setPago(semPagamento ? false : null); setComprovante(null); setValorPix(''); setDataPix('')
     setSomenteFechar(false)
   }
 
@@ -234,7 +235,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
           <Faixa>A soma dos itens ({formatMoeda(totalItens)}) não bate com o total do documento ({formatMoeda(leitura.total_documento)}). Confira.</Faixa>
         )}
 
-        <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
+        {!semPagamento && <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
           <span style={{ fontWeight: 600, fontSize: 14 }}>Já foi pago?</span>
           <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 14 }}>
             <label><input type="radio" name="pago" checked={pago === false} onChange={() => { setPago(false); setComprovante(null) }} /> Não</label>
@@ -278,7 +279,7 @@ export default function UploadPedidoCompra({ fornecedores, fornecedorSel, onSalv
               </div>
             </div>
           )}
-        </div>
+        </div>}
 
         {erro && <p style={{ color: 'var(--color-danger)', margin: 0, fontSize: 13 }}>{erro}</p>}
 
