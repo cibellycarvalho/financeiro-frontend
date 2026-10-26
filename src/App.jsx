@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import ContasPagar from './pages/ContasPagar'
 import Fornecedores from './pages/Fornecedores'
 import Funcionarios from './pages/Funcionarios'
+import Hoje from './pages/Hoje'
 import Fechamento from './pages/Fechamento'
 import LucroReal from './pages/LucroReal'
 import Admin from './pages/Admin'
@@ -82,6 +83,7 @@ export default function App() {
           {/* Fora do menu desde 14/09/2026, rota mantida: esconder é reversível,
               apagar não. Ver comentário do nav em components/Layout.jsx. */}
           <Route path="/visao-semana" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/hoje" element={<ProtectedRoute><Hoje /></ProtectedRoute>} />
           <Route path="/contas" element={<ProtectedRoute><ContasPagar /></ProtectedRoute>} />
           <Route path="/fornecedores" element={<ProtectedRoute><Fornecedores /></ProtectedRoute>} />
           <Route path="/funcionarios" element={<ProtectedRoute><Funcionarios /></ProtectedRoute>} />

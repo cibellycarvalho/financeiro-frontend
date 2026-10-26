@@ -16,6 +16,7 @@ import Logo from './Logo'
  * estão lá e um link direto ainda abre. Esconder é reversível; apagar não.
  */
 const nav = [
+  { path: '/hoje', label: 'Hoje' },
   { path: '/', label: 'Caixa da Semana' },
   { path: '/contas', label: 'Contas a Pagar' },
   { path: '/fornecedores', label: 'Fornecedores' },
