@@ -57,3 +57,23 @@ describe('resumoVendas', () => {
     expect(resumoVendas(null)).toBeNull()
   })
 })
+
+import { textoStatus } from './Conciliacao'
+import { linhaAnuncio } from './Lucro'
+
+describe('textoStatus', () => {
+  it('fala o que é cada movimento', () => {
+    expect(textoStatus({ status: 'sugerido', casado_texto: 'Conta: DAS' })).toBe('Parece: Conta: DAS')
+    expect(textoStatus({ status: 'novo', valor: 320 })).toBe('Novo: entrada sem origem')
+    expect(textoStatus({ status: 'casado', casado_texto: 'Repasse do Mercado Pago' })).toBe('Casado: Repasse do Mercado Pago')
+  })
+})
+
+describe('linhaAnuncio', () => {
+  it('divide por unidade e classifica', () => {
+    const l = linhaAnuncio({ ml_item_id: 'x', unidades: 4, total_faturado: 400, comissao: 40, frete: 20, lucro_pos_ads: -8 })
+    expect(l).toMatchObject({ comissao: 10, frete: 5, lucro: -2, grupo: 'pr' })
+    expect(linhaAnuncio({ unidades: 1, total_faturado: 100, lucro_pos_ads: 5 }).grupo).toBe('at')
+    expect(linhaAnuncio({ unidades: 1, total_faturado: 100, lucro_pos_ads: 30 }).grupo).toBe('ok')
+  })
+})

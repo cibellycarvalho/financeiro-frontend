@@ -8,6 +8,8 @@ import Fornecedores from './pages/Fornecedores'
 import Funcionarios from './pages/Funcionarios'
 import Hoje from './pages/Hoje'
 import Equipe from './pages/Equipe'
+import Lucro from './pages/Lucro'
+import Conciliacao from './pages/Conciliacao'
 import Fechamento from './pages/Fechamento'
 import LucroReal from './pages/LucroReal'
 import Admin from './pages/Admin'
@@ -85,6 +87,8 @@ export default function App() {
               apagar não. Ver comentário do nav em components/Layout.jsx. */}
           <Route path="/visao-semana" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/hoje" element={<ProtectedRoute><Hoje /></ProtectedRoute>} />
+          <Route path="/lucro" element={<ProtectedRoute><Lucro /></ProtectedRoute>} />
+          <Route path="/bancos" element={<ProtectedRoute><Conciliacao /></ProtectedRoute>} />
           <Route path="/equipe" element={<ProtectedRoute><Equipe /></ProtectedRoute>} />
           <Route path="/contas" element={<ProtectedRoute><ContasPagar /></ProtectedRoute>} />
           <Route path="/fornecedores" element={<ProtectedRoute><Fornecedores /></ProtectedRoute>} />

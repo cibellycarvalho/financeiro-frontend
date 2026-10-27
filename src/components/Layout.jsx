@@ -17,6 +17,8 @@ import Logo from './Logo'
  */
 const nav = [
   { path: '/hoje', label: 'Hoje' },
+  { path: '/lucro', label: 'Lucro por anúncio' },
+  { path: '/bancos', label: 'Bancos e conciliação' },
   { path: '/equipe', label: 'Contas e equipe' },
   { path: '/', label: 'Caixa da Semana' },
   { path: '/contas', label: 'Contas a Pagar' },
