@@ -1,6 +1,6 @@
 // src/pages/Conciliacao.jsx
 // "Bancos e conciliação" (27/10/2026), no visual do desenho "Margem". Qualquer
-// banco: ela baixa o extrato OFX no app do banco e arrasta aqui. O sistema lê
+// banco: ela baixa o extrato (OFX ou PDF) no app do banco e arrasta aqui. O sistema lê
 // o saldo, lista os movimentos e diz com o que cada um casa; ela confirma o
 // resto com um clique.
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -64,7 +64,7 @@ export default function Conciliacao() {
       setAviso(`${lidos} movimentos lidos, ${novos} novos${lidos > novos ? ` (${lidos - novos} já estavam aqui)` : ''}.${saldo != null ? ` Saldo atualizado: ${formatMoeda(saldo)}.` : ''}`)
       await Promise.all([carregarBancos(), carregarMovs(sel)])
     } catch (e) {
-      setErro(mensagemDe(e, 'Não consegui ler o arquivo. Ele precisa ser .ofx.'))
+      setErro(mensagemDe(e, 'Não consegui ler o arquivo. Envie em OFX ou PDF.'))
     } finally {
       setEnviando(false)
       if (input.current) input.current.value = ''
@@ -121,7 +121,7 @@ export default function Conciliacao() {
               <div>
                 <h2 style={{ margin: 0, fontSize: 17 }}>Extrato do {banco.nome}</h2>
                 <div style={{ ...rotulo, marginTop: 2 }}>
-                  {movs.length ? `${casados} de ${movs.length} movimentos resolvidos. ${pendentes.length ? 'Confirme o resto com um clique.' : 'Tudo certo.'}` : 'Baixe o extrato em OFX no app do banco e envie aqui.'}
+                  {movs.length ? `${casados} de ${movs.length} movimentos resolvidos. ${pendentes.length ? 'Confirme o resto com um clique.' : 'Tudo certo.'}` : 'Baixe o extrato no app do banco (OFX ou PDF) e envie aqui.'}
                 </div>
               </div>
               <label
@@ -130,8 +130,8 @@ export default function Conciliacao() {
                 style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1.5px dashed #9FB3D1', background: '#F2F6FC', color: '#1F5FBF',
                          borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: enviando ? 'wait' : 'pointer' }}>
                 <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 16V4M6 10l6-6 6 6M4 20h16" /></svg>
-                {enviando ? 'Lendo o extrato…' : 'Arraste o extrato (OFX) ou clique'}
-                <input ref={input} type="file" accept=".ofx,.OFX" style={{ display: 'none' }} disabled={enviando} onChange={e => enviar(e.target.files[0])} />
+                {enviando ? 'Lendo o extrato… (PDF leva até 1 minuto)' : 'Arraste o extrato (OFX ou PDF) ou clique'}
+                <input ref={input} type="file" accept=".ofx,.OFX,.pdf,application/pdf" style={{ display: 'none' }} disabled={enviando} onChange={e => enviar(e.target.files[0])} />
               </label>
             </div>
             {aviso && <Faixa tipo="aviso">{aviso}</Faixa>}
