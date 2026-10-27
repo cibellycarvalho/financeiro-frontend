@@ -1,42 +1,37 @@
 :root {
-  /* Cores base — modo claro */
-  /* O fundo e um degrau mais escuro que o cartao de proposito: e o degrau
-     que faz o bloco parecer um bloco. Era #faf8f3 contra #fffefb — 2% de
-     diferenca — e os cartoes sumiam no fundo. O Finco usa #F0F0F0 contra
-     branco pelo mesmo motivo. Aprovado por ela em 21/08/2026: unica cor que
-     mudou na reformulacao, e continua na familia marfim. */
-  --color-bg: #f1ece0;
-  --color-surface: #fffefb;
-  --color-border: #e8e2d5;
-  --color-text: #221f19;
-  --color-text-muted: #7d7666;
+  /* Visual "Margem" (27/10/2026): o desenho que ela aprovou ontem. Cinza-azulado
+     claro no fundo, cartao branco, azul-marinho no texto e no menu. Antes era
+     marfim com verde garrafa (21/08); ela pediu "exatamente como o desenho". */
+  --color-bg: #F4F5F7;
+  --color-surface: #ffffff;
+  --color-border: #E3E7ED;
+  --color-text: #0F1B2D;
+  --color-text-muted: #5B6576;
 
-  /* Acento da marca — verde garrafa Cravelli (harmonizado com ink/marfim) */
-  --color-accent: #2f4a3b;
-  --color-accent-hover: #24382d;
-  --color-accent-solid: #2f4a3b;
+  --color-accent: #1F5FBF;
+  --color-accent-hover: #163F80;
+  --color-accent-solid: #0F1B2D;
   --color-on-accent: #ffffff;
 
-  /* Semânticas (status) */
-  --color-success: #2f8a5c;
-  --color-success-dark: #1f6b45;
-  --color-success-solid: #1f6b45;
+  --color-success: #0B7A4B;
+  --color-success-dark: #0B5C39;
+  --color-success-solid: #0B7A4B;
   --color-on-success: #ffffff;
-  --color-danger: #c94f3f;
-  --color-danger-light: #f6e0db;
-  --color-warning: #c08a2e;
+  --color-danger: #A42020;
+  --color-danger-light: #FDECEC;
+  --color-warning: #B4540A;
+  --color-warning-light: #FFF4E8;
 
-  /* Fundo das linhas de valor dentro de um cartao. Precisa se destacar da
-     superficie do cartao sem virar outro cartao — e o que separa "lista de
-     valores" de "blocos empilhados". */
-  --color-row: #f5f1e7;
+  --color-row: #F4F5F7;
 
-  /* Tipografia */
-  --font-sans: 'Manrope', ui-sans-serif, -apple-system, sans-serif;
+  /* Menu lateral: sempre escuro, nos dois temas. */
+  --color-menu: #0F1B2D;
+  --color-menu-ativo: #1E2D45;
 
-  /* Espaçamento e forma */
+  --font-sans: 'Inter', ui-sans-serif, -apple-system, sans-serif;
+
   --radius-sm: 10px;
-  --radius-md: 14px;
+  --radius-md: 16px;
 
   color-scheme: light;
 }
@@ -63,6 +58,9 @@
   --color-warning: #d1a44f;
 
   --color-row: #2a261d;
+  --color-warning-light: #3a2c14;
+  --color-menu: #0b0a06;
+  --color-menu-ativo: #24211a;
 
   color-scheme: dark;
 }
@@ -85,6 +83,7 @@ input, select, textarea, button {
 
 h1 {
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
+
+body { font-variant-numeric: tabular-nums; }

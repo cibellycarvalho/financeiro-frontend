@@ -17,6 +17,7 @@ import Logo from './Logo'
  */
 const nav = [
   { path: '/hoje', label: 'Hoje' },
+  { path: '/equipe', label: 'Contas e equipe' },
   { path: '/', label: 'Caixa da Semana' },
   { path: '/contas', label: 'Contas a Pagar' },
   { path: '/fornecedores', label: 'Fornecedores' },
@@ -59,12 +60,15 @@ export default function Layout({ children }) {
       key={path}
       to={path}
       style={{
-        padding: '10px 20px',
+        padding: '11px 12px',
+        margin: '0 12px',
+        borderRadius: 8,
         minHeight: estreita ? 44 : undefined,
         display: estreita ? 'flex' : undefined,
         alignItems: estreita ? 'center' : undefined,
-        color: pathname === path ? 'var(--color-on-accent)' : 'var(--color-text-muted)',
-        background: pathname === path ? 'var(--color-accent-solid)' : 'transparent',
+        color: pathname === path ? '#fff' : 'var(--color-text-muted)',
+        background: pathname === path ? 'var(--color-menu-ativo)' : 'transparent',
+        fontWeight: pathname === path ? 600 : 400,
         textDecoration: 'none',
         fontSize: 14,
         ...extra,
@@ -77,12 +81,17 @@ export default function Layout({ children }) {
   const menu = (
     <aside
       style={{
-        width: 220,
-        background: 'var(--color-surface)',
-        borderRight: '1px solid var(--color-border)',
+        width: 232,
+        // Menu escuro como no desenho "Margem" (27/10/2026). As variáveis de
+        // texto são trocadas só aqui dentro, para Logo e botões ficarem claros.
+        background: 'var(--color-menu)',
+        '--color-text': '#ffffff',
+        '--color-text-muted': '#C9D2E0',
+        '--color-border': '#22334F',
         padding: '24px 0',
         display: 'flex',
         flexDirection: 'column',
+        gap: 4,
         ...(estreita
           ? { position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 50, boxShadow: '0 0 24px rgba(0,0,0,0.35)' }
           : null),
